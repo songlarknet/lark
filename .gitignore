@@ -1,0 +1,8 @@
+# Most of these seem to be created by sbt and metals
+.bloop/
+.bsp/
+.metals/
+.vscode/
+bak/
+project/
+target/
