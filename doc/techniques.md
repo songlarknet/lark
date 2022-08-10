@@ -229,6 +229,8 @@ If the counterexample doesn't apply to the original program, then you can get th
 Split a problem with multiple properties into multiple smaller problems.
 Slicing seems pretty easy - though would the SMT solver be able to do this on its own with a dependency analysis?
 
+How does slicing interact with path compression?
+
 # Invariant generation
 
 ## IC3 / property-directed reachability

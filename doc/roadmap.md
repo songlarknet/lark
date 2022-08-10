@@ -3,6 +3,7 @@
 bare minimum to be useful:
 * model checking with BMC and K-induction
 * compilation to C - bare minimum with code duplication
+* well-formedness checks: causality
 later:
 * invariant generation
 * plumb generated invariants to generated C code - any way to use CBMC for translation validation?

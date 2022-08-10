@@ -31,13 +31,24 @@ Later:
 * better compilation (modular rather than monolithic);
 * pure stream transformers: so node applications with same arguments are definitionally equal.
 
+See [doc/roadmap.md]
+
 ## Other systems
 
 There are many systems trying to do similar things.
 None of them quite solve the same problems that Lack aims to solve.
+
+See [doc/why.md].
 
 ## Licence
 
 Non-commercial / evaluation licence, with secondary commercial licence?
 Similar to CompCert:
 https://raw.githubusercontent.com/AbsInt/CompCert/master/LICENSE
+
+## Applications
+
+Potential applications:
+* electrohydraulic braking-by-wire
+* flight controllers https://github.com/betaflight/betaflight
+* a train controller

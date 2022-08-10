@@ -21,10 +21,10 @@ object builder:
 
   class Node(val supply: Supply, val name: String, val reset: Exp, val when: Exp):
     // TODO add List[Var] for declaring args, or change vars to List[(Var, Arg | Local | State | Output)]
-    var subnodes: List[Node] = List()
+    var subnodes: List[Node]       = List()
     var bindings: List[(Exp, Exp)] = List()
-    var props: List[Judgment] = List()
-    var vars: List[Var] = List()
+    var props:    List[Judgment]   = List()
+    var vars:     List[Var]        = List()
 
     def allProps: List[Judgment] = props ++ subnodes.flatMap(_.allProps)
     def allPropObligations: List[Judgment] = allProps.filter(p => p.form == Form.Property)
