@@ -2,7 +2,7 @@ package lack.meta.core
 
 import lack.meta.base.Integer
 import lack.meta.core.sort.Sort
-import lack.meta.core.term.{Exp, Prim, Var, Val}
+import lack.meta.core.term.{Exp, Prim, Val}
 
 object prop:
   enum Form:

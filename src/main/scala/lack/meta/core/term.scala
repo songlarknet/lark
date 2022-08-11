@@ -39,11 +39,8 @@ object term:
     case class Struct(fields: List[(String, Val)], struct: Sort.Struct) extends Val:
       require(fields.map(_._1) == struct.fields.map(_._1))
       require(struct.fields.zip(fields).forall(f => f._2._2.check(f._1._2)))
-      def pretty: String = s"(#${struct.pretty} ${fields.map(f => s"'${f._1} ${f._2}").mkString(" ")})"
+      def pretty: String = s"(#${struct.pretty} ${fields.map(f => s":${f._1} ${f._2}").mkString(" ")})"
       def check(sort: Sort) = sort == struct
-
-  case class Var(prefix: String, ix: Int, sort: Sort):
-    def pretty: String = "$" + prefix + "_" + ix.toString + "_" + sort.toString
 
   /** Pure total primitives. */
   trait Prim:
@@ -78,11 +75,11 @@ object term:
         case List(Val.Int(i)) => Val.Int(- i)
 
     // TODO: floats too
-    def eval_ii_b(args: List[Val])(f: (Long, Long) => Boolean): Val = args match
+    def eval_ii_b(args: List[Val])(f: (Integer, Integer) => Boolean): Val = args match
       case List(Val.Int(i), Val.Int(j)) => Val.Bool(f(i, j))
       case List(Val.Mod(i, _), Val.Mod(j, _)) => Val.Bool(f(i, j))
 
-    def eval_ii_i(args: List[Val])(f: (Long, Long) => Long): Val = args match
+    def eval_ii_i(args: List[Val])(f: (Integer, Integer) => Integer): Val = args match
       case List(Val.Int(i), Val.Int(j)) => Val.Int(f(i, j))
       case List(Val.Mod(i, iw), Val.Mod(j, jw)) =>
         require(iw.width == jw.width)
@@ -101,7 +98,13 @@ object term:
       def pretty: String = "*"
       def eval(args: List[Val]): Val = eval_ii_i(args)((_ * _))
 
-    /** "Safe" division, */
+    /** "Safe" division where x / 0 = 0, which agrees with Isabelle and Z3 semantics
+     * for integers. However, SMTLib's bitvector semantics for division are that bvudiv
+     * returns a bitvector with all ones. For signed division with bvsdiv, the result
+     * is -1 or 1 depending on the sign of the left-hand-side.
+     * We probably want to wrap bv.div to keep the x/0=0 semantics.
+     * TODO: wrap bitvector division in smt encoding
+     */
     case object Div extends Prim:
       def pretty: String = "-"
       def eval(args: List[Val]): Val = eval_ii_i(args) {
@@ -148,14 +151,14 @@ object term:
 
   object Exp:
     /** Variable */
-    case class Var(v: term.Var) extends Exp:
-      def pretty: String = "$" + v.prefix + "_" + v.ix.toString() + "_" + v.sort.pretty
+    case class Var(v: names.Ref, sort: Sort) extends Exp:
+      def pretty: String = s"(as ${v.pretty} ${sort.pretty})"
 
     /** Value */
     case class Val(v: term.Val) extends Exp:
       def pretty: String = v.pretty
 
-    /** Primitive application */
+    /** Pure primitive application */
     case class App(prim: term.Prim, args: Exp*) extends Exp:
       def pretty: String = s"(${prim.pretty} ${args.map(_.pretty).mkString(" ")})"
 
@@ -167,3 +170,8 @@ object term:
       /** x -> y, or "first x then y". */
       case class Arrow(a: Exp, b: Exp) extends Exp:
         def pretty: String = s"(flow'-> ${a.pretty} ${b.pretty})"
+
+    /** Non-deterministic terms */
+    object nondet:
+      case class Undefined(s: Sort) extends Exp:
+        def pretty: String = s"(undefined ${s.pretty})"

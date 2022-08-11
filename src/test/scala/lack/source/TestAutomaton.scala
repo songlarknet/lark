@@ -79,6 +79,7 @@ object TestAutomaton:
    * tel
   */
 
+  /** hand-translated version */
   class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], application: NodeApplication) extends Node(application):
     // Should be able to generate a lot of this from a nicer representation
     val S_OFF     = u8(0)
@@ -167,3 +168,47 @@ object TestAutomaton:
     def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], activate: Activate = Activate.always)(using superbuilder: Builder) =
       new Cruise(btn_on, cmd_set, speedo, accel, NodeApplication(activate, superbuilder))
 
+  /** Hypothetical syntax sugar */
+  /**
+  class CruiseHyp(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], application: NodeApplication) extends Node(application) with Automaton:
+    val accel_out = output[UInt8]
+    val light_on  = output[Bool]
+    val speed_out = output[UInt8]
+
+    val OFF = new State with reflect.Selectable {
+      unless(btn_on) { restart(AWAIT) }
+
+      accel_out := accel
+      light_on  := False
+      speed_out := u8(0)
+    }
+
+    val AWAIT = new State with reflect.Selectable {
+      unless(!btn_on) { restart(OFF) }
+      unless(cmd_set) { restart(ON) }
+
+      accel_out := accel
+      light_on  := True
+      speed_out := u8(0)
+    }
+
+    val ON = new State with reflect.Selectable {
+      unless(!btn_on) { restart(OFF) }
+
+      accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
+      light_on  := True
+      speed_out := speedo -> cond(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
+    }
+
+    property("!btn_on ==> off") {
+      !btn_on ==> (state == OFF.v)
+    }
+
+    property("!btn_on ==> accel_out == accel") {
+      !btn_on ==> (accel_out == accel)
+    }
+
+    property("accel >= 100 => accel_out == accel") {
+      (accel >= 100) ==> (accel_out == accel)
+    }
+*/

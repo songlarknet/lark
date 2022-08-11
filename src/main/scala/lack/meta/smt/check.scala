@@ -3,7 +3,7 @@ package lack.meta.smt
 import lack.meta.base.Integer
 import lack.meta.core.builder.Node
 import lack.meta.core.sort.Sort
-import lack.meta.core.term.{Exp, Prim, Val, Var}
+import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.solver.Solver
 import lack.meta.smt.solver.compound
@@ -94,7 +94,7 @@ object check:
 
   class Stepped(val step: Int, val ty: StepType):
 
-    def ppvar(v: Var): Terms.SSymbol =
+    def ppref(v: lack.meta.core.names.Ref): Terms.SSymbol =
       compound.sym(s"${v.pretty}@${step}")
 
     def ppsort(s: Sort): Terms.Sort = s match
@@ -117,13 +117,13 @@ object check:
         case StepType.Transition => new Stepped(step - 1, ty).ppexp(pre)
         case StepType.Free => throw new Exception(s"can't pretty-print expression (pre e) for StepType.Free ${e}")
       case Exp.Val(v) => ppval(v)
-      case Exp.Var(v) => Terms.QualifiedIdentifier(Terms.Identifier(ppvar(v)))
+      case Exp.Var(v, _) => Terms.QualifiedIdentifier(Terms.Identifier(ppref(v)))
       case Exp.App(prim, args : _*) =>
         compound.funapp(prim.pretty, args.map(ppexp(_)) : _*)
 
-    def declares(vs: List[Var], solver: Solver): Unit =
+    def declares(vs: List[Exp.Var], solver: Solver): Unit =
       vs.foreach { v =>
-        solver.declareConst(ppvar(v), ppsort(v.sort))
+        solver.declareConst(ppref(v.v), ppsort(v.sort))
       }
 
     def bind(lhs: Exp, rhs: Exp, solver: Solver): Unit = rhs match

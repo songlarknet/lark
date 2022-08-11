@@ -68,3 +68,12 @@ object TestLastN:
     def apply(n: Integer, e: Stream[stream.Bool], activate: Activate = Activate.always)(using superbuilder: Builder) =
       new LastN(n, e, NodeApplication(activate, superbuilder))
 
+
+
+object Blah:
+
+  class X(sub: Builder):
+    def x = sub.nodeRef
+
+  class Foo(sub: Builder) extends X(sub):
+    def y = x

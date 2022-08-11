@@ -17,7 +17,7 @@ object stream:
   object internal:
     case class Prim[T <: Sort]()
 
-  opaque type Bool    = internal.Prim[Sort.Bool.type]
+  opaque type Bool    = Sort.Bool.type
   given SortRepr_Bool: SortRepr[Bool] = new SortRepr(Sort.Bool)
 
   opaque type Int8    = internal.Prim[Sort.Int8.type]

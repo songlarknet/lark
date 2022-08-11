@@ -1,6 +1,6 @@
 package lack.meta.core
 
-import lack.meta.base.Integer
+import lack.meta.base.{Integer, Range}
 
 object sort:
 
@@ -16,9 +16,13 @@ object sort:
       * Arithmetic overflow is not defined. */
     class Integral(val width: Int, val signed: Boolean) extends Sort:
       def pretty: String = (if (signed) "Int" else "UInt") + width.toString
-      def minInclusive: Integer = if (signed) (-1L << (width - 1)) else 0
-      // TODO: all Longs should be BigIntegers. Long won't hold UInt64.
-      def maxInclusive: Integer = if (signed) ( 1L << (width - 1)) else (1L << width)
+      def minInclusive: Integer = if (signed) (Integer(-1) << (width - 1)) else 0
+      def maxInclusive: Integer = (if (signed) (Integer(1) << (width - 1)) else (Integer(1) << width)) - 1
+
+    // TODO: we probably do want an arbitrary-precision Integer Sort, so we can
+    // translate fixed-width integers with proof obligations.
+    // This unbounded Integer sort should perhaps not be exposed in source,
+    // and C compilation should die if the program uses it other than in proof obligations.
 
     case object Int8   extends Integral(8, true)
     case object UInt8  extends Integral(8, false)
@@ -47,15 +51,16 @@ object sort:
       Subrange(range.min, range.max, fits.headOption.getOrElse(Int64))
 
     /** Unsigned integers with modulus arithmetic.
-      * The representation of these are equivalent to unsigned integers, but
-      * operations have well-defined overflow semantics. */
+      * The compiled representation of these are equivalent to unsigned integers,
+      * but operations have well-defined overflow semantics.
+      * The SMT representation may use bitvectors.
+      * TODO: rename to Bit32 or UBit32?
+      */
     class Mod(val width: scala.Int) extends Sort:
-      // TODO range doesn't support 32-bit unsigned or 64-bit
-      def range: Range = Range(0, 1 << width)
+      def range: Range = Range(0, (Integer(1) << width) - 1)
       def pretty: String = s"Mod$width"
-      def minInclusive: Integer = 0
-      // TODO: all Longs should be BigIntegers. Long won't hold UInt64.
-      def maxInclusive: Integer = 1L << width
+      def minInclusive: Integer = range.min
+      def maxInclusive: Integer = range.max
 
     case object Mod8  extends Mod(8)
     case object Mod16 extends Mod(16)

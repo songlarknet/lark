@@ -49,7 +49,7 @@ object node:
 
     given builder: Builder =
       new Builder(superbuilder.nodeRef.subnode(
-        this.getClass().getName(),
+        lack.meta.core.names.ComponentSymbol.fromScalaSymbol(this.getClass().getSimpleName()),
         activate.reset._exp,
         activate.when._exp))
 
@@ -59,13 +59,13 @@ object node:
 
 
     protected def declare[T: SortRepr](name: String): Lhs[T] =
-      new Lhs(core.term.Exp.Var(builder.nodeRef.fresh(name, summon[SortRepr[T]].sort)))
+      new Lhs(builder.nodeRef.fresh(lack.meta.core.names.ComponentSymbol.fromScalaSymbol(name), summon[SortRepr[T]].sort))
 
     protected def local[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-      declare(loc.enclosing.mkString("."))
+      declare(loc.prettyPath)
 
     protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-      declare(loc.enclosing.mkString("."))
+      declare(loc.prettyPath)
 
     protected def property(name: String)(prop: Stream[stream.Bool]) =
       builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, core.prop.Form.Property))

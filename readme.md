@@ -52,3 +52,4 @@ Potential applications:
 * electrohydraulic braking-by-wire
 * flight controllers https://github.com/betaflight/betaflight
 * a train controller
+* apply to examples from Lucid Synchrone https://www.di.ens.fr/~pouzet/lucid-synchrone/manual_html/manual016.html

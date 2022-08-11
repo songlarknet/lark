@@ -69,7 +69,8 @@ object compound:
     stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
 
   object implicits:
-    implicit def implicit_int[T: SortRepr: Num](i: base.Integer): Stream[T] = summon[Num[T]].const(i)
+    implicit def implicit_integer[T: SortRepr: Num](i: base.Integer): Stream[T] = summon[Num[T]].const(i)
+    implicit def implicit_int[T: SortRepr: Num](i: Int): Stream[T] = summon[Num[T]].const(i)
 
     // this doesn't want to apply
     // implicit def tuple2[A, B](a: Stream[A], b: Stream[B]): Stream[(A, B)] =
