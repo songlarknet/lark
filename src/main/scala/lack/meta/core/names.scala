@@ -16,9 +16,9 @@ object names:
     /** Make an identifier from given Scala identifier. */
     def fromScalaSymbol(s: String): ComponentSymbol = {
       // TODO: check no bad characters, disallow ^ and ? and .
-      require(!s.contains("."), s)
-      require(!s.contains("^"), s)
-      require(!s.contains("?"), s)
+      require(!s.contains("."), s"Illegal character: '$s' should not contain '.'")
+      require(!s.contains("^"), s"Illegal character: '$s' should not contain '^'")
+      require(!s.contains("?"), s"Illegal character: '$s' should not contain '?'")
       s
     }
     /** Make an internal component name.
@@ -31,11 +31,11 @@ object names:
     def pretty(c: ComponentSymbol): String = c
 
     val INIT  = fromInternal("init")
-    val EMPTY = fromInternal("")
+    val LOCAL = fromInternal("local")
 
   /** A name component, which can be used as a variable binding. */
-  case class Component(symbol: ComponentSymbol, ix: Int):
-    def pretty: String = symbol + (if (ix != 0) s"?${ix}" else "")
+  case class Component(symbol: ComponentSymbol, ix: Option[Int]):
+    def pretty: String = symbol + (if (ix.isDefined) s"?${ix.get}" else "")
 
   /** A reference to a named variable.
    * This may have a path of node instances, to refer to the results of subnodes.

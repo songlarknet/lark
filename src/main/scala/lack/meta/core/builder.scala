@@ -11,13 +11,14 @@ object builder:
   class Supply(val path: List[names.Component]):
     var ixes: scala.collection.mutable.Map[names.ComponentSymbol, Int] = scala.collection.mutable.Map[names.ComponentSymbol, Int]().withDefaultValue(0)
 
-    def fresh(name: names.ComponentSymbol): names.Ref =
+    def freshRef(name: names.ComponentSymbol, forceIndex: Boolean = false): names.Ref =
       val ix = ixes(name)
+      val ixy = if (ix > 0 || forceIndex) Some(ix) else None
       ixes(name) += 1
-      names.Ref(path, names.Component(name, ix))
+      names.Ref(path, names.Component(name, ixy))
 
-    def fresh(name: names.ComponentSymbol, sort: Sort): Exp.Var =
-      Exp.Var(fresh(name), sort)
+    def freshVar(name: names.ComponentSymbol, sort: Sort, forceIndex: Boolean = false): Exp.Var =
+      Exp.Var(freshRef(name, forceIndex), sort)
 
     // TODO: want a second sort of context that's program-level
     // TODO: add map from Var to Node where it's defined?
@@ -46,13 +47,13 @@ object builder:
     /** All obligations we need to prove. TODO: restructure, deal with contracts */
     def allPropObligations: List[Judgment] = allProps.filter(p => p.form == Form.Property)
 
-    def fresh(prefix: names.ComponentSymbol, sort: Sort): Exp.Var =
-      val v = supply.fresh(prefix, sort)
+    def fresh(prefix: names.ComponentSymbol, sort: Sort, forceIndex: Boolean = false): Exp.Var =
+      val v = supply.freshVar(prefix, sort, forceIndex)
       vars = v :: vars
       v
 
     def subnode(name: names.ComponentSymbol, reset: Exp, when: Exp): Node =
-      val inst = supply.fresh(name)
+      val inst = supply.freshRef(name, forceIndex = true)
       val s = new Supply(supply.path :+ inst.name)
       val c = new Node(s, s.path, reset, when)
       subnodes = c :: subnodes
@@ -71,6 +72,9 @@ object builder:
       case Exp.Val(_) => rhs
       case _ =>
         // Try to re-use
+        // TODO: apply some local rewrites, eg
+        // v -> pre e = Fby(v, e)
+        // and const prop
         bindings.find { case (v,rhsx) => rhs == rhsx } match
           case None =>
             memoForce(rhs, sort)
@@ -82,7 +86,7 @@ object builder:
      * doesn't reuse existing bindings.
      */
     def memoForce(rhs: Exp, sort: Sort): Exp =
-      val v = fresh(names.ComponentSymbol.EMPTY, sort)
+      val v = fresh(names.ComponentSymbol.LOCAL, sort, forceIndex = true)
       bind(v, rhs)
       v
 

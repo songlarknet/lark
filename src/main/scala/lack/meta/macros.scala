@@ -4,7 +4,7 @@ import scala.quoted.*
 
 object macros:
   case class Location(enclosing: List[String], position: Position):
-    def prettyPath: String = enclosing.drop(1).mkString("/")
+    def prettyPath: String = enclosing.lastOption.getOrElse("")
 
   case class Position(name: String, path: String, line: Int, column: Int)
 

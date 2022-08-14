@@ -171,6 +171,16 @@ object term:
       case class Arrow(a: Exp, b: Exp) extends Exp:
         def pretty: String = s"(flow'-> ${a.pretty} ${b.pretty})"
 
+      /** Followed by, or initialised delay.
+       * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
+       * "v -> pre e".
+       * This primitive has a slightly better encoding.
+       * Vélus also only supports fby and not pre, so we'll need to
+       * rewrite occurrences of pre to fby if we want to generate Vélus.
+       */
+      case class Fby(v: Val, e: Exp) extends Exp:
+        def pretty: String = s"(flow'fby ${v.pretty} ${e.pretty})"
+
     /** Non-deterministic terms */
     object nondet:
       case class Undefined(s: Sort) extends Exp:
