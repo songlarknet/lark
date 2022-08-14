@@ -4,10 +4,19 @@ import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
-import smtlib.interpreters.Z3Interpreter
+import smtlib.interpreters.{CVC4Interpreter, Z3Interpreter}
 
 object solver:
-  def gimme(verbose: Boolean = false): Solver = new Solver(Z3Interpreter.buildDefault, verbose)
+  def gimme(verbose: Boolean = false): Solver = new Solver(interpreters.z3(), verbose)
+
+  object interpreters:
+    def z3() = Z3Interpreter.buildDefault
+    def cvc5() = new CVC4Interpreter("cvc5",
+      Array("--lang", "smt2",
+        "--incremental",
+        "--produce-models",
+        "--print-success"),
+      tailPrinter = true)
 
   object compound:
     def sym(s: String) = Terms.SSymbol(s)
@@ -15,6 +24,13 @@ object solver:
     def qid(s: String, sort: Terms.Sort) = Terms.QualifiedIdentifier(id(s), Some(sort))
     def qid(s: String) = Terms.QualifiedIdentifier(id(s))
     def funapp(f: String, args: Terms.Term*) = Terms.FunctionApplication(qid(f), args)
+
+    def int(i: lack.meta.base.Integer) =
+      // cvc5 barfs on negative integers. Is this standards-compliant?
+      if (i >= 0)
+        Terms.SNumeral(i)
+      else
+        funapp("-", Terms.SNumeral(- i))
 
 
   class Solver(interpreter: Interpreter, verbose: Boolean):
@@ -35,12 +51,19 @@ object solver:
     private def clean(response: SExpr): SExpr = response match
       case r : CommandsResponses.CheckSatStatus => r
       case e : CommandsResponses.Error =>
-        if (e.msg.endsWith("Found: unsat"))
-          CommandsResponses.CheckSatStatus(CommandsResponses.UnsatStatus)
-        else if (e.msg.endsWith("Found: sat"))
-          CommandsResponses.CheckSatStatus(CommandsResponses.SatStatus)
-        else if (e.msg.endsWith("Found: unknown"))
-          CommandsResponses.CheckSatStatus(CommandsResponses.UnknownStatus)
+        // The Scala smtlib parser doesn't seem to handle sat, unsat or unknown results from check-sat-assuming.
+        // When it tries to parse the result it encounters an error that looks like:
+        //  (error "Solver encountered exception: smtlib.parser.Parser$UnexpectedTokenException: Unexpected token at position: (74, 1). Expected: [OParen]. Found: unsat")
+        //
+        if (e.msg.contains("UnexpectedTokenException"))
+          if (e.msg.endsWith("Found: unsat"))
+            CommandsResponses.CheckSatStatus(CommandsResponses.UnsatStatus)
+          else if (e.msg.endsWith("Found: sat"))
+            CommandsResponses.CheckSatStatus(CommandsResponses.SatStatus)
+          else if (e.msg.endsWith("Found: unknown"))
+            CommandsResponses.CheckSatStatus(CommandsResponses.UnknownStatus)
+          else
+            e
         else
           e
       case _ => response
@@ -64,9 +87,14 @@ object solver:
       declareConst(actlit, Terms.Sort(compound.id("Bool")))
       assert(compound.funapp("=>", xactlit, prop))
       val sat = command(Commands.CheckSatAssuming(Seq(Commands.PropLiteral(actlit, true))))
-        .asInstanceOf[CommandsResponses.CheckSatStatus]
-      val ret = cont(sat)
-      assert(compound.funapp("not", xactlit))
-      ret
+      if (sat.isInstanceOf[CommandsResponses.CheckSatStatus])
+        val ret = cont(sat.asInstanceOf[CommandsResponses.CheckSatStatus])
+        assert(compound.funapp("not", xactlit))
+        ret
+      else
+        throw new SolverException(sat)
 
 
+  class SolverException(response: SExpr) extends Exception(
+    s"""SMT solver returned unexpected response:
+      ${response}""")

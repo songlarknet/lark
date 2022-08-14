@@ -104,8 +104,9 @@ object check:
 
     def ppval(v: Val): Terms.Term = v match
       case Val.Bool(b) => compound.qid(b.toString)
-      case Val.Int(i) => Terms.SNumeral(i)
+      case Val.Int(i) => compound.int(i)
       // TODO
+
 
     def ppexp(e: Exp): Terms.Term = e match
       case Exp.flow.Arrow(first, later) => ty match
