@@ -60,9 +60,9 @@ object builder:
        * @param rhs
        * @param sort
        * */
-      def memo(rhs: Exp, sort: Sort)(using location: Location): Exp = rhs match
+      def memo(rhs: Exp)(using location: Location): Exp = rhs match
         case Exp.Var(_, _) => rhs
-        case Exp.Val(_) => rhs
+        case Exp.Val(_, _) => rhs
         case _ =>
           // Try to re-use binding if we already have one.
           //
@@ -77,7 +77,7 @@ object builder:
           children.flatMap {
             case Equation(lhs, rhsx) if rhs == rhsx =>
               val v = node.vars(lhs)
-              assert(v.sort == sort,
+              assert(v.sort == rhs.sort,
                 s"""When trying to reuse existing binding
                   ${lhs} : ${v.sort} = ${rhsx}
                 for requested expression ${rhs} : ${sort} at location ${location},
@@ -85,14 +85,14 @@ object builder:
                 """)
               Seq(node.xvar(lhs))
             case _ => Seq.empty
-          }.headOption.getOrElse(memoForce(rhs, sort))
+          }.headOption.getOrElse(memoForce(rhs))
 
       /** Create a new binding for the given expression, even for simple expressions.
        * This creates bindings for simple expressions such as variables and values;
        * doesn't reuse existing bindings.
        */
-      def memoForce(rhs: Exp, sort: Sort)(using location: Location): Exp =
-        val vv = Variable(sort, location, Variable.Generated)
+      def memoForce(rhs: Exp)(using location: Location): Exp =
+        val vv = Variable(rhs.sort, location, Variable.Generated)
         val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromInternal(i))
         val v = node.fresh(name, vv, forceIndex = true)
         append(Equation(v.v.name, rhs))
@@ -135,7 +135,7 @@ object builder:
     var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
     var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
 
-    var nested: Binding.Nested = new Binding.Nested(supply.freshInit().name, Selector.When(term.Exp.Val(term.Val.Bool(true))), this)
+    var nested: Binding.Nested = new Binding.Nested(supply.freshInit().name, Selector.When(term.Exp.Val(Sort.Bool, term.Val.Bool(true))), this)
 
     def allProps: Iterable[Judgment] = props ++ subnodes.values.flatMap(_.allProps)
     /** All obligations we need to prove. TODO: restructure, deal with contracts */
@@ -143,7 +143,7 @@ object builder:
 
     def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
       val r = supply.freshRef(name, forceIndex)
-      val v = Exp.Var(r, variable.sort)
+      val v = Exp.Var(variable.sort, r)
       vars += r.name -> variable
       if (variable.mode == Variable.Argument)
         params += r.name
@@ -154,7 +154,7 @@ object builder:
 
     def xvar(name: names.Component): Exp.Var =
       val v = vars(name)
-      Exp.Var(names.Ref(path, name), v.sort)
+      Exp.Var(v.sort, names.Ref(path, name))
 
 
     def prop(j: Judgment): Unit =

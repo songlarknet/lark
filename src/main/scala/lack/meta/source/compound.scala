@@ -9,22 +9,22 @@ import lack.meta.core.sort.Sort
 
 object compound:
   def pre[T: SortRepr](it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    builder.memo1(it) { e => Exp.flow.Pre(e) }
+    builder.memo1(it) { e => Exp.flow.Pre(it.sort, e) }
 
   def arrow[T: SortRepr](a: Stream[T], b: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    builder.memo2(a, b) { case (e, f) => Exp.flow.Arrow(e, f) }
+    builder.memo2(a, b) { case (e, f) => Exp.flow.Arrow(a.sort, e, f) }
 
   def and(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Exp.App(Prim.And, e, f)}
+    builder.memo2(x, y) { case (e, f) => Exp.App(Sort.Bool, Prim.And, e, f)}
 
   def or(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Exp.App(Prim.Or, e, f)}
+    builder.memo2(x, y) { case (e, f) => Exp.App(Sort.Bool, Prim.Or, e, f)}
 
   def implies(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Exp.App(Prim.Implies, e, f)}
+    builder.memo2(x, y) { case (e, f) => Exp.App(Sort.Bool, Prim.Implies, e, f)}
 
   def not(x: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo1(x) { case e => Exp.App(Prim.Not, e)}
+    builder.memo1(x) { case e => Exp.App(Sort.Bool, Prim.Not, e)}
 
   extension [T: SortRepr](x: Stream[T])(using builder: Builder, location: Location)
     def ->(y: Stream[T]): Stream[T] = compound.arrow(x, y)
@@ -43,7 +43,7 @@ object compound:
       compound.not(x)
 
   def ifthenelse[T: SortRepr](p: Stream[stream.Bool], t: Stream[T], f: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    builder.memo3x1(p, t, f) { case (e, f, g) => Exp.App(Prim.Ite, e, f, g) }
+    builder.memo3x1(p, t, f) { case (e, f, g) => Exp.App(t.sort, Prim.Ite, e, f, g) }
 
   def int[T: Num](i: base.Integer): Stream[T] = summon[Num[T]].const(i)
 
@@ -61,10 +61,10 @@ object compound:
   def m64(i: base.Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
 
   val True: Stream[stream.Bool] =
-    new Stream(Exp.Val(Val.Bool(true)))
+    new Stream(Exp.Val(Sort.Bool, Val.Bool(true)))
 
   val False: Stream[stream.Bool] =
-    new Stream(Exp.Val(Val.Bool(false)))
+    new Stream(Exp.Val(Sort.Bool, Val.Bool(false)))
 
   def tuple[A, B](a: Stream[A], b: Stream[B]): Stream[(A, B)] =
     stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
@@ -144,48 +144,48 @@ object compound:
   object internal:
     abstract class NumImpl[T: SortRepr] extends Num[T] with Ord[T]:
       def add(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Exp.App(Prim.Add, _, _) }
+        builder.memo2(x, y) { Exp.App(x.sort, Prim.Add, _, _) }
 
       def sub(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Exp.App(Prim.Sub, _, _) }
+        builder.memo2(x, y) { Exp.App(x.sort, Prim.Sub, _, _) }
 
       def mul(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Exp.App(Prim.Mul, _, _) }
+        builder.memo2(x, y) { Exp.App(x.sort, Prim.Mul, _, _) }
 
       def div(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Exp.App(Prim.Div, _, _) }
+        builder.memo2(x, y) { Exp.App(x.sort, Prim.Div, _, _) }
 
       def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo1(x) { Exp.App(Prim.Negate, _) }
+        builder.memo1(x) { Exp.App(x.sort, Prim.Negate, _) }
 
       def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Exp.App(Prim.Eq, _, _) }
+        builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Eq, _, _) }
 
       def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Exp.App(Prim.Lt, _, _) }
+        builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Lt, _, _) }
 
       def le(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Exp.App(Prim.Le, _, _) }
+        builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Le, _, _) }
 
       def gt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Exp.App(Prim.Gt, _, _) }
+        builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Gt, _, _) }
 
       def ge(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Exp.App(Prim.Ge, _, _) }
+        builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Ge, _, _) }
 
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
       def const(i: base.Integer): Stream[T] =
         summon[SortRepr[T]].sort match
           case sort: Sort.Integral =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
-            new Stream(Exp.Val(Val.Int(i)))
+            new Stream(Exp.Val(sort, Val.Int(i)))
 
     class NumImplMod[T: SortRepr](mod: Sort.Mod) extends NumImpl[T]:
       def const(i: base.Integer): Stream[T] =
         summon[SortRepr[T]].sort match
           case sort: Sort.Mod =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
-            new Stream(Exp.Val(Val.Mod(i, mod)))
+            new Stream(Exp.Val(sort, Val.Mod(i, mod)))
 
 
   def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =

@@ -12,6 +12,12 @@ object stream:
     def ==(o: Stream[T])(using eq: compound.Eq[T], builder: node.Builder, location: Location): Stream[Bool] = eq.eq(this, o)
     def !=(o: Stream[T])(using eq: compound.Eq[T], builder: node.Builder, location: Location): Stream[Bool] = compound.not(eq.eq(this, o))
 
+    // Check that all constructed streams have a sort that agrees with the type-level sort.
+    // PERF: is this overkill?
+    assert(_exp.sort == sort,
+      s"""Stream[T] sort check: expected ${sort}, but expression has sort ${_exp.sort}.
+      Expression: ${_exp.pretty}""")
+
   class SortRepr[T](val sort: Sort)
 
   // TODO: remove this, unnecessary
@@ -64,22 +70,23 @@ object stream:
   given SortRepr_Complex: SortRepr[Complex] = new SortRepr(Sort.Complex)
 
   extension (x: Stream[Complex])
-    def re: Stream[Float32] = new Stream(Exp.App(term.Prim.StructGet("re", Sort.Complex), x._exp))
-    def im: Stream[Float32] = new Stream(Exp.App(term.Prim.StructGet("im", Sort.Complex), x._exp))
+    def re: Stream[Float32] = new Stream(Exp.App(Sort.Float32, term.Prim.StructGet("re", Sort.Complex), x._exp))
+    def im: Stream[Float32] = new Stream(Exp.App(Sort.Float32, term.Prim.StructGet("im", Sort.Complex), x._exp))
 
   object Complex:
     def apply(re: Stream[Float32], im: Stream[Float32]): Stream[Complex] =
-      new Stream(Exp.App(term.Prim.StructMk(Sort.Complex), re._exp, im._exp))
+      new Stream(Exp.App(Sort.Complex, term.Prim.StructMk(Sort.Complex), re._exp, im._exp))
 
   // TODO more tuples
   given SortRepr_Tuple2[A: SortRepr, B: SortRepr]: SortRepr[(A, B)] =
     new SortRepr(Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort))
 
   extension [A: SortRepr, B: SortRepr](x: Stream[(A, B)])
-    def _1: Stream[A] = new Stream(Exp.App(term.Prim.StructGet("_1", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
-    def _2: Stream[B] = new Stream(Exp.App(term.Prim.StructGet("_2", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
+    def _1: Stream[A] = new Stream(Exp.App(summon[SortRepr[A]].sort, term.Prim.StructGet("_1", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
+    def _2: Stream[B] = new Stream(Exp.App(summon[SortRepr[B]].sort, term.Prim.StructGet("_2", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
 
   object Tuple2:
     def apply[A: SortRepr, B: SortRepr](_1: Stream[A], _2: Stream[B]): Stream[(A, B)] =
-      new Stream(Exp.App(term.Prim.StructMk(Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), _1._exp, _2._exp))
+      val sort = Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)
+      new Stream(Exp.App(sort, term.Prim.StructMk(sort), _1._exp, _2._exp))
 

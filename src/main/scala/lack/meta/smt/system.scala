@@ -116,7 +116,7 @@ object system:
     case class Context(init: names.Ref, supply: Supply)
 
     def expr(context: Context, exp: Exp): System[Terms.Term] = exp match
-      case Exp.flow.Arrow(first, later) =>
+      case Exp.flow.Arrow(_, first, later) =>
         val t0 = expr(context, first)
         val t1 = expr(context, later)
         val choice = new System[Terms.Term => Terms.Term => Terms.Term]:
@@ -133,19 +133,16 @@ object system:
             compound.bool(true)
         choice <*> t0 <*> t1
 
-      case Exp.flow.Pre(pre) =>
+      case Exp.flow.Pre(sort, pre) =>
         val t0 = expr(context, pre)
-        // TODO need sort
-        val sort = Sort.Bool
         val ref = context.supply.state()
         new System[Terms.Term]:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
           def row: Namespace = t0.row
           def init(oracle: Oracle, state: Prefix): Terms.Term =
-            // TODO: use an oracle to re-initialise state(ref) every time.
-            // This needs the type of pre though. Perhaps all Exp constructors should have type annotations
-            // val u = oracle.oracle(ref, pre)
-            t0.init(oracle, state)
+            val u = oracle.oracle(ref, sort)
+            compound.and(t0.init(oracle, state),
+              compound.funapp("=", Terms.QualifiedIdentifier(Terms.Identifier(state(ref))), Terms.QualifiedIdentifier(Terms.Identifier(u))))
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
             (compound.bool(true), Terms.QualifiedIdentifier(Terms.Identifier(state(ref))))
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
@@ -155,10 +152,8 @@ object system:
                 t0.extract(oracle, state, row)._2),
               t0.step(oracle, state, row, stateX))
 
-      case Exp.flow.Fby(v0, pre) =>
+      case Exp.flow.Fby(sort, v0, pre) =>
         val t0 = expr(context, pre)
-        // TODO need sort
-        val sort = Sort.Bool
         val ref = context.supply.state()
         new System[Terms.Term]:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
@@ -188,8 +183,8 @@ object system:
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)
 
-      case Exp.Val(v) => System.pure(value(v))
-      case Exp.Var(v, s) => new System:
+      case Exp.Val(_, v) => System.pure(value(v))
+      case Exp.Var(s, v) => new System:
         def state: Namespace = Namespace()
         def row: Namespace = Namespace.fromRef(v, s)
         def init(oracle: Oracle, state: Prefix): Terms.Term =

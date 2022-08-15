@@ -45,6 +45,7 @@ object term:
   /** Pure total primitives. */
   trait Prim:
     def pretty: String
+    // TODO: prims need sort checking
     // def sort(args: List[Sort]): Sort
     def eval(args: List[Val]): Val
   object Prim:
@@ -148,27 +149,30 @@ object term:
 
   sealed trait Exp:
     def pretty: String
+    // Annotate each node with its type. Is this overkill? The expressions probably won't be "too big"...
+    def sort: Sort
 
   object Exp:
     /** Variable */
-    case class Var(v: names.Ref, sort: Sort) extends Exp:
+    case class Var(sort: Sort, v: names.Ref) extends Exp:
       def pretty: String = s"(as ${v.pretty} ${sort.pretty})"
 
     /** Value */
-    case class Val(v: term.Val) extends Exp:
+    case class Val(sort: Sort, v: term.Val) extends Exp:
       def pretty: String = v.pretty
 
     /** Pure primitive application */
-    case class App(prim: term.Prim, args: Exp*) extends Exp:
+    case class App(sort: Sort, prim: term.Prim, args: Exp*) extends Exp:
+      // TODO: should constructors do typechecking?
       def pretty: String = s"(${prim.pretty} ${args.map(_.pretty).mkString(" ")})"
 
     /** Streaming terms */
     object flow:
       /** Previous value */
-      case class Pre(e: Exp) extends Exp:
+      case class Pre(sort: Sort, e: Exp) extends Exp:
         def pretty: String = s"(flow'pre ${e.pretty})"
       /** x -> y, or "first x then y". */
-      case class Arrow(a: Exp, b: Exp) extends Exp:
+      case class Arrow(sort: Sort, a: Exp, b: Exp) extends Exp:
         def pretty: String = s"(flow'-> ${a.pretty} ${b.pretty})"
 
       /** Followed by, or initialised delay.
@@ -178,10 +182,10 @@ object term:
        * Vélus also only supports fby and not pre, so we'll need to
        * rewrite occurrences of pre to fby if we want to generate Vélus.
        */
-      case class Fby(v: Val, e: Exp) extends Exp:
+      case class Fby(sort: Sort, v: Val, e: Exp) extends Exp:
         def pretty: String = s"(flow'fby ${v.pretty} ${e.pretty})"
 
     /** Non-deterministic terms */
     object nondet:
-      case class Undefined(s: Sort) extends Exp:
-        def pretty: String = s"(undefined ${s.pretty})"
+      case class Undefined(sort: Sort) extends Exp:
+        def pretty: String = "undefined"

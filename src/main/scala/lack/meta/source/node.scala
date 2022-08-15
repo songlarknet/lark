@@ -13,11 +13,11 @@ object node:
 
     def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Exp)(using location: lack.meta.macros.Location): Stream[T] =
       val e   = it._exp
-      val mem = nested.memo(f(e), it.sort)
+      val mem = nested.memo(f(e))
       new Stream(mem)(using it.sortRepr)
 
     def memo2[T](a: Stream[T], b: Stream[T])(f: (core.term.Exp, core.term.Exp) => core.term.Exp)(using location: lack.meta.macros.Location): Stream[T] =
-      val mem = nested.memo(f(a._exp, b._exp), a.sort)
+      val mem = nested.memo(f(a._exp, b._exp))
       new Stream(mem)(using a.sortRepr)
 
     def memo2x1[T, U, V: SortRepr]
@@ -25,7 +25,7 @@ object node:
       (f: (core.term.Exp, core.term.Exp) => core.term.Exp)
       (using location: lack.meta.macros.Location): Stream[V] =
       val sort = summon[SortRepr[V]].sort
-      val mem = nested.memo(f(a._exp, b._exp), sort)
+      val mem = nested.memo(f(a._exp, b._exp))
       new Stream(mem)
 
     def memo3x1[T, U, V, W: SortRepr]
@@ -33,7 +33,7 @@ object node:
       (f: (core.term.Exp, core.term.Exp, core.term.Exp) => core.term.Exp)
       (using location: lack.meta.macros.Location): Stream[W] =
       val sort = summon[SortRepr[W]].sort
-      val mem = nested.memo(f(a._exp, b._exp, c._exp), sort)
+      val mem = nested.memo(f(a._exp, b._exp, c._exp))
       new Stream(mem)
 
     /** Call a subnode.
@@ -109,9 +109,9 @@ object node:
   case class Activate(reset: Stream[stream.Bool] = Activate.falses, when: Stream[stream.Bool] = Activate.trues)
   object Activate:
     val trues: Stream[stream.Bool]  =
-      new Stream(core.term.Exp.Val(core.term.Val.Bool(true)))
+      new Stream(core.term.Exp.Val(core.sort.Sort.Bool, core.term.Val.Bool(true)))
     val falses: Stream[stream.Bool] =
-      new Stream(core.term.Exp.Val(core.term.Val.Bool(false)))
+      new Stream(core.term.Exp.Val(core.sort.Sort.Bool, core.term.Val.Bool(false)))
     val always = Activate(reset = falses, when = trues)
 
   // case class NodeApplication(activate: Activate, superbuilder: Builder)
@@ -129,7 +129,7 @@ object node:
 
     protected class Lhs[T: SortRepr](_exp: core.term.Exp) extends Stream[T](_exp):
       def v: core.names.Component = _exp match
-        case core.term.Exp.Var(v, _) =>
+        case core.term.Exp.Var(_, v) =>
           require(v.path == builder.nodeRef.path)
           v.name
         case _ =>
