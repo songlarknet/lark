@@ -13,20 +13,6 @@ import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
 object check:
-  /** The pretty-printer needs to know whether a step is the initial step or
-    * the next step.
-    */
-  sealed trait StepType
-  object StepType:
-    /** Initial state. (x -> y) is printed as x. */
-    case object Init extends StepType
-    /** Non-reset transition. (x -> y) is printed as y. */
-    case object Transition extends StepType
-    /** Abstract state before a transition.
-      * This is used as the start of evaluation for the inductive case.
-      * (x -> y) could evaluate to either x or y. */
-    case object Free extends StepType
-
   sealed trait CheckFeasible
   object CheckFeasible:
     case object Feasible extends CheckFeasible
@@ -46,7 +32,7 @@ object check:
 
 
   def feasible(n: Node, count: Int, solver: Solver): Option[CheckFeasible] =
-    val steps = (0 until count).map { i => new Stepped(i, if (i == 0) StepType.Init else StepType.Transition) }
+    val steps = (0 until count).map { i => new Stepped(i) }
     steps.foreach { step =>
       step.nodedeclares(n, solver)
       step.nodebinds(n, solver)
@@ -57,44 +43,44 @@ object check:
       case CommandsResponses.UnsatStatus   => Some(CheckFeasible.Infeasible)
 
   def bmc(n: Node, count: Int, solver: Solver): Bmc =
-    solver.command(Commands.SetOption(Commands.ProduceModels(true)))
+    // solver.command(Commands.SetOption(Commands.ProduceModels(true)))
 
-    val steps = (0 until count).map { i => new Stepped(i, if (i == 0) StepType.Init else StepType.Transition) }
-    steps.foreach { step =>
-      step.nodedeclares(n, solver)
-      step.nodebinds(n, solver)
-      val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
-      solver.checkSatAssumingX(xcounterexample) { _.status match
-        case CommandsResponses.UnknownStatus => return Bmc.Unknown(step.step)
-        case CommandsResponses.SatStatus     =>
-          val model = solver.command(Commands.GetAssignment())
-          // solver.command(Commands.GetValue(step.ppexp(n.subnodes.head.bindings.head._1), Seq()))
-          return Bmc.Counterexample(step.step, model)
-        case CommandsResponses.UnsatStatus   =>
-      }
-    }
+    // val steps = (0 until count).map { i => new Stepped(i) }
+    // steps.foreach { step =>
+    //   step.nodedeclares(n, solver)
+    //   step.nodebinds(n, solver)
+    //   val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
+    //   solver.checkSatAssumingX(xcounterexample) { _.status match
+    //     case CommandsResponses.UnknownStatus => return Bmc.Unknown(step.step)
+    //     case CommandsResponses.SatStatus     =>
+    //       val model = solver.command(Commands.GetAssignment())
+    //       // solver.command(Commands.GetValue(step.ppexp(n.subnodes.head.bindings.head._1), Seq()))
+    //       return Bmc.Counterexample(step.step, model)
+    //     case CommandsResponses.UnsatStatus   =>
+    //   }
+    // }
     Bmc.SafeUpTo(count)
 
   def kind(n: Node, count: Int, solver: Solver): Kind =
-    val steps = (0 to count).map { i => new Stepped(i, if (i == 0) StepType.Free else StepType.Transition) }
-    steps.foreach { step =>
-      step.nodedeclares(n, solver)
-      step.nodebinds(n, solver)
-      val ands = compound.funapp("and", n.allPropObligations.map(p => step.ppexp(p.term)).toSeq : _*)
-      if (step.step == 0)
-        solver.assert(ands)
-      else
-        val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
-        solver.checkSatAssumingX(xcounterexample) { res =>
-          if (res.status == CommandsResponses.UnsatStatus)
-            return Kind.InvariantAt(step.step)
-        }
-        solver.assert(ands)
-    }
+    // val steps = (0 to count).map { i => new Stepped(i) }
+    // steps.foreach { step =>
+    //   step.nodedeclares(n, solver)
+    //   step.nodebinds(n, solver)
+    //   val ands = compound.funapp("and", n.allPropObligations.map(p => step.ppexp(p.term)).toSeq : _*)
+    //   if (step.step == 0)
+    //     solver.assert(ands)
+    //   else
+    //     val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
+    //     solver.checkSatAssumingX(xcounterexample) { res =>
+    //       if (res.status == CommandsResponses.UnsatStatus)
+    //         return Kind.InvariantAt(step.step)
+    //     }
+    //     solver.assert(ands)
+    // }
     Kind.NoGood(count)
 
 
-  class Stepped(val step: Int, val ty: StepType):
+  class Stepped(val step: Int):
 
     def ppref(v: lack.meta.core.names.Ref): Terms.SSymbol =
       compound.sym(s"${v.pretty}@${step}")
@@ -110,47 +96,33 @@ object check:
       // TODO
 
 
-    def ppexp(e: Exp): Terms.Term = e match
-      case Exp.flow.Arrow(first, later) => ty match
-        case StepType.Init => ppexp(first)
-        case StepType.Transition => ppexp(later)
-        case StepType.Free => throw new Exception(s"can't pretty-print expression (x -> y) for StepType.Free ${e}")
-      case Exp.flow.Pre(pre) => ty match
-        case StepType.Init => throw new Exception(s"can't pretty-print expression (pre e) for StepType.Init ${e}")
-        case StepType.Transition => new Stepped(step - 1, ty).ppexp(pre)
-        case StepType.Free => throw new Exception(s"can't pretty-print expression (pre e) for StepType.Free ${e}")
-      case Exp.Val(v) => ppval(v)
-      case Exp.Var(v, _) => Terms.QualifiedIdentifier(Terms.Identifier(ppref(v)))
-      case Exp.App(prim, args : _*) =>
-        compound.funapp(prim.pretty, args.map(ppexp(_)) : _*)
+    // def declares(path: List[names.Component], vs: List[(names.Component, builder.Variable)], solver: Solver): Unit =
+    //   vs.foreach { v =>
+    //     solver.declareConst(ppref(names.Ref(path, v._1)), ppsort(v._2.sort))
+    //   }
 
-    def declares(path: List[names.Component], vs: List[(names.Component, builder.Variable)], solver: Solver): Unit =
-      vs.foreach { v =>
-        solver.declareConst(ppref(names.Ref(path, v._1)), ppsort(v._2.sort))
-      }
+    // def bind(lhs: Exp, rhs: Exp, solver: Solver): Unit = rhs match
+    //   case Exp.flow.Arrow(first, later)
+    //     if ty == StepType.Free =>
+    //       solver.assert(
+    //         compound.funapp("or",
+    //           compound.funapp("=", ppexp(lhs), ppexp(first)),
+    //           compound.funapp("=", ppexp(lhs), ppexp(later))))
+    //   case Exp.flow.Pre(pre)
+    //     if ty == StepType.Init =>
+    //       // unguarded pre for init (step 0)
+    //   case Exp.flow.Pre(pre)
+    //     if ty == StepType.Free =>
+    //       // unguarded pre for free (pre-transition)
+    //   case _ =>
+    //     solver.assert(
+    //       compound.funapp("=", ppexp(lhs), ppexp(rhs)))
 
-    def bind(lhs: Exp, rhs: Exp, solver: Solver): Unit = rhs match
-      case Exp.flow.Arrow(first, later)
-        if ty == StepType.Free =>
-          solver.assert(
-            compound.funapp("or",
-              compound.funapp("=", ppexp(lhs), ppexp(first)),
-              compound.funapp("=", ppexp(lhs), ppexp(later))))
-      case Exp.flow.Pre(pre)
-        if ty == StepType.Init =>
-          // unguarded pre for init (step 0)
-      case Exp.flow.Pre(pre)
-        if ty == StepType.Free =>
-          // unguarded pre for free (pre-transition)
-      case _ =>
-        solver.assert(
-          compound.funapp("=", ppexp(lhs), ppexp(rhs)))
-
-    def nodedeclares(n: Node, solver: Solver): Unit =
-      declares(n.path, n.vars.toList, solver)
-      n.subnodes.foreach { nx =>
-        nodedeclares(nx._2, solver)
-      }
+    def nodedeclares(n: Node, solver: Solver): Unit = {}
+    //   declares(n.path, n.vars.toList, solver)
+    //   n.subnodes.foreach { nx =>
+    //     nodedeclares(nx._2, solver)
+    //   }
 
     def nodebinds(n: Node, solver: Solver): Unit = {}
       // TODO

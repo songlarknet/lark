@@ -25,6 +25,9 @@ object solver:
     def qid(s: String) = Terms.QualifiedIdentifier(id(s))
     def funapp(f: String, args: Terms.Term*) = Terms.FunctionApplication(qid(f), args)
 
+    // TODO: simplify, filter out literal trues
+    def and(args: Terms.Term*) = funapp("and", args : _*)
+
     def int(i: lack.meta.base.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
       if (i >= 0)
@@ -32,6 +35,7 @@ object solver:
       else
         funapp("-", Terms.SNumeral(- i))
 
+    def bool(b: Boolean) = qid(b.toString)
 
   class Solver(interpreter: Interpreter, verbose: Boolean):
     var fresh: Int = 0

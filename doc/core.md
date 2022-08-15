@@ -287,8 +287,16 @@ for q <- qualid
   in {
     state = t.state U { x : e.type };
     row   = t.row;
-    -- Don't care what value x has - uninitialized is undefined
-    init  = t.init;
+    -- Make sure the state has a fresh oracle whenever we initialise or reset.
+    -- It's tempting to leave s[x] unconstrained because it will initially
+    -- have some undefined value anyway. This won't work for the reset case
+    -- because it would just keep the previous value, which is a bit dodgy.
+    -- The C implementation could reasonably reset to zero, so we have to
+    -- explicitly reset it to some unknown value.
+    init  = λs.
+      let u = oracle
+      in s[x] = u
+      /\ t.init s;
     step  = λs r s' v.
       t.step s r s' s'[x]
       /\ v = s[x]
@@ -297,15 +305,14 @@ for q <- qualid
 -- Undefined has no restrictions at all
 [| c |- undefined |] =
   let t = [|c |- e|]
-  and x = fresh
   in {
-    state = t.state U { x : e.type };
+    state = t.state;
     row   = t.row;
-    -- Don't care what value x has - uninitialized is undefined
     init  = t.init;
     step  = λs r s' v.
-      t.step s r s' s'[x]
-      /\ v = s[x]
+      let u = oracle
+      in v = u
+      /\ t.step s r s' s'[x];
   }
 ```
 
