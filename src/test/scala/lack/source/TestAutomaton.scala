@@ -5,8 +5,9 @@ import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeApplication, Activate}
+import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.smt
+import lack.meta.source.node.Activate
 
 /** First attempt at automaton example.
  * Manual translation from Lustre syntax to nested nodes.
@@ -15,7 +16,7 @@ object TestAutomaton:
 
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    new Top(NodeApplication(Activate.always, builder))
+    builder.invoke { new Top(_) }
     println(builder.nodeRef.pretty)
 
     def solver() = smt.solver.gimme(verbose = false)
@@ -24,13 +25,14 @@ object TestAutomaton:
     println(s"bmc:      ${smt.check.bmc(builder.nodeRef, 4, solver())}")
     println(s"k-ind:    ${smt.check.kind(builder.nodeRef, 2, solver())}")
 
-  class Top(application: NodeApplication) extends Node(application):
+  class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...
     val btn_on  = local[Bool]
     val cmd_set = local[Bool]
     val speedo  = local[UInt8]
     val accel   = local[UInt8]
     val cruise  = Cruise(btn_on, cmd_set, speedo, accel)
+
 
   /**
    * Very simple "cruise control" automaton in Lustre:
@@ -80,7 +82,7 @@ object TestAutomaton:
   */
 
   /** hand-translated version */
-  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], application: NodeApplication) extends Node(application):
+  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: NodeInvocation) extends Node(invocation):
     // Should be able to generate a lot of this from a nicer representation
     val S_OFF     = u8(0)
     val S_AWAIT   = u8(1)
@@ -104,19 +106,19 @@ object TestAutomaton:
 
     // Scala 3 needs reflect.Selectable to be able to refer to N_OFF.accel_out etc.
     // Activation has reset=False (transitions are all resume) and enabled when state=S_OFF
-    val N_OFF = new Node(NodeApplication(Activate(False, state == S_OFF), builder)) with reflect.Selectable {
+    val N_OFF = new Nested(Activate(when = state == S_OFF)) {
       val accel_out = accel
       val light_on  = False
       val speed_out = u8(0)
     }
 
-    val N_AWAIT = new Node(NodeApplication(Activate(False, state == S_AWAIT), builder)) with reflect.Selectable {
+    val N_AWAIT = new Nested(Activate(when = state == S_AWAIT)) {
       val accel_out = accel
       val light_on  = True
       val speed_out = u8(0)
     }
 
-    val N_ON = new Node(NodeApplication(Activate(pre_state == S_AWAIT && cmd_set, state == S_ON), builder)) with reflect.Selectable {
+    val N_ON = new Nested(Activate(reset = pre_state == S_AWAIT && cmd_set, when = state == S_ON)) {
       val accel_out = local[UInt8]
       val speed_out = local[UInt8]
       val light_on  = local[Bool]
@@ -165,8 +167,15 @@ object TestAutomaton:
 
 
   object Cruise:
-    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], activate: Activate = Activate.always)(using superbuilder: Builder) =
-      new Cruise(btn_on, cmd_set, speedo, accel, NodeApplication(activate, superbuilder))
+    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Builder, location: lack.meta.macros.Location) =
+      builder.invoke { invocation =>
+        new Cruise(
+          invocation.arg("btn_on", btn_on),
+          invocation.arg("cmd_set", cmd_set),
+          invocation.arg("speedo", speedo),
+          invocation.arg("accel", accel),
+          invocation)
+      }
 
   /** Hypothetical syntax sugar */
   /**

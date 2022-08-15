@@ -5,7 +5,7 @@ import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeApplication, Activate}
+import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.smt
 
 object TestLastN:
@@ -22,7 +22,7 @@ object TestLastN:
     println(s"k-ind:    ${smt.check.kind(builder.nodeRef, 2, solver())}")
 
 
-  class LemmaLastN(n: Integer, application: NodeApplication) extends Node(application):
+  class LemmaLastN(n: Integer, invocation: NodeInvocation) extends Node(invocation):
     val e      = local[Bool]
     val lastN  = LastN(n,     e)
     val lastSN = LastN(n + 1, e)
@@ -34,10 +34,13 @@ object TestLastN:
     }
 
   object LemmaLastN:
-    def apply(n: Integer, activate: Activate = Activate.always)(using superbuilder: Builder) =
-      new LemmaLastN(n, NodeApplication(activate, superbuilder))
+    def apply(n: Integer)(using builder: Builder, location: lack.meta.macros.Location) =
+      builder.invoke { invocation =>
+        invocation.metaarg("n", n)
+        new LemmaLastN(n, invocation)
+      }
 
-  class LastN(n: Integer, e: Stream[Bool], application: NodeApplication) extends Node(application):
+  class LastN(n: Integer, e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation):
     require(n <= 255)
 
     val count     = local[UInt8]
@@ -50,7 +53,7 @@ object TestLastN:
       otherwise                 { 0 }
     )
 
-    out   := count >= n
+    val chk = out   := count >= n
 
     property("0 <= count <= n") {
       u8(0) <= count && count <= n
@@ -61,19 +64,8 @@ object TestLastN:
     // }
 
   object LastN:
-    // TODO: this should construct the sub-builder and freshen stream argument e to mark them as arguments.
-    // we probably also want to mark the meta-arguments (n) somehow
-    // we should be able to define a macro to take care of that.
-    // see lack.meta.source.node.Node
-    def apply(n: Integer, e: Stream[stream.Bool], activate: Activate = Activate.always)(using superbuilder: Builder) =
-      new LastN(n, e, NodeApplication(activate, superbuilder))
-
-
-
-object Blah:
-
-  class X(sub: Builder):
-    def x = sub.nodeRef
-
-  class Foo(sub: Builder) extends X(sub):
-    def y = x
+    def apply(n: Integer, e: Stream[stream.Bool])(using builder: Builder, location: lack.meta.macros.Location) =
+      builder.invoke { invocation =>
+        invocation.metaarg("n", n)
+        new LastN(n, invocation.arg("e", e), invocation)
+      }

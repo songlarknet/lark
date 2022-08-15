@@ -1,6 +1,8 @@
 package lack.meta.smt
 
 import lack.meta.base.Integer
+import lack.meta.core.names
+import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
@@ -61,7 +63,7 @@ object check:
     steps.foreach { step =>
       step.nodedeclares(n, solver)
       step.nodebinds(n, solver)
-      val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))) : _*)
+      val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
       solver.checkSatAssumingX(xcounterexample) { _.status match
         case CommandsResponses.UnknownStatus => return Bmc.Unknown(step.step)
         case CommandsResponses.SatStatus     =>
@@ -78,11 +80,11 @@ object check:
     steps.foreach { step =>
       step.nodedeclares(n, solver)
       step.nodebinds(n, solver)
-      val ands = compound.funapp("and", n.allPropObligations.map(p => step.ppexp(p.term)) : _*)
+      val ands = compound.funapp("and", n.allPropObligations.map(p => step.ppexp(p.term)).toSeq : _*)
       if (step.step == 0)
         solver.assert(ands)
       else
-        val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))) : _*)
+        val xcounterexample = compound.funapp("or", n.allPropObligations.map(p => compound.funapp("not", step.ppexp(p.term))).toSeq : _*)
         solver.checkSatAssumingX(xcounterexample) { res =>
           if (res.status == CommandsResponses.UnsatStatus)
             return Kind.InvariantAt(step.step)
@@ -122,9 +124,9 @@ object check:
       case Exp.App(prim, args : _*) =>
         compound.funapp(prim.pretty, args.map(ppexp(_)) : _*)
 
-    def declares(vs: List[Exp.Var], solver: Solver): Unit =
+    def declares(path: List[names.Component], vs: List[(names.Component, builder.Variable)], solver: Solver): Unit =
       vs.foreach { v =>
-        solver.declareConst(ppref(v.v), ppsort(v.sort))
+        solver.declareConst(ppref(names.Ref(path, v._1)), ppsort(v._2.sort))
       }
 
     def bind(lhs: Exp, rhs: Exp, solver: Solver): Unit = rhs match
@@ -145,16 +147,17 @@ object check:
           compound.funapp("=", ppexp(lhs), ppexp(rhs)))
 
     def nodedeclares(n: Node, solver: Solver): Unit =
-      declares(n.vars, solver)
+      declares(n.path, n.vars.toList, solver)
       n.subnodes.foreach { nx =>
-        nodedeclares(nx, solver)
+        nodedeclares(nx._2, solver)
       }
 
-    def nodebinds(n: Node, solver: Solver): Unit =
-      n.bindings.foreach { case (l,r) =>
-        bind(l, r, solver)
-      }
-      n.subnodes.foreach { nx =>
-        nodebinds(nx, solver)
-      }
+    def nodebinds(n: Node, solver: Solver): Unit = {}
+      // TODO
+      // n.bindings.foreach { case (l,r) =>
+      //   bind(l, r, solver)
+      // }
+      // n.subnodes.foreach { nx =>
+      //   nodebinds(nx, solver)
+      // }
 

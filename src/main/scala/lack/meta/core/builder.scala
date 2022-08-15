@@ -1,15 +1,18 @@
 package lack.meta.core
 
-import lack.meta.base.Integer
+import lack.meta.macros.Location
+import lack.meta.base.{Integer, indent}
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 import lack.meta.core.prop.{Form, Judgment}
-import javax.naming.Binding
 
+import scala.collection.mutable
+
+/** Mutable builder for node-based transition systems. */
 object builder:
   /** Node-level context with a fresh name supply */
   class Supply(val path: List[names.Component]):
-    var ixes: scala.collection.mutable.Map[names.ComponentSymbol, Int] = scala.collection.mutable.Map[names.ComponentSymbol, Int]().withDefaultValue(0)
+    var ixes: mutable.Map[names.ComponentSymbol, Int] = mutable.Map().withDefaultValue(0)
 
     def freshRef(name: names.ComponentSymbol, forceIndex: Boolean = false): names.Ref =
       val ix = ixes(name)
@@ -17,8 +20,8 @@ object builder:
       ixes(name) += 1
       names.Ref(path, names.Component(name, ixy))
 
-    def freshVar(name: names.ComponentSymbol, sort: Sort, forceIndex: Boolean = false): Exp.Var =
-      Exp.Var(freshRef(name, forceIndex), sort)
+    def freshInit(): names.Ref =
+      freshRef(names.ComponentSymbol.INIT, forceIndex = true)
 
     // TODO: want a second sort of context that's program-level
     // TODO: add map from Var to Node where it's defined?
@@ -26,84 +29,142 @@ object builder:
     // var nodes: List[Node] = List()
     // var sorts: List[Sort] = List()
 
+  /** Binding contexts, called "context" in core.md. */
+  sealed trait Binding:
+    def pretty: String
+  object Binding:
+    case class Equation(lhs: names.Component, rhs: Exp) extends Binding:
+      def pretty = s"${lhs.pretty} = ${rhs.pretty}"
+    case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
+      def pretty = s"${subnode.pretty}(${args.map(_.pretty).mkString(", ")})"
+    class Nested(val init: names.Component, val selector: Selector, val node: Node) extends Binding:
+      val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
+
+      def pretty: String =
+        s"${selector.pretty} @init(${init.pretty}):\n" +
+        indent(children.map(_.pretty).toList)
+
+      // TODO do merging / cse on append?
+      def append(b: Binding): Unit =
+        children += b
+
+      def nested(selector: Selector): Nested =
+        val i = node.supply.freshInit()
+        val n = new Nested(i.name, selector, node)
+        append(n)
+        n
+
+
+      /** Create a new binding for the given expression.
+       *
+       * @param rhs
+       * @param sort
+       * */
+      def memo(rhs: Exp, sort: Sort)(using location: Location): Exp = rhs match
+        case Exp.Var(_, _) => rhs
+        case Exp.Val(_) => rhs
+        case _ =>
+          // Try to re-use binding if we already have one.
+          //
+          // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
+          // and const prop
+          // TODO: look in other bindings.
+          // TODO: UNSOUND: do not reuse bindings that call undefined
+          //
+          // Maybe we want this to be as dumb as possible so that the
+          // source translation is "obviously correct".
+          // Then we can do better CSE in later stages.
+          children.flatMap {
+            case Equation(lhs, rhsx) if rhs == rhsx =>
+              val v = node.vars(lhs)
+              assert(v.sort == sort,
+                s"""When trying to reuse existing binding
+                  ${lhs} : ${v.sort} = ${rhsx}
+                for requested expression ${rhs} : ${sort} at location ${location},
+                the two sorts don't match.
+                """)
+              Seq(node.xvar(lhs))
+            case _ => Seq.empty
+          }.headOption.getOrElse(memoForce(rhs, sort))
+
+      /** Create a new binding for the given expression, even for simple expressions.
+       * This creates bindings for simple expressions such as variables and values;
+       * doesn't reuse existing bindings.
+       */
+      def memoForce(rhs: Exp, sort: Sort)(using location: Location): Exp =
+        val vv = Variable(sort, location, Variable.Generated)
+        val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromInternal(i))
+        val v = node.fresh(name, vv, forceIndex = true)
+        append(Equation(v.v.name, rhs))
+        v
+
+      def equation(lhs: names.Component, rhs: Exp): Unit =
+        append(Equation(lhs, rhs))
+
+      def subnode(name: names.Component, subnode: Node, args: List[Exp]): Unit =
+        assert(!node.vars.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by variable ${node.vars(name)}")
+        assert(!node.subnodes.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by subnode ${node.subnodes(name)}")
+        node.subnodes += name -> subnode
+        append(Subnode(name, args))
+
+
+  sealed trait Selector:
+    def pretty: String
+  object Selector:
+    case class When(clock: Exp) extends Selector:
+      def pretty: String = s"When(${clock.pretty})"
+    case class Reset(clock: Exp) extends Selector:
+      def pretty: String = s"Reset(${clock.pretty})"
+
   object Node:
-    def top(): Node = new Node(new Supply(List()), List(), Exp.Val(Val.Bool(false)), Exp.Val(Val.Bool(true)))
+    def top(): Node = new Node(new Supply(List()), List())
 
-  // object flow:
-  //   sealed trait Bind
-  //   case class Context(flag: Var, when: Exp, reset: Exp, binds: List[Bind]) extends Bind
-  //   case class Instance(vars: List[Var], node: Node, args: List[Exp]) extends Bind
-  //   case class Binding(lhs: Var, rhs: Exp) extends Bind
+  object Variable:
+    sealed trait Mode
+    case object Argument extends Mode
+    case object Local extends Mode
+    case object Output extends Mode
+    case object Generated extends Mode
 
-  class Node(val supply: Supply, val path: List[names.Component], val reset: Exp, val when: Exp):
-    // TODO: add List[Var] for declaring args, or change vars to List[(Var, Arg | Local | State | Output)]
-    // TODO: distinguish between nodes and node instances.
-    var subnodes: List[Node]       = List()
-    var bindings: List[(Exp, Exp)] = List()
-    var props:    List[Judgment]   = List()
-    var vars:     List[Exp.Var]    = List()
+  case class Variable(sort: Sort, location: Location, mode: Variable.Mode)
 
-    def allProps: List[Judgment] = props ++ subnodes.flatMap(_.allProps)
+  class Node(val supply: Supply, val path: List[names.Component]):
+    val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
+    var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
+    // TODO subnodes need location information
+    var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
+    var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
+
+    var nested: Binding.Nested = new Binding.Nested(supply.freshInit().name, Selector.When(term.Exp.Val(term.Val.Bool(true))), this)
+
+    def allProps: Iterable[Judgment] = props ++ subnodes.values.flatMap(_.allProps)
     /** All obligations we need to prove. TODO: restructure, deal with contracts */
-    def allPropObligations: List[Judgment] = allProps.filter(p => p.form == Form.Property)
+    def allPropObligations: Iterable[Judgment] = allProps.filter(p => p.form == Form.Property)
 
-    def fresh(prefix: names.ComponentSymbol, sort: Sort, forceIndex: Boolean = false): Exp.Var =
-      val v = supply.freshVar(prefix, sort, forceIndex)
-      vars = v :: vars
+    def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
+      val r = supply.freshRef(name, forceIndex)
+      val v = Exp.Var(r, variable.sort)
+      vars += r.name -> variable
+      if (variable.mode == Variable.Argument)
+        params += r.name
       v
 
-    def subnode(name: names.ComponentSymbol, reset: Exp, when: Exp): Node =
-      val inst = supply.freshRef(name, forceIndex = true)
-      val s = new Supply(supply.path :+ inst.name)
-      val c = new Node(s, s.path, reset, when)
-      subnodes = c :: subnodes
-      c
+    def freshSubnodeRef(name: names.ComponentSymbol): names.Ref =
+      supply.freshRef(name, forceIndex = true)
 
-    def bind(lhs: Exp, rhs: Exp): Unit =
-      bindings = (lhs -> rhs) :: bindings
+    def xvar(name: names.Component): Exp.Var =
+      val v = vars(name)
+      Exp.Var(names.Ref(path, name), v.sort)
 
-    /** Create a new binding for the given expression.
-     *
-     * @param rhs
-     * @param sort
-     * */
-    def memo(rhs: Exp, sort: Sort): Exp = rhs match
-      case Exp.Var(_, _) => rhs
-      case Exp.Val(_) => rhs
-      case _ =>
-        // Try to re-use
-        // TODO: apply some local rewrites, eg
-        // v -> pre e = Fby(v, e)
-        // and const prop
-        bindings.find { case (v,rhsx) => rhs == rhsx } match
-          case None =>
-            memoForce(rhs, sort)
-          case Some((v,rhsx)) =>
-            v
-
-    /** Create a new binding for the given expression, even for simple expressions.
-     * This creates bindings for simple expressions such as variables and values;
-     * doesn't reuse existing bindings.
-     */
-    def memoForce(rhs: Exp, sort: Sort): Exp =
-      val v = fresh(names.ComponentSymbol.LOCAL, sort, forceIndex = true)
-      bind(v, rhs)
-      v
 
     def prop(j: Judgment): Unit =
-      props = j :: props
+      props += j
 
     def pretty: String =
-      def indent(head: String, xs: List[String]): String = xs match
-        case List() => ""
-        case _ :: _ =>
-          val xss = xs.flatMap(x => x.split("\n"))
-          s"  $head\n" + xss.map(x => s"    $x").mkString("\n")
-
-      s"""Node: ${path.map(_.pretty).mkString(".")}
-         |  Reset: ${reset.pretty}; When: ${when.pretty}
-         |${indent("Bindings:", bindings.map(x => s"${x._1.pretty} := ${x._2.pretty}"))}
-         |${indent("Subnodes:", subnodes.map(x => x.pretty))}
-         |${indent("Props:", props.map(x => x.pretty))}
+      s"""Node ${path.map(_.pretty).mkString(".")}(${params.map(_.pretty).mkString(", ")})
+         |${indent("Vars:", vars.map(x => s"${x._2.mode} ${x._1.pretty} : ${x._2.sort}${x._2.location.pretty}").toList)}
+         |${indent("Bindings:", nested.children.map(x => x.pretty).toList)}
+         |${indent("Subnodes:", subnodes.map(x => x._2.pretty).toList)}
+         |${indent("Props:", props.map(x => x.pretty).toList)}
          |""".stripMargin
 

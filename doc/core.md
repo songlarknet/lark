@@ -366,6 +366,12 @@ XXX: if step type is `state -> row -> state' -> (bool, value)` then might reduce
  }
 ```
 
+TODO: try with extracting semantics where system has type `{state; row; init : state; extract : state -> row -> bool; step : state -> row -> step' -> bool; }`
+
+TODO: also try with non-empty semantics where system has type `{state; row; zero : row -> state' -> bool; succ: state -> row -> state' -> bool; }`
+
+Will either of these be clearer?
+
 ### Scheduled semantics
 
 Scheduled semantics that requires program to be in correct order.
