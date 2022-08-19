@@ -26,7 +26,19 @@ object solver:
     def funapp(f: String, args: Terms.Term*) = Terms.FunctionApplication(qid(f), args)
 
     // TODO: simplify, filter out literal trues
-    def and(args: Terms.Term*) = funapp("and", args : _*)
+    def and(args: Terms.Term*) =
+      def go(t: Terms.Term): Seq[Terms.Term] = t match
+        case Terms.QualifiedIdentifier(ti, _)
+         if ti.symbol.name == "true" => Seq()
+        case Terms.FunctionApplication(qi, args)
+          if qi.id.symbol.name == "and" => args.flatMap(go)
+        case _ => Seq(t)
+
+      val argsX = args.flatMap(go)
+      argsX match
+        case Seq() => bool(true)
+        case Seq(i) => i
+        case _ => funapp("and", argsX : _*)
 
     def int(i: lack.meta.base.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?

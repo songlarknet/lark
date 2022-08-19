@@ -141,6 +141,12 @@ object builder:
     /** All obligations we need to prove. TODO: restructure, deal with contracts */
     def allPropObligations: Iterable[Judgment] = allProps.filter(p => p.form == Form.Property)
 
+    /** All dependent nodes in the system, including this node */
+    def allNodes: Iterable[Node] =
+      val subs = subnodes.values.flatMap(_.allNodes)
+      // TODO: filter out non-unique nodes
+      subs ++ Seq(this)
+
     def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
       val r = supply.freshRef(name, forceIndex)
       val v = Exp.Var(variable.sort, r)
@@ -150,7 +156,7 @@ object builder:
       v
 
     def freshSubnodeRef(name: names.ComponentSymbol): names.Ref =
-      supply.freshRef(name, forceIndex = true)
+      supply.freshRef(name) // , forceIndex = true)
 
     def xvar(name: names.Component): Exp.Var =
       val v = vars(name)

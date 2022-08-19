@@ -107,7 +107,7 @@ object term:
      * TODO: wrap bitvector division in smt encoding
      */
     case object Div extends Prim:
-      def pretty: String = "-"
+      def pretty: String = "/"
       def eval(args: List[Val]): Val = eval_ii_i(args) {
         case (i, j) => if (j == 0) 0 else (i / j)
       }
@@ -155,7 +155,7 @@ object term:
   object Exp:
     /** Variable */
     case class Var(sort: Sort, v: names.Ref) extends Exp:
-      def pretty: String = s"(as ${v.pretty} ${sort.pretty})"
+      def pretty: String = v.pretty
 
     /** Value */
     case class Val(sort: Sort, v: term.Val) extends Exp:
@@ -182,7 +182,7 @@ object term:
        * Vélus also only supports fby and not pre, so we'll need to
        * rewrite occurrences of pre to fby if we want to generate Vélus.
        */
-      case class Fby(sort: Sort, v: Val, e: Exp) extends Exp:
+      case class Fby(sort: Sort, v: term.Val, e: Exp) extends Exp:
         def pretty: String = s"(flow'fby ${v.pretty} ${e.pretty})"
 
     /** Non-deterministic terms */

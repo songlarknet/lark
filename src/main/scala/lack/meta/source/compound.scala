@@ -11,6 +11,20 @@ object compound:
   def pre[T: SortRepr](it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     builder.memo1(it) { e => Exp.flow.Pre(it.sort, e) }
 
+  // TODO need typed representation of Val
+  def fby[T: SortRepr](v: Val, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+    require(v.check(it.sort))
+    builder.memo1(it) { e => Exp.flow.Fby(it.sort, v, e) }
+
+  // TODO may barf at runtime
+  def fby[T: SortRepr](v: Stream[T], it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+    fby(v._exp.asInstanceOf[Exp.Val].v, it)
+
+  // def fby[T: SortRepr: Num](v: lack.meta.base.Integer, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+  //   fby(int(v), it)
+  // def fby[T: SortRepr](b: Boolean, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+  //   fby(Val.Bool(b), it)
+
   def arrow[T: SortRepr](a: Stream[T], b: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     builder.memo2(a, b) { case (e, f) => Exp.flow.Arrow(a.sort, e, f) }
 
