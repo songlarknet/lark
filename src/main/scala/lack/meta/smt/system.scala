@@ -51,6 +51,11 @@ object system:
     def apply(name: names.Ref): Terms.Term =
       compound.qid(prefix.pretty + "/" + name.pretty)
 
+  object Prefix:
+    val state  = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
+    val stateX = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("stateX"), None)) )
+    val row    = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("row"), None)) )
+
   /** Oracle supply so that systems can ask for nondeterministic choices from outside,
    * such as re-initialising delays to undefined on reset. */
   class Oracle:
@@ -58,7 +63,8 @@ object system:
 
     def oracle(prefix: names.Ref, sort: Sort): Terms.Term =
       val i = oracles.length
-      val sym = compound.sym(s"oracle?${prefix.pretty}?${i}")
+      val name = names.Ref(prefix.path, names.Component(prefix.name.symbol, Some(i)))
+      val sym = compound.sym(s"oracle/${name.pretty}")
       oracles += (sym -> sort)
       Terms.QualifiedIdentifier(Terms.Identifier(sym))
 
@@ -67,7 +73,7 @@ object system:
     var stateIx = 0
     def state(): names.Ref =
       // want better state variables
-      val ref = names.Ref(prefix, names.Component(names.ComponentSymbol.fromInternal("state"), Some(stateIx)))
+      val ref = names.Ref(prefix, names.Component(names.ComponentSymbol.fromScalaSymbol("pre"), Some(stateIx)))
       stateIx = stateIx + 1
       ref
 
@@ -75,7 +81,7 @@ object system:
     def state: Namespace
     def row: Namespace
     def init(oracle: Oracle, state: Prefix): Terms.Term
-    def extract(oracle: Oracle, state: Prefix, row: Prefix): (Terms.Term, T)
+    def extract(oracle: Oracle, state: Prefix, row: Prefix): T
     def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term
 
   object System:
@@ -84,8 +90,8 @@ object system:
       def row: Namespace = Namespace()
       def init(oracle: Oracle, state: Prefix): Terms.Term =
         compound.bool(true)
-      def extract(oracle: Oracle, state: Prefix, row: Prefix): (Terms.Term, T) =
-        (compound.bool(true), value)
+      def extract(oracle: Oracle, state: Prefix, row: Prefix): T =
+        value
       def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
         compound.bool(true)
 
@@ -97,10 +103,10 @@ object system:
         compound.and(
           outer.init(oracle, state),
           that.init(oracle, state))
-      def extract(oracle: Oracle, state: Prefix, row: Prefix): (Terms.Term, U) =
-        val (xa, f) = outer.extract(oracle, state, row)
-        val (xb, t) = that.extract(oracle, state, row)
-        (compound.and(xa, xb), f(t))
+      def extract(oracle: Oracle, state: Prefix, row: Prefix): U =
+        val f = outer.extract(oracle, state, row)
+        val t = that.extract(oracle, state, row)
+        f(t)
 
       def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
         val xa = outer.step(oracle, state, row, stateX)
@@ -109,22 +115,10 @@ object system:
 
   extension (outer: System[Unit])
     /** join two systems, ignoring the values */
-    def <>(that: System[Unit]): System[Unit] = new System[Unit]:
-      def state: Namespace = outer.state <> that.state
-      def row: Namespace = outer.row <> that.row
-      def init(oracle: Oracle, state: Prefix): Terms.Term =
-        compound.and(
-          outer.init(oracle, state),
-          that.init(oracle, state))
-      def extract(oracle: Oracle, state: Prefix, row: Prefix): (Terms.Term, Unit) =
-        val (xa, _) = outer.extract(oracle, state, row)
-        val (xb, _) = that.extract(oracle, state, row)
-        (compound.and(xa, xb), ())
+    def <>(that: System[Unit]): System[Unit] =
+      def ignore2(x: Unit)(y: Unit): Unit = ()
+      System.pure(ignore2) <*> outer <*> that
 
-      def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
-        val xa = outer.step(oracle, state, row, stateX)
-        val xb = that.step(oracle, state, row, stateX)
-        compound.and(xa, xb)
 
   /** Defined system */
   case class SolverDefinition(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
@@ -135,7 +129,6 @@ object system:
     row: Namespace,
     params: List[names.Ref],
     init: SolverDefinition,
-    extract: SolverDefinition,
     step: SolverDefinition):
     def pretty: String =
       s"""System [${path.map(_.pretty).mkString(".")}]
@@ -143,7 +136,6 @@ object system:
          |  Row:     ${row.pretty}
          |  Params:  ${params.map(_.pretty).mkString(", ")}
          |  Init:    ${init.pretty}
-         |  Extract: ${extract.pretty}
          |  Step:    ${step.pretty}""".stripMargin
 
   object translate:
@@ -175,27 +167,20 @@ object system:
 
       val sys = nested(context, node, None, node.nested)
       val params = node.params.map { p => names.Ref(node.path, p) }.toList
-      val state  = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
-      val stateX = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("stateX"), None)) )
-      val row    = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("row"), None)) )
 
       val initO    = new Oracle()
-      val extractO = new Oracle()
       val stepO    = new Oracle()
 
-      val initT    = sys.init(initO, state)
-      val extractT = sys.extract(extractO, state, row)._1
-      val stepT    = sys.step(stepO, state, row, stateX)
+      val initT    = sys.init(initO, Prefix.state)
+      val stepT    = sys.step(stepO, Prefix.state, Prefix.row, Prefix.stateX)
 
-      val initI    = compound.qid(nm(names.ComponentSymbol.fromInternal("init")).pretty)
-      val extractI = compound.qid(nm(names.ComponentSymbol.fromInternal("extract")).pretty)
-      val stepI    = compound.qid(nm(names.ComponentSymbol.fromInternal("step")).pretty)
+      val initI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pretty)
+      val stepI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pretty)
 
       val initD    = SolverDefinition(initI, initO.oracles.toList, initT)
-      val extractD = SolverDefinition(extractI, extractO.oracles.toList, extractT)
       val stepD    = SolverDefinition(stepI, stepO.oracles.toList, stepT)
 
-      SolverSystem(node.path, sys.state, sys.row, params, initD, extractD, stepD)
+      SolverSystem(node.path, sys.state, sys.row, params, initD, stepD)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
       val initR = names.Ref(node.path, nested.init)
@@ -212,15 +197,12 @@ object system:
         def row: Namespace = t.row <> initN
         def init(oracle: Oracle, state: Prefix): Terms.Term =
           compound.and(t.init(oracle, state), state(initR))
-        // TODO: splitting out extract and step makes reset hard, merge back in
         def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-          val (tx, _) = t.extract(oracle, state, row)
-          (compound.and(
-            tx,
-            compound.funapp("=", state(initR), row(initR))), ())
+          ()
         def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
           compound.and(
             t.step(oracle, state, row, stateX),
+            compound.funapp("=", state(initR), row(initR)),
             compound.funapp("not", stateX(initR)))
 
     def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
@@ -233,10 +215,13 @@ object system:
           def init(oracle: Oracle, state: Prefix): Terms.Term =
             t0.init(oracle, state)
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-            val (t, v) = t0.extract(oracle, state, row)
-            (compound.and(t, compound.funapp("=", row(xbind.v), v)), ())
+            ()
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
-            t0.step(oracle, state, row, stateX)
+            val v = t0.extract(oracle, state, row)
+            compound.and(
+              compound.funapp("=", row(xbind.v), v),
+              t0.step(oracle, state, row, stateX)
+            )
       case builder.Binding.Subnode(subnode, args) =>
         // TODO call subnodes
         System.pure(())
@@ -256,10 +241,9 @@ object system:
           def init(oracle: Oracle, state: Prefix): Terms.Term =
             compound.bool(true)
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-            val sym = state(context.init)
             def choose(firstT: Terms.Term)(laterT: Terms.Term): Terms.Term =
-              compound.funapp("ite", sym, firstT, laterT)
-            (compound.bool(true), choose)
+              compound.funapp("ite", state(context.init), firstT, laterT)
+            choose
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)
         choice <*> t0 <*> t1
@@ -271,16 +255,16 @@ object system:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
           def row: Namespace = t0.row
           def init(oracle: Oracle, state: Prefix): Terms.Term =
-            val u = oracle.oracle(state.prefix, sort)
+            val u = oracle.oracle(ref, sort)
             compound.and(t0.init(oracle, state),
               compound.funapp("=", state(ref), u))
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-            (compound.bool(true), state(ref))
+            state(ref)
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.and(
               compound.funapp("=",
                 stateX(ref),
-                t0.extract(oracle, state, row)._2),
+                t0.extract(oracle, state, row)),
               t0.step(oracle, state, row, stateX))
 
       case Exp.flow.Fby(sort, v0, pre) =>
@@ -294,12 +278,12 @@ object system:
               t0.init(oracle, state),
               compound.funapp("=", state(ref), value(v0)))
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-            (compound.bool(true), state(ref))
+            state(ref)
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.and(
               compound.funapp("=",
                 stateX(ref),
-                t0.extract(oracle, state, row)._2),
+                t0.extract(oracle, state, row)),
               t0.step(oracle, state, row, stateX))
 
       case Exp.nondet.Undefined(sort) =>
@@ -309,8 +293,10 @@ object system:
           def init(oracle: Oracle, state: Prefix): Terms.Term =
             compound.bool(true)
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
+            // TODO: multiple calls to extract is weird - will allocate fresh oracles.
+            // Move oracle allocation to step
             val o = oracle.oracle(state.prefix, sort)
-            (compound.bool(true), o)
+            o
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)
 
@@ -320,9 +306,8 @@ object system:
         def row: Namespace = Namespace.fromRef(v, s)
         def init(oracle: Oracle, state: Prefix): Terms.Term =
           compound.bool(true)
-        def extract(oracle: Oracle, state: Prefix, row: Prefix): (Terms.Term, Terms.Term) =
-          val sym = row(v)
-          (compound.bool(true), sym)
+        def extract(oracle: Oracle, state: Prefix, row: Prefix): Terms.Term =
+          row(v)
         def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
           compound.bool(true)
 
