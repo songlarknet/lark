@@ -17,12 +17,7 @@ object TestBounds:
 
     def solver() = smt.solver.gimme(verbose = false)
 
-    val systems = smt.system.translate.nodes(builder.nodeRef.allNodes)
-
-    systems.foreach { case (k,v) =>
-      println(s"system ${k}:")
-      println(s"  ${v.pretty}")
-    }
+    val systems = smt.system.translate.nodes(bounds.builder.nodeRef.allNodes)
 
     println(s"feasible: ${smt.check.feasible(builder.nodeRef, 2, solver())}")
     println(s"bmc:      ${smt.check.bmc(builder.nodeRef, 4, solver())}")

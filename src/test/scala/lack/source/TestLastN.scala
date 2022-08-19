@@ -16,6 +16,7 @@ object TestLastN:
     println(builder.nodeRef.pretty)
 
     def solver() = smt.solver.gimme(verbose = false)
+    val systems = smt.system.translate.nodes(lem.builder.nodeRef.allNodes)
 
     println(s"feasible: ${smt.check.feasible(builder.nodeRef, 2, solver())}")
     println(s"bmc:      ${smt.check.bmc(builder.nodeRef, 4, solver())}")

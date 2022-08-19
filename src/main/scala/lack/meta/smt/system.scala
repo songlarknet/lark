@@ -58,7 +58,7 @@ object system:
 
     def oracle(prefix: names.Ref, sort: Sort): Terms.Term =
       val i = oracles.length
-      val sym = compound.sym(s"?${prefix.pretty}?${i}")
+      val sym = compound.sym(s"oracle?${prefix.pretty}?${i}")
       oracles += (sym -> sort)
       Terms.QualifiedIdentifier(Terms.Identifier(sym))
 
@@ -128,8 +128,9 @@ object system:
 
   /** Defined system */
   case class SolverDefinition(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
-    def pretty: String = s"${name} = λ${oracles.map((a,b) => s"${a.name} : ${b.pretty}").mkString(" ")}. ${body}"
+    def pretty: String = s"${name} = λ${oracles.map((a,b) => s"${a.name}: ${b.pretty}").mkString(" ")}. ${body}"
   case class SolverSystem(
+    path: List[names.Component],
     state: Namespace,
     row: Namespace,
     params: List[names.Ref],
@@ -137,12 +138,13 @@ object system:
     extract: SolverDefinition,
     step: SolverDefinition):
     def pretty: String =
-      s"""State:   ${state.pretty}
-         |Row:     ${row.pretty}
-         |Params:  ${params}
-         |Init:    ${init.pretty}
-         |Extract: ${extract.pretty}
-         |Step:    ${step.pretty}""".stripMargin
+      s"""System [${path.map(_.pretty).mkString(".")}]
+         |  State:   ${state.pretty}
+         |  Row:     ${row.pretty}
+         |  Params:  ${params.map(_.pretty).mkString(", ")}
+         |  Init:    ${init.pretty}
+         |  Extract: ${extract.pretty}
+         |  Step:    ${step.pretty}""".stripMargin
 
   object translate:
     def sort(s: Sort): Terms.Sort = s match
@@ -156,13 +158,16 @@ object system:
 
     class Context(val nodes: Map[List[names.Component], SolverSystem], val supply: Supply)
 
-    def nodes(inodes: Iterable[Node]): Map[List[names.Component], SolverSystem] =
-      val m = inodes.foldLeft(Map[List[names.Component], SolverSystem]()) { case (map,inode) =>
+    def nodes(inodes: Iterable[Node]): List[SolverSystem] =
+      var map = Map[List[names.Component], SolverSystem]()
+      inodes.map { case inode =>
         val system = node(new Context(map, new Supply(List())), inode)
 
-        map + (inode.path -> system)
-      }
-      m
+        println(system.pretty)
+
+        map += (inode.path -> system)
+        system
+      }.toList
 
     def node(context: Context, node: Node): SolverSystem =
       def nm(i: names.ComponentSymbol): names.Ref =
@@ -190,7 +195,7 @@ object system:
       val extractD = SolverDefinition(extractI, extractO.oracles.toList, extractT)
       val stepD    = SolverDefinition(stepI, stepO.oracles.toList, stepT)
 
-      SolverSystem(sys.state, sys.row, params, initD, extractD, stepD)
+      SolverSystem(node.path, sys.state, sys.row, params, initD, extractD, stepD)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
       val initR = names.Ref(node.path, nested.init)
@@ -266,7 +271,7 @@ object system:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
           def row: Namespace = t0.row
           def init(oracle: Oracle, state: Prefix): Terms.Term =
-            val u = oracle.oracle(ref, sort)
+            val u = oracle.oracle(state.prefix, sort)
             compound.and(t0.init(oracle, state),
               compound.funapp("=", state(ref), u))
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
