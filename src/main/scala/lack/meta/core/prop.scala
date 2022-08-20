@@ -29,3 +29,10 @@ object prop:
 
   case class Judgment(name: String, term: Exp, form: Form):
     def pretty: String = s"${form} ${name}: ${term.pretty}"
+
+    def isObligation: Boolean = form match
+      case Form.Require => false
+      case Form.Guarantee => true
+      case Form.Property => true
+      case Form.Sorry => false
+      case Form.Generated => true

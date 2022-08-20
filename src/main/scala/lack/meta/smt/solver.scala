@@ -40,6 +40,20 @@ object solver:
         case Seq(i) => i
         case _ => funapp("and", argsX : _*)
 
+    def or(args: Terms.Term*) =
+      def go(t: Terms.Term): Seq[Terms.Term] = t match
+        case Terms.QualifiedIdentifier(ti, _)
+         if ti.symbol.name == "false" => Seq()
+        case Terms.FunctionApplication(qi, args)
+          if qi.id.symbol.name == "or" => args.flatMap(go)
+        case _ => Seq(t)
+
+      val argsX = args.flatMap(go)
+      argsX match
+        case Seq() => bool(false)
+        case Seq(i) => i
+        case _ => funapp("or", argsX : _*)
+
     def int(i: lack.meta.base.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
       if (i >= 0)
@@ -94,11 +108,11 @@ object solver:
 
     def declareConst(name: Terms.SSymbol, sort: Terms.Sort): Unit =
       val r = command(Commands.DeclareConst(name, sort))
-      if (r.isInstanceOf[CommandsResponses.Success.type])
+      if (!r.isInstanceOf[CommandsResponses.Success.type])
         throw new SolverException(r, s"declareConst ${name} ${sort}: expected success, but got:")
 
     def declareConsts(consts: Iterable[Terms.SortedVar]): Unit = consts.foreach { c =>
-      command(Commands.DeclareConst(c.name, c.sort))
+      declareConst(c.name, c.sort)
     }
 
     def assert(term: Terms.Term): SExpr =

@@ -4,6 +4,7 @@ import lack.meta.base.Integer
 import lack.meta.core.names
 import lack.meta.core.builder
 import lack.meta.core.builder.Node
+import lack.meta.core.prop.Judgment
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
@@ -130,20 +131,27 @@ object system:
       val allParams = params ++ oracles.map((v,s) => Terms.SortedVar(v, translate.sort(s)))
       Commands.FunDef(name.id.symbol, allParams, translate.sort(Sort.Bool), body)
 
+  case class SolverJudgment(row: names.Ref, judgment: Judgment):
+    def pretty = s"${row.pretty} = ${judgment.pretty}"
+
   case class SolverNode(
     path: List[names.Component],
     state: Namespace,
     row: Namespace,
     params: List[names.Ref],
     init: SolverFunDef,
-    step: SolverFunDef):
+    step: SolverFunDef,
+    assumptions: List[SolverJudgment],
+    obligations: List[SolverJudgment]):
     def pretty: String =
       s"""System [${path.map(_.pretty).mkString(".")}]
          |  State:   ${state.pretty}
          |  Row:     ${row.pretty}
          |  Params:  ${params.map(_.pretty).mkString(", ")}
          |  Init:    ${init.pretty}
-         |  Step:    ${step.pretty}""".stripMargin
+         |  Step:    ${step.pretty}
+         |${lack.meta.base.indent("Assumptions:", assumptions.map(_.pretty))}
+         |${lack.meta.base.indent("Obligations:", obligations.map(_.pretty))}""".stripMargin
 
     def paramsOfNamespace(prefix: Prefix, ns: Namespace): List[Terms.SortedVar] =
       val vs = ns.values.toList.map((v,s) => Terms.SortedVar(prefix(names.Ref(List(), v)).id.symbol, translate.sort(s)))
@@ -205,7 +213,16 @@ object system:
       val initD    = SolverFunDef(initI, initO.oracles.toList, initT)
       val stepD    = SolverFunDef(stepI, stepO.oracles.toList, stepT)
 
-      SolverNode(node.path, sys.state, sys.row, params, initD, stepD)
+      def prop(judgment: Judgment): SolverJudgment =
+        judgment.term match
+          // LODO: deal with non-variables by creating a fresh row variable for them
+          case Exp.Var(s, v) =>
+            SolverJudgment(v, judgment)
+
+      // TODO: include assumptions and obligations from subnode calls
+      val (obligations, assumptions) = node.props.map(prop).partition(j => j.judgment.isObligation)
+
+      SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList, obligations.toList)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
       val initR = names.Ref(node.path, nested.init)
