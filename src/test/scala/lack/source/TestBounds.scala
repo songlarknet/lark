@@ -14,14 +14,17 @@ object TestBounds:
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
     val bounds = LemmaBounds(2)
     println(builder.nodeRef.pretty)
+    val checknode = bounds.builder.nodeRef.allNodes.toIndexedSeq(0)
 
-    def solver() = smt.solver.gimme(verbose = false)
+    def solver() = smt.solver.gimme(verbose = true)
 
-    val systems = smt.system.translate.nodes(bounds.builder.nodeRef.allNodes)
+    val system = smt.system.translate.nodes(bounds.builder.nodeRef.allNodes)
+    println(system.pretty)
 
-    println(s"feasible: ${smt.check.feasible(builder.nodeRef, 2, solver())}")
-    println(s"bmc:      ${smt.check.bmc(builder.nodeRef, 4, solver())}")
-    println(s"k-ind:    ${smt.check.kind(builder.nodeRef, 2, solver())}")
+    println(s"feasible: ${smt.check.feasible(checknode, 2, solver())}")
+
+    println(s"bmc:      ${smt.check.bmc(checknode, 4, solver())}")
+    println(s"k-ind:    ${smt.check.kind(checknode, 2, solver())}")
 
 
   class LemmaBounds(n: Int, invocation: NodeInvocation) extends Node(invocation):

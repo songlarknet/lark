@@ -47,33 +47,35 @@ object system:
           Namespace(namespaces = Map(p -> fromRef(names.Ref(rest, ref.name), sort)))
       }
 
-  case class Prefix(prefix: names.Ref):
-    def apply(name: names.Ref): Terms.Term =
-      compound.qid(prefix.pretty + "/" + name.pretty)
+  case class Prefix(prefix: List[names.Component]):
+    val pfx = prefix.map(_.pretty).mkString(".")
+    def apply(name: names.Ref): Terms.QualifiedIdentifier =
+      compound.qid(names.Ref(prefix ++ name.path, name.name).pretty)
 
   object Prefix:
-    val state  = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
-    val stateX = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("stateX"), None)) )
-    val row    = Prefix(names.Ref(List(), names.Component(names.ComponentSymbol.fromScalaSymbol("row"), None)) )
+    val state  = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
+    val stateX = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("stateX"), None)) )
+    val row    = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("row"), None)) )
+    val oracle = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("oracle"), None)) )
 
   /** Oracle supply so that systems can ask for nondeterministic choices from outside,
    * such as re-initialising delays to undefined on reset. */
   class Oracle:
     val oracles: mutable.ArrayBuffer[(Terms.SSymbol, Sort)] = mutable.ArrayBuffer()
 
-    def oracle(prefix: names.Ref, sort: Sort): Terms.Term =
+    def oracle(path: List[names.Component], sort: Sort): Terms.QualifiedIdentifier =
       val i = oracles.length
-      val name = names.Ref(prefix.path, names.Component(prefix.name.symbol, Some(i)))
-      val sym = compound.sym(s"oracle/${name.pretty}")
-      oracles += (sym -> sort)
-      Terms.QualifiedIdentifier(Terms.Identifier(sym))
+      val name = names.Ref(path, names.Component(names.ComponentSymbol.fromStringUnsafe(""), Some(i)))
+      val qid  = Prefix.oracle(name)
+      oracles += (qid.id.symbol -> sort)
+      qid
 
   /** State supply */
-  class Supply(prefix: List[names.Component]):
+  class Supply(path: List[names.Component]):
     var stateIx = 0
     def state(): names.Ref =
       // want better state variables
-      val ref = names.Ref(prefix, names.Component(names.ComponentSymbol.fromScalaSymbol("pre"), Some(stateIx)))
+      val ref = names.Ref(path, names.Component(names.ComponentSymbol.fromScalaSymbol("pre"), Some(stateIx)))
       stateIx = stateIx + 1
       ref
 
@@ -121,15 +123,20 @@ object system:
 
 
   /** Defined system */
-  case class SolverDefinition(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
+  case class SolverFunDef(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
     def pretty: String = s"${name} = λ${oracles.map((a,b) => s"${a.name}: ${b.pretty}").mkString(" ")}. ${body}"
-  case class SolverSystem(
+
+    def fundef(params: List[Terms.SortedVar]): Commands.FunDef =
+      val allParams = params ++ oracles.map((v,s) => Terms.SortedVar(v, translate.sort(s)))
+      Commands.FunDef(name.id.symbol, allParams, translate.sort(Sort.Bool), body)
+
+  case class SolverNode(
     path: List[names.Component],
     state: Namespace,
     row: Namespace,
     params: List[names.Ref],
-    init: SolverDefinition,
-    step: SolverDefinition):
+    init: SolverFunDef,
+    step: SolverFunDef):
     def pretty: String =
       s"""System [${path.map(_.pretty).mkString(".")}]
          |  State:   ${state.pretty}
@@ -137,6 +144,26 @@ object system:
          |  Params:  ${params.map(_.pretty).mkString(", ")}
          |  Init:    ${init.pretty}
          |  Step:    ${step.pretty}""".stripMargin
+
+    def paramsOfNamespace(prefix: Prefix, ns: Namespace): List[Terms.SortedVar] =
+      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(prefix(names.Ref(List(), v)).id.symbol, translate.sort(s)))
+      val nsX = ns.namespaces.toList.flatMap((v,n) => paramsOfNamespace(Prefix(prefix.prefix :+ v), n))
+      vs ++ nsX
+
+    def fundefs: List[Commands.DefineFun] =
+      val statePs  = paramsOfNamespace(Prefix.state,  state)
+      val stateXPs = paramsOfNamespace(Prefix.stateX, state)
+      val rowPs    = paramsOfNamespace(Prefix.row,    row)
+
+      val initF    = init.fundef(statePs)
+      val stepF    = step.fundef(statePs ++ rowPs ++ stateXPs)
+
+      List(Commands.DefineFun(initF), Commands.DefineFun(stepF))
+
+  case class SolverSystem(nodes: List[SolverNode], top: SolverNode):
+    def fundefs: List[Commands.DefineFun] = nodes.flatMap(_.fundefs)
+
+    def pretty: String = nodes.map(_.pretty).mkString("\n")
 
   object translate:
     def sort(s: Sort): Terms.Sort = s match
@@ -148,20 +175,18 @@ object system:
       case Val.Bool(b) => compound.qid(b.toString)
       case Val.Int(i) => compound.int(i)
 
-    class Context(val nodes: Map[List[names.Component], SolverSystem], val supply: Supply)
+    class Context(val nodes: Map[List[names.Component], SolverNode], val supply: Supply)
 
-    def nodes(inodes: Iterable[Node]): List[SolverSystem] =
-      var map = Map[List[names.Component], SolverSystem]()
-      inodes.map { case inode =>
-        val system = node(new Context(map, new Supply(List())), inode)
-
-        println(system.pretty)
-
-        map += (inode.path -> system)
-        system
+    def nodes(inodes: Iterable[Node]): SolverSystem =
+      var map = Map[List[names.Component], SolverNode]()
+      val snodes = inodes.map { case inode =>
+        val snode = node(new Context(map, new Supply(List())), inode)
+        map += (inode.path -> snode)
+        snode
       }.toList
+      SolverSystem(snodes, snodes.last)
 
-    def node(context: Context, node: Node): SolverSystem =
+    def node(context: Context, node: Node): SolverNode =
       def nm(i: names.ComponentSymbol): names.Ref =
         names.Ref(node.path, names.Component(i, None))
 
@@ -177,10 +202,10 @@ object system:
       val initI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pretty)
       val stepI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pretty)
 
-      val initD    = SolverDefinition(initI, initO.oracles.toList, initT)
-      val stepD    = SolverDefinition(stepI, stepO.oracles.toList, stepT)
+      val initD    = SolverFunDef(initI, initO.oracles.toList, initT)
+      val stepD    = SolverFunDef(stepI, stepO.oracles.toList, stepT)
 
-      SolverSystem(node.path, sys.state, sys.row, params, initD, stepD)
+      SolverNode(node.path, sys.state, sys.row, params, initD, stepD)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
       val initR = names.Ref(node.path, nested.init)
@@ -255,7 +280,7 @@ object system:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
           def row: Namespace = t0.row
           def init(oracle: Oracle, state: Prefix): Terms.Term =
-            val u = oracle.oracle(ref, sort)
+            val u = oracle.oracle(context.node.path, sort)
             compound.and(t0.init(oracle, state),
               compound.funapp("=", state(ref), u))
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
@@ -295,7 +320,7 @@ object system:
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
             // TODO: multiple calls to extract is weird - will allocate fresh oracles.
             // Move oracle allocation to step
-            val o = oracle.oracle(state.prefix, sort)
+            val o = oracle.oracle(context.node.path, sort)
             o
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)

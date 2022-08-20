@@ -15,8 +15,9 @@ import smtlib.trees.Terms.SExpr
 object check:
   sealed trait CheckFeasible
   object CheckFeasible:
-    case object Feasible extends CheckFeasible
-    case object Infeasible extends CheckFeasible
+    case class FeasibleUpTo(steps: Int) extends CheckFeasible
+    case class InfeasibleAt(steps: Int) extends CheckFeasible
+    case class UnknownAt(steps: Int) extends CheckFeasible
 
 
   sealed trait Bmc
@@ -30,17 +31,59 @@ object check:
     case class InvariantAt(steps: Int) extends Kind
     case class NoGood(steps: Int) extends Kind
 
+  def declareSystem(n: Node, solver: Solver): system.SolverSystem =
+    val sys = system.translate.nodes(n.allNodes)
+    sys.fundefs.foreach(solver.command)
+    sys
 
-  def feasible(n: Node, count: Int, solver: Solver): Option[CheckFeasible] =
-    val steps = (0 until count).map { i => new Stepped(i) }
-    steps.foreach { step =>
-      step.nodedeclares(n, solver)
-      step.nodebinds(n, solver)
+  def stepPrefix(pfx: String, i: Int) = system.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol(pfx), Some(i))))
+  def statePrefix(i: Int) = stepPrefix("state", i)
+  def rowPrefix(i: Int) = stepPrefix("row", i)
+  def initOraclePrefix = stepPrefix("init-oracle", 0)
+  def stepOraclePrefix(i: Int) = stepPrefix("step-oracle", i)
+
+  def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: system.Prefix, solver: Solver): Unit =
+    val oracles = fun.oracles.map { (v,s) =>
+      Terms.SortedVar(compound.sym(oraclePrefix.pfx + "/" + v.name), system.translate.sort(s))
     }
+    solver.declareConsts(oracles)
+
+    val argsV = argVars ++ oracles
+    val argsT = argsV.map { v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)) }
+    val call = Terms.FunctionApplication(fun.name, argsT)
+    solver.assert(call)
+
+  def feasible(n: Node, count: Int, solver: Solver): CheckFeasible =
+    val sys = declareSystem(n, solver)
+    val top = sys.top
+
+    {
+      val state = top.paramsOfNamespace(statePrefix(0), top.state)
+      solver.declareConsts(state)
+      callSystemFun(top.init, state, initOraclePrefix, solver)
+    }
+
     solver.checkSat().status match
-      case CommandsResponses.UnknownStatus => None
-      case CommandsResponses.SatStatus     => Some(CheckFeasible.Feasible)
-      case CommandsResponses.UnsatStatus   => Some(CheckFeasible.Infeasible)
+      case CommandsResponses.UnknownStatus => return CheckFeasible.UnknownAt(-1)
+      case CommandsResponses.SatStatus     =>
+      case CommandsResponses.UnsatStatus   => return CheckFeasible.InfeasibleAt(-1)
+
+    for (step <- 0 until count) {
+      val state  = top.paramsOfNamespace(statePrefix(step), top.state)
+      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.state)
+      val row    = top.paramsOfNamespace(rowPrefix(step), top.row)
+
+      solver.declareConsts(row ++ stateS)
+
+      callSystemFun(top.step, state ++ row ++ stateS, stepOraclePrefix(step), solver)
+
+      solver.checkSat().status match
+        case CommandsResponses.UnknownStatus => return CheckFeasible.UnknownAt(-1)
+        case CommandsResponses.SatStatus     =>
+        case CommandsResponses.UnsatStatus   => return CheckFeasible.InfeasibleAt(-1)
+    }
+
+    CheckFeasible.FeasibleUpTo(count)
 
   def bmc(n: Node, count: Int, solver: Solver): Bmc =
     // solver.command(Commands.SetOption(Commands.ProduceModels(true)))
@@ -78,58 +121,3 @@ object check:
     //     solver.assert(ands)
     // }
     Kind.NoGood(count)
-
-
-  class Stepped(val step: Int):
-
-    def ppref(v: lack.meta.core.names.Ref): Terms.SSymbol =
-      compound.sym(s"${v.pretty}@${step}")
-
-    def ppsort(s: Sort): Terms.Sort = s match
-      case _: Sort.Integral => Terms.Sort(compound.id("Int"))
-      case _: Sort.Mod => Terms.Sort(compound.id("Int"))
-      case Sort.Bool => Terms.Sort(compound.id("Bool"))
-
-    def ppval(v: Val): Terms.Term = v match
-      case Val.Bool(b) => compound.qid(b.toString)
-      case Val.Int(i) => compound.int(i)
-      // TODO
-
-
-    // def declares(path: List[names.Component], vs: List[(names.Component, builder.Variable)], solver: Solver): Unit =
-    //   vs.foreach { v =>
-    //     solver.declareConst(ppref(names.Ref(path, v._1)), ppsort(v._2.sort))
-    //   }
-
-    // def bind(lhs: Exp, rhs: Exp, solver: Solver): Unit = rhs match
-    //   case Exp.flow.Arrow(first, later)
-    //     if ty == StepType.Free =>
-    //       solver.assert(
-    //         compound.funapp("or",
-    //           compound.funapp("=", ppexp(lhs), ppexp(first)),
-    //           compound.funapp("=", ppexp(lhs), ppexp(later))))
-    //   case Exp.flow.Pre(pre)
-    //     if ty == StepType.Init =>
-    //       // unguarded pre for init (step 0)
-    //   case Exp.flow.Pre(pre)
-    //     if ty == StepType.Free =>
-    //       // unguarded pre for free (pre-transition)
-    //   case _ =>
-    //     solver.assert(
-    //       compound.funapp("=", ppexp(lhs), ppexp(rhs)))
-
-    def nodedeclares(n: Node, solver: Solver): Unit = {}
-    //   declares(n.path, n.vars.toList, solver)
-    //   n.subnodes.foreach { nx =>
-    //     nodedeclares(nx._2, solver)
-    //   }
-
-    def nodebinds(n: Node, solver: Solver): Unit = {}
-      // TODO
-      // n.bindings.foreach { case (l,r) =>
-      //   bind(l, r, solver)
-      // }
-      // n.subnodes.foreach { nx =>
-      //   nodebinds(nx, solver)
-      // }
-

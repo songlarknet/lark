@@ -53,6 +53,14 @@ object solver:
     var fresh: Int = 0
 
     def command(cmd: SExpr): SExpr =
+      val r = commandUnchecked(cmd)
+      r match
+        case _ : CommandsResponses.Error =>
+          throw new SolverException(r)
+        case _ =>
+          r
+
+    def commandUnchecked(cmd: SExpr): SExpr =
       if (verbose)
         System.err.print(s"[smt]< ${cmd}")
       val got = clean(interpreter.eval(cmd))
@@ -84,8 +92,14 @@ object solver:
           e
       case _ => response
 
-    def declareConst(name: Terms.SSymbol, sort: Terms.Sort): SExpr =
-      command(Commands.DeclareConst(name, sort))
+    def declareConst(name: Terms.SSymbol, sort: Terms.Sort): Unit =
+      val r = command(Commands.DeclareConst(name, sort))
+      if (r.isInstanceOf[CommandsResponses.Success.type])
+        throw new SolverException(r, s"declareConst ${name} ${sort}: expected success, but got:")
+
+    def declareConsts(consts: Iterable[Terms.SortedVar]): Unit = consts.foreach { c =>
+      command(Commands.DeclareConst(c.name, c.sort))
+    }
 
     def assert(term: Terms.Term): SExpr =
       command(Commands.Assert(term))
@@ -94,7 +108,6 @@ object solver:
       command(Commands.CheckSat()).asInstanceOf[CommandsResponses.CheckSatStatus]
 
     /** Check satisfaction assuming that some expression is true.
-      * 
       */
     def checkSatAssumingX[T](prop: Terms.Term)(cont: CommandsResponses.CheckSatStatus => T): T =
       val actlit  = compound.sym(s"%actlit$fresh")
@@ -111,6 +124,6 @@ object solver:
         throw new SolverException(sat)
 
 
-  class SolverException(response: SExpr) extends Exception(
-    s"""SMT solver returned unexpected response:
+  class SolverException(response: SExpr, message: String = "SMT solver returned unexpected response") extends Exception(
+    s"""${message}
       ${response}""")
