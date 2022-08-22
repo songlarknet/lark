@@ -39,6 +39,10 @@ object system:
         val ns = namespaces.map { (k,v) => s"${k.pretty}: ${v.pretty}" }
         s"{ ${(vs ++ ns).mkString("; ")} }"
 
+      def refs(prefix: Prefix): Iterable[names.Ref] =
+        values.map(v => names.Ref(prefix.prefix, v._1)) ++
+        namespaces.flatMap(ns => ns._2.refs(Prefix(prefix.prefix :+ ns._1)))
+
   object Namespace:
     def fromRef(ref: names.Ref, sort: Sort): Namespace =
       ref.path match {
@@ -243,26 +247,95 @@ object system:
       SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList ++ sys.assumptions, obligations.toList ++ sys.obligations)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
-      val initR = names.Ref(List(), nested.init)
-      val initN = Namespace.fromRef(initR, Sort.Bool)
-      // TODO match on selector, do When/Reset
-      // val selectorS = nested.selector
-      val children = nested.children.map(binding(context, node, initR, _))
-      val t = children.fold(System.pure(()))(_ <> _)
+      nested.selector match
+      case builder.Selector.When(k) =>
+        val initR = names.Ref(List(), nested.init)
+        val initN = Namespace.fromRef(initR, Sort.Bool)
+        val children = nested.children.map(binding(context, node, initR, _))
+        val t = children.fold(System.pure(()))(_ <> _)
 
-      new System:
-        def state: Namespace = t.state <> initN
-        def row: Namespace = t.row
-        def init(oracle: Oracle, state: Prefix): Terms.Term =
-          compound.and(t.init(oracle, state), state(initR))
-        def extract(oracle: Oracle, state: Prefix, row: Prefix) =
-          ()
-        def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
-          compound.and(
-            t.step(oracle, state, row, stateX),
-            compound.funapp("not", stateX(initR)))
-        def assumptions: List[SolverJudgment] = t.assumptions
-        def obligations: List[SolverJudgment] = t.obligations
+        val te = init match
+          case None =>
+            // Blah - restructure, top level needs const clock so init=None
+            require(k == Exp.Val(Sort.Bool, Val.Bool(true)))
+            System.pure(compound.bool(true))
+          case Some(i) =>
+            // Evaluate clock in parent init context
+            expr(ExpContext(node, i, context.supply), k)
+
+        new System:
+          def state: Namespace = t.state <> te.state <> initN
+          def row: Namespace = t.row <> te.row
+          def init(oracle: Oracle, state: Prefix): Terms.Term =
+            compound.and(
+              te.init(oracle, state),
+              t.init(oracle, state),
+              state(initR))
+          def extract(oracle: Oracle, state: Prefix, row: Prefix) =
+            ()
+          def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
+            val whenStep = compound.and(
+              t.step(oracle, state, row, stateX),
+              compound.funapp("not", stateX(initR)))
+
+            val whenStay = compound.and(
+              this.state.refs(Prefix(List())).map { x =>
+                compound.funapp("=", state(x), stateX(x))
+              }.toSeq : _*)
+
+            compound.and(
+              te.step(oracle, state, row, stateX),
+              compound.ite(te.extract(oracle, state, row), whenStep, whenStay))
+          def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
+          def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
+      case builder.Selector.Reset(k) =>
+        val initR = names.Ref(List(), nested.init)
+        val initN = Namespace.fromRef(initR, Sort.Bool)
+        val children = nested.children.map(binding(context, node, initR, _))
+        val t = children.fold(System.pure(()))(_ <> _)
+
+        val te = init match
+          case None =>
+            assert(false, s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${node.path.map(_.pretty).mkString(".")}")
+          case Some(i) =>
+            // Evaluate clock in parent init context
+            expr(ExpContext(node, i, context.supply), k)
+
+        // We really want to existentially quantify over the reset states, so
+        // we sneak a version of the state into the row variables
+        val substateN = t.state <> initN
+        val nestStateN = Namespace(Map(), Map(nested.init -> substateN))
+
+
+        new System:
+          def state: Namespace = substateN <> te.state
+          def row: Namespace = t.row <> te.row <> nestStateN
+          def init(oracle: Oracle, state: Prefix): Terms.Term =
+            compound.and(
+              te.init(oracle, state),
+              t.init(oracle, state),
+              state(initR))
+          def extract(oracle: Oracle, state: Prefix, row: Prefix) =
+            ()
+          def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
+            val stateR = Prefix(row.prefix ++ List(nested.init))
+
+            val whenReset = compound.and(
+              t.init(oracle, stateR),
+              stateR(initR))
+
+            val whenStep = compound.and(
+              this.state.refs(Prefix(List())).map { x =>
+                compound.funapp("=", state(x), stateR(x))
+              }.toSeq : _*)
+
+            compound.and(
+              te.step(oracle, state, row, stateX),
+              t.step(oracle, stateR, row, stateX),
+              compound.funapp("not", stateX(initR)),
+              compound.ite(te.extract(oracle, state, row), whenReset, whenStep))
+          def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
+          def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
 
     def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
       case builder.Binding.Equation(lhs, rhs) =>
@@ -327,13 +400,11 @@ object system:
             val stepT = Terms.FunctionApplication(subsystem.step.name, argsT)
             stepT
 
-          // Get all of the subnode's judgments.
-          // Contract requires become obligations at the use-site.
-          // Other judgments become assumptions here as they've been proven
-          // in the subnode itself.
-          // TODO: what about sorries? should they need to be re-stated in all callers, like requires?
+          // Get all of the subnode's judgments. Contract requires become
+          // obligations at the use-site. Other judgments become assumptions
+          // here as they've been proven in the subnode itself.
+          // Should all local properties bubble up? What about sorries?
           // TODO: UNSOUND: rewrite assumptions to always(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
-          // should local properties bubble up?
           def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
           val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
           val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)

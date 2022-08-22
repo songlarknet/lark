@@ -30,7 +30,13 @@ object solver:
     def id(s: String) = Terms.Identifier(sym(s))
     def qid(s: String, sort: Terms.Sort) = Terms.QualifiedIdentifier(id(s), Some(sort))
     def qid(s: String) = Terms.QualifiedIdentifier(id(s))
-    def funapp(f: String, args: Terms.Term*) = Terms.FunctionApplication(qid(f), args)
+    def funapp(f: String, args: Terms.Term*) = (f, args.toList) match
+      case ("ite", List(p, t, f)) => ite(p, t, f)
+      case ("and", args) => and(args : _*)
+      case ("or", args) => or(args : _*)
+      case _ => funappNoSimp(f, args.toList)
+
+    def funappNoSimp(f: String, args: List[Terms.Term]) = Terms.FunctionApplication(qid(f), args)
 
     def and(args: Terms.Term*) =
       def go(t: Terms.Term): Seq[Terms.Term] = t match
@@ -44,7 +50,7 @@ object solver:
       argsX match
         case Seq() => bool(true)
         case Seq(i) => i
-        case _ => funapp("and", argsX : _*)
+        case _ => funappNoSimp("and", argsX.toList)
 
     def or(args: Terms.Term*) =
       def go(t: Terms.Term): Seq[Terms.Term] = t match
@@ -58,14 +64,21 @@ object solver:
       argsX match
         case Seq() => bool(false)
         case Seq(i) => i
-        case _ => funapp("or", argsX : _*)
+        case _ => funappNoSimp("or", argsX.toList)
+
+    def ite(p: Terms.Term, t: Terms.Term, f: Terms.Term) = p match
+      case Terms.QualifiedIdentifier(ti, _)
+        if ti.symbol.name == "true" => t
+      case Terms.QualifiedIdentifier(ti, _)
+        if ti.symbol.name == "false" => f
+      case _ => funappNoSimp("ite", List(p, t, f))
 
     def int(i: lack.meta.base.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
       if (i >= 0)
         Terms.SNumeral(i)
       else
-        funapp("-", Terms.SNumeral(- i))
+        funappNoSimp("-", List(Terms.SNumeral(- i)))
 
     def bool(b: Boolean) = qid(b.toString)
 
