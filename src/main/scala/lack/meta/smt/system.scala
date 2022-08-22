@@ -131,7 +131,9 @@ object system:
 
   /** Defined system */
   case class SolverFunDef(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
-    def pretty: String = s"${name} = λ${oracles.map((a,b) => s"${a.name}: ${b.pretty}").mkString(" ")}. ${body}"
+    def pretty: String =
+      val oraclesP = s"λ${oracles.map((a,b) => s"(${a.name}: ${b.pretty})").mkString(" ")}."
+      s"${name} = ${oraclesP} ${lack.meta.smt.solver.pprTermBigAnd(body)}"
 
     def fundef(params: List[Terms.SortedVar]): Commands.FunDef =
       val allParams = params ++ oracles.map((v,s) => Terms.SortedVar(v, translate.sort(s)))

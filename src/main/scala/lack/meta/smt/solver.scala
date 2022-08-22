@@ -18,6 +18,13 @@ object solver:
         "--print-success"),
       tailPrinter = true)
 
+
+  def pprTermBigAnd(t: Terms.Term): String = t match
+    case Terms.FunctionApplication(f, args) if f.id.symbol.name == "and" =>
+      val xs = args.map(x => s"    ${x}").mkString("\n")
+      s"(and\n$xs)"
+    case _ => t.toString
+
   object compound:
     def sym(s: String) = Terms.SSymbol(s)
     def id(s: String) = Terms.Identifier(sym(s))
