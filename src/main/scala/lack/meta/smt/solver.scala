@@ -25,7 +25,6 @@ object solver:
     def qid(s: String) = Terms.QualifiedIdentifier(id(s))
     def funapp(f: String, args: Terms.Term*) = Terms.FunctionApplication(qid(f), args)
 
-    // TODO: simplify, filter out literal trues
     def and(args: Terms.Term*) =
       def go(t: Terms.Term): Seq[Terms.Term] = t match
         case Terms.QualifiedIdentifier(ti, _)
@@ -137,6 +136,13 @@ object solver:
       else
         throw new SolverException(sat)
 
+    /** Execute in a local push/pop context
+      */
+    def pushed[T](cont: => T): T =
+      command(Commands.Push(1))
+      val ret: T = cont
+      command(Commands.Pop(1))
+      ret
 
   class SolverException(response: SExpr, message: String = "SMT solver returned unexpected response") extends Exception(
     s"""${message}

@@ -86,6 +86,8 @@ object system:
     def init(oracle: Oracle, state: Prefix): Terms.Term
     def extract(oracle: Oracle, state: Prefix, row: Prefix): T
     def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term
+    def assumptions: List[SolverJudgment]
+    def obligations: List[SolverJudgment]
 
   object System:
     def pure[T](value: T): System[T] = new System[T]:
@@ -97,6 +99,8 @@ object system:
         value
       def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
         compound.bool(true)
+      def assumptions: List[SolverJudgment] = List()
+      def obligations: List[SolverJudgment] = List()
 
   extension[T,U] (outer: System[T => U])
     def <*>(that: System[T]): System[U] = new System[U]:
@@ -115,6 +119,8 @@ object system:
         val xa = outer.step(oracle, state, row, stateX)
         val xb = that.step(oracle, state, row, stateX)
         compound.and(xa, xb)
+      def assumptions: List[SolverJudgment] = outer.assumptions ++ that.assumptions
+      def obligations: List[SolverJudgment] = outer.obligations ++ that.obligations
 
   extension (outer: System[Unit])
     /** join two systems, ignoring the values */
@@ -222,7 +228,7 @@ object system:
       // TODO: include assumptions and obligations from subnode calls
       val (obligations, assumptions) = node.props.map(prop).partition(j => j.judgment.isObligation)
 
-      SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList, obligations.toList)
+      SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList ++ sys.assumptions, obligations.toList ++ sys.obligations)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
       val initR = names.Ref(node.path, nested.init)
@@ -246,6 +252,8 @@ object system:
             t.step(oracle, state, row, stateX),
             compound.funapp("=", state(initR), row(initR)),
             compound.funapp("not", stateX(initR)))
+        def assumptions: List[SolverJudgment] = t.assumptions
+        def obligations: List[SolverJudgment] = t.obligations
 
     def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
       case builder.Binding.Equation(lhs, rhs) =>
@@ -264,9 +272,59 @@ object system:
               compound.funapp("=", row(xbind.v), v),
               t0.step(oracle, state, row, stateX)
             )
-      case builder.Binding.Subnode(subnode, args) =>
-        // TODO call subnodes
-        System.pure(())
+          def assumptions: List[SolverJudgment] = t0.assumptions
+          def obligations: List[SolverJudgment] = t0.obligations
+      case builder.Binding.Subnode(v, args) =>
+        val subnode = node.subnodes(v)
+        val subsystem = context.nodes(subnode.path)
+
+        val argsS  = args.map(expr(ExpContext(node, init, context.supply), _))
+        val argsEq = subnode.params.zip(argsS).map { (param, argT) =>
+          val t0 = new System[Terms.Term => Unit]:
+            def state: Namespace = Namespace()
+            def row: Namespace = Namespace(Map.empty, Map(v -> subsystem.row))
+            def init(oracle: Oracle, stateP: Prefix): Terms.Term =
+              compound.bool(true)
+            def extract(oracle: Oracle, state: Prefix, row: Prefix) =
+              def const(i : Terms.Term) = ()
+              const
+            def step(oracle: Oracle, stateP: Prefix, rowP: Prefix, stateXP: Prefix): Terms.Term =
+              val argV = argT.extract(oracle, stateP, rowP)
+              val p = rowP(names.Ref(List(v) ++ subnode.path, param))
+              compound.funapp("=", p, argV)
+
+            def assumptions: List[SolverJudgment] = List()
+            def obligations: List[SolverJudgment] = List()
+          t0 <*> argT
+        }
+
+        val subnodeT = new System[Unit]:
+          def state: Namespace = Namespace(Map.empty, Map(v -> subsystem.state))
+          def row: Namespace = Namespace(Map.empty, Map(v -> subsystem.row))
+          def init(oracle: Oracle, stateP: Prefix): Terms.Term =
+            val argsV = subsystem.paramsOfNamespace(stateP, state).map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
+            val argsO = subsystem.init.oracles.map((sym, sort) => oracle.oracle(List(v), sort))
+            val argsT = (argsV ++ argsO)
+            Terms.FunctionApplication(subsystem.init.name, argsT)
+          def extract(oracle: Oracle, state: Prefix, row: Prefix) =
+            ()
+          def step(oracle: Oracle, stateP: Prefix, rowP: Prefix, stateXP: Prefix): Terms.Term =
+            val argsV = subsystem.paramsOfNamespace(stateP, state) ++ subsystem.paramsOfNamespace(rowP, row) ++ subsystem.paramsOfNamespace(stateXP, state)
+            val argsO = subsystem.step.oracles.map((sym, sort) => oracle.oracle(List(v), sort))
+            val argsT = (argsV.map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name))) ++ argsO)
+            val stepT = Terms.FunctionApplication(subsystem.step.name, argsT)
+            stepT
+
+          // Flip assumptions/obligations so that we get subnode's guarantees as assumptions and requires as obligations
+          // TODO: ensure that requires show up as preconditions to guarantees, ie assumptions = always(/\subnode.requires) => /\ subnode.guarantee
+          // TODO: do we want any sorries inside subnode to remain assumed, or should the supernode need to explicitly copy them?
+          // should local properties bubble up?
+          def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
+          def assumptions: List[SolverJudgment] = subsystem.obligations.map(j => SolverJudgment(pfx(j.row), j.judgment))
+          def obligations: List[SolverJudgment] = subsystem.assumptions.map(j => SolverJudgment(pfx(j.row), j.judgment))
+
+        argsEq.foldLeft(subnodeT)(_ <> _)
+
       case nest: builder.Binding.Nested =>
         nested(context, node, Some(init), nest)
 
@@ -288,6 +346,8 @@ object system:
             choose
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)
+          def assumptions: List[SolverJudgment] = List()
+          def obligations: List[SolverJudgment] = List()
         choice <*> t0 <*> t1
 
       case Exp.flow.Pre(sort, pre) =>
@@ -308,6 +368,8 @@ object system:
                 stateX(ref),
                 t0.extract(oracle, state, row)),
               t0.step(oracle, state, row, stateX))
+          def assumptions: List[SolverJudgment] = List()
+          def obligations: List[SolverJudgment] = List()
 
       case Exp.flow.Fby(sort, v0, pre) =>
         val t0 = expr(context, pre)
@@ -327,6 +389,8 @@ object system:
                 stateX(ref),
                 t0.extract(oracle, state, row)),
               t0.step(oracle, state, row, stateX))
+          def assumptions: List[SolverJudgment] = List()
+          def obligations: List[SolverJudgment] = List()
 
       case Exp.nondet.Undefined(sort) =>
         new System[Terms.Term]:
@@ -341,6 +405,8 @@ object system:
             o
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             compound.bool(true)
+          def assumptions: List[SolverJudgment] = List()
+          def obligations: List[SolverJudgment] = List()
 
       case Exp.Val(_, v) => System.pure(value(v))
       case Exp.Var(s, v) => new System:
@@ -352,6 +418,8 @@ object system:
           row(v)
         def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
           compound.bool(true)
+        def assumptions: List[SolverJudgment] = List()
+        def obligations: List[SolverJudgment] = List()
 
       case Exp.App(sort, prim, args : _*) =>
         val zeroS = System.pure(List[Terms.Term]())

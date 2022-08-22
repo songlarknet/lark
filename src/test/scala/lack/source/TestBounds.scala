@@ -13,23 +13,14 @@ object TestBounds:
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
     val bounds = LemmaBounds(3)
-    println(builder.nodeRef.pretty)
-    val checknode = bounds.builder.nodeRef.allNodes.toIndexedSeq(0)
-
-    def solver() = smt.solver.gimme(verbose = true)
-
-    val system = smt.system.translate.nodes(bounds.builder.nodeRef.allNodes)
-    println(system.pretty)
-
-    println(s"feasible: ${smt.check.feasible(checknode, 2, solver())}")
-
-    println(s"bmc:      ${smt.check.bmc(checknode, 4, solver())}")
-    println(s"k-ind:    ${smt.check.kind(checknode, 4, solver())}")
+    def solver() = smt.solver.gimme(verbose = false)
+    smt.check.checkMany(builder.nodeRef, 4, solver)
 
 
   class LemmaBounds(n: Int, invocation: NodeInvocation) extends Node(invocation):
     val human  = local[Int32]
     val OVERRIDE    = i32(100)
+
 
     val human_in_bounds = human < OVERRIDE
     val last_in_bounds  = LastN(n, human_in_bounds)

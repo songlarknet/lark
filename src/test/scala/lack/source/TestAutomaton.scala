@@ -16,16 +16,9 @@ object TestAutomaton:
 
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    val top = builder.invoke { new Top(_) }
-    println(builder.nodeRef.pretty)
-
-    def solver() = smt.solver.gimme(verbose = false)
-
-    val systems = smt.system.translate.nodes(top.builder.nodeRef.allNodes)
-
-    println(s"feasible: ${smt.check.feasible(builder.nodeRef, 2, solver())}")
-    println(s"bmc:      ${smt.check.bmc(builder.nodeRef, 4, solver())}")
-    println(s"k-ind:    ${smt.check.kind(builder.nodeRef, 2, solver())}")
+    builder.invoke { new Top(_) }
+    def solver() = smt.solver.gimme(verbose = true)
+    smt.check.checkMany(builder.nodeRef, 4, solver)
 
   class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...

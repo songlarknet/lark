@@ -63,10 +63,32 @@ object check:
     val propsT = props.map(p => compound.funapp("not", row(p.row)))
     compound.or(propsT : _*)
 
-  def feasible(n: Node, count: Int, solver: Solver): CheckFeasible =
-    val sys = declareSystem(n, solver)
-    val top = sys.top
+  def checkMany(top: Node, count: Int, solver: () => Solver): Unit =
+    println("Checking top-level node:")
+    println(top.pretty)
+    println("System translation:")
+    println(system.translate.nodes(top.allNodes).pretty)
 
+    top.allNodes.foreach { n =>
+      val s = solver()
+      checkNode(n, count, s)
+    }
+
+  def checkNode(top: Node, count: Int, solver: Solver): Unit =
+    val sys  = declareSystem(top, solver)
+    val topS = sys.top
+    val feaR = solver.pushed { feasible(sys, topS, count, solver) }
+    val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
+    val indR = solver.pushed { kind(sys, topS, count, solver) }
+    println(s"Node ${top.path.map(_.pretty).mkString(".")}:")
+    topS.obligations.foreach { o =>
+      println(s"  ${o.judgment.pretty}")
+    }
+    println(s"  Feasibility check:   ${feaR}")
+    println(s"  Bounded model check: ${bmcR}")
+    println(s"  K-inductive check:   ${indR}")
+
+  def feasible(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): CheckFeasible =
     {
       val state = top.paramsOfNamespace(statePrefix(0), top.state)
       solver.declareConsts(state)
@@ -98,10 +120,7 @@ object check:
     CheckFeasible.FeasibleUpTo(count)
 
 
-  def bmc(n: Node, count: Int, solver: Solver): Bmc =
-    val sys = declareSystem(n, solver)
-    val top = sys.top
-
+  def bmc(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): Bmc =
     {
       val state = top.paramsOfNamespace(statePrefix(0), top.state)
       solver.declareConsts(state)
@@ -131,10 +150,7 @@ object check:
     Bmc.SafeUpTo(count)
 
 
-  def kind(n: Node, count: Int, solver: Solver): Kind =
-    val sys = declareSystem(n, solver)
-    val top = sys.top
-
+  def kind(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): Kind =
     {
       val state = top.paramsOfNamespace(statePrefix(0), top.state)
       solver.declareConsts(state)
