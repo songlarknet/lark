@@ -193,6 +193,17 @@ object system:
 
     class Context(val nodes: Map[List[names.Component], SolverNode], val supply: Supply)
 
+    class ExpContext(val node: Node, val init: names.Ref, val supply: Supply):
+      def stripRef(r: names.Ref): names.Ref =
+        ExpContext.stripRef(node, r)
+
+    object ExpContext:
+      def stripRef(node: Node, r: names.Ref): names.Ref =
+        val pfx = node.path
+        require(r.path.startsWith(pfx), s"Ill-formed node in node ${node.path.map(_.pretty).mkString(".")}: all variable references should start with the node's path, but ${r.pretty} doesn't")
+        val strip = r.path.drop(pfx.length)
+        names.Ref(strip, r.name)
+
     def nodes(inodes: Iterable[Node]): SolverSystem =
       var map = Map[List[names.Component], SolverNode]()
       val snodes = inodes.map { case inode =>
@@ -207,7 +218,7 @@ object system:
         names.Ref(node.path, names.Component(i, None))
 
       val sys = nested(context, node, None, node.nested)
-      val params = node.params.map { p => names.Ref(node.path, p) }.toList
+      val params = node.params.map { p => names.Ref(List(), p) }.toList
 
       val initO    = new Oracle()
       val stepO    = new Oracle()
@@ -225,15 +236,14 @@ object system:
         judgment.term match
           // LODO: deal with non-variables by creating a fresh row variable for them
           case Exp.Var(s, v) =>
-            SolverJudgment(v, judgment)
+            SolverJudgment(ExpContext.stripRef(node, v), judgment)
 
-      // TODO: include assumptions and obligations from subnode calls
       val (obligations, assumptions) = node.props.map(prop).partition(j => j.judgment.isObligation)
 
       SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList ++ sys.assumptions, obligations.toList ++ sys.obligations)
 
     def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
-      val initR = names.Ref(node.path, nested.init)
+      val initR = names.Ref(List(), nested.init)
       val initN = Namespace.fromRef(initR, Sort.Bool)
       // TODO match on selector, do When/Reset
       // val selectorS = nested.selector
@@ -242,9 +252,7 @@ object system:
 
       new System:
         def state: Namespace = t.state <> initN
-        // Dumb thing: we need the init binding in both state and row because
-        // variable references to init will look inside the row, but arrow looks in state.
-        def row: Namespace = t.row <> initN
+        def row: Namespace = t.row
         def init(oracle: Oracle, state: Prefix): Terms.Term =
           compound.and(t.init(oracle, state), state(initR))
         def extract(oracle: Oracle, state: Prefix, row: Prefix) =
@@ -252,18 +260,19 @@ object system:
         def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
           compound.and(
             t.step(oracle, state, row, stateX),
-            compound.funapp("=", state(initR), row(initR)),
             compound.funapp("not", stateX(initR)))
         def assumptions: List[SolverJudgment] = t.assumptions
         def obligations: List[SolverJudgment] = t.obligations
 
     def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
       case builder.Binding.Equation(lhs, rhs) =>
-        val t0 = expr(ExpContext(node, init, context.supply), rhs)
+        val ec = ExpContext(node, init, context.supply)
+        val t0 = expr(ec, rhs)
         val xbind = node.xvar(lhs)
+        val xref = names.Ref(List(), lhs)
         new System:
           def state: Namespace = t0.state
-          def row: Namespace = t0.row <> Namespace.fromRef(xbind.v, xbind.sort)
+          def row: Namespace = t0.row <> Namespace.fromRef(xref, xbind.sort)
           def init(oracle: Oracle, state: Prefix): Terms.Term =
             t0.init(oracle, state)
           def extract(oracle: Oracle, state: Prefix, row: Prefix) =
@@ -271,16 +280,17 @@ object system:
           def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
             val v = t0.extract(oracle, state, row)
             compound.and(
-              compound.funapp("=", row(xbind.v), v),
+              compound.funapp("=", row(xref), v),
               t0.step(oracle, state, row, stateX)
             )
           def assumptions: List[SolverJudgment] = t0.assumptions
           def obligations: List[SolverJudgment] = t0.obligations
       case builder.Binding.Subnode(v, args) =>
+        val ec = ExpContext(node, init, context.supply)
         val subnode = node.subnodes(v)
         val subsystem = context.nodes(subnode.path)
 
-        val argsS  = args.map(expr(ExpContext(node, init, context.supply), _))
+        val argsS  = args.map(expr(ec, _))
         val argsEq = subnode.params.zip(argsS).map { (param, argT) =>
           val t0 = new System[Terms.Term => Unit]:
             def state: Namespace = Namespace()
@@ -292,7 +302,7 @@ object system:
               const
             def step(oracle: Oracle, stateP: Prefix, rowP: Prefix, stateXP: Prefix): Terms.Term =
               val argV = argT.extract(oracle, stateP, rowP)
-              val p = rowP(names.Ref(List(v) ++ subnode.path, param))
+              val p = rowP(names.Ref(List(v), param))
               compound.funapp("=", p, argV)
 
             def assumptions: List[SolverJudgment] = List()
@@ -320,6 +330,7 @@ object system:
           // Flip assumptions/obligations so that we get subnode's guarantees as assumptions and requires as obligations
           // TODO: ensure that requires show up as preconditions to guarantees, ie assumptions = always(/\subnode.requires) => /\ subnode.guarantee
           // TODO: do we want any sorries inside subnode to remain assumed, or should the supernode need to explicitly copy them?
+          // TODO broken
           // should local properties bubble up?
           def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
           def assumptions: List[SolverJudgment] = subsystem.obligations.map(j => SolverJudgment(pfx(j.row), j.judgment))
@@ -329,9 +340,6 @@ object system:
 
       case nest: builder.Binding.Nested =>
         nested(context, node, Some(init), nest)
-
-
-    class ExpContext(val node: Node, val init: names.Ref, val supply: Supply)
 
     def expr(context: ExpContext, exp: Exp): System[Terms.Term] = exp match
       case Exp.flow.Arrow(_, first, later) =>
@@ -359,6 +367,8 @@ object system:
           def state: Namespace = Namespace.fromRef(ref, sort) <> t0.state
           def row: Namespace = t0.row
           def init(oracle: Oracle, state: Prefix): Terms.Term =
+            // LODO: is the oracle necessary here? Couldn't we just leave it uninitialised?
+            // Might be able to remove oracle stuff altogether
             val u = oracle.oracle(context.node.path, sort)
             compound.and(t0.init(oracle, state),
               compound.funapp("=", state(ref), u))
@@ -412,12 +422,21 @@ object system:
 
       case Exp.Val(_, v) => System.pure(value(v))
       case Exp.Var(s, v) => new System:
-        def state: Namespace = Namespace()
-        def row: Namespace = Namespace.fromRef(v, s)
+        val ref = context.stripRef(v)
+        // TODO HACK: should take a context describing which variables are in state and which are in row
+        val rowVariable = ref.name.symbol != names.ComponentSymbol.INIT
+
+        val ns = Namespace.fromRef(ref, s)
+
+        def state: Namespace = if (!rowVariable) ns else Namespace()
+        def row: Namespace = if (rowVariable) ns else Namespace()
         def init(oracle: Oracle, state: Prefix): Terms.Term =
           compound.bool(true)
         def extract(oracle: Oracle, state: Prefix, row: Prefix): Terms.Term =
-          row(v)
+          if (rowVariable)
+            row(ref)
+          else
+            state(ref)
         def step(oracle: Oracle, state: Prefix, row: Prefix, stateX: Prefix): Terms.Term =
           compound.bool(true)
         def assumptions: List[SolverJudgment] = List()

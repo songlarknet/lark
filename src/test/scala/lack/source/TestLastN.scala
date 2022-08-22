@@ -13,7 +13,7 @@ object TestLastN:
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
     val lem = LemmaLastN(3)
-    def solver() = smt.solver.gimme(verbose = false)
+    def solver() = smt.solver.gimme(verbose = true)
     smt.check.checkMany(builder.nodeRef, 4, solver)
 
 
@@ -24,9 +24,9 @@ object TestLastN:
     property("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {
       lastN.count <= lastSN.count && lastSN.count <= lastN.count + 1
     }
-    // property("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
-    //   lastSN.out ==> lastN.out
-    // }
+    property("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
+      lastSN.out ==> lastN.out
+    }
 
   object LemmaLastN:
     def apply(n: Integer)(using builder: Builder, location: lack.meta.macros.Location) =

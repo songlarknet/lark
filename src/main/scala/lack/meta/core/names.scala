@@ -31,7 +31,7 @@ object names:
     def pretty(c: ComponentSymbol): String = c
 
     val INIT  = fromInternal("init")
-    val LOCAL = fromInternal("local")
+    val LOCAL = fromStringUnsafe("")
 
   /** A name component, which can be used as a variable binding. */
   case class Component(symbol: ComponentSymbol, ix: Option[Int]):

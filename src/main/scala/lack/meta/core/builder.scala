@@ -36,7 +36,7 @@ object builder:
     case class Equation(lhs: names.Component, rhs: Exp) extends Binding:
       def pretty = s"${lhs.pretty} = ${rhs.pretty}"
     case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
-      def pretty = s"${subnode.pretty}(${args.map(_.pretty).mkString(", ")})"
+      def pretty = s"Subnode ${subnode.pretty}(${args.map(_.pretty).mkString(", ")})"
     class Nested(val init: names.Component, val selector: Selector, val node: Node) extends Binding:
       val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
@@ -93,7 +93,7 @@ object builder:
        */
       def memoForce(rhs: Exp)(using location: Location): Exp =
         val vv = Variable(rhs.sort, location, Variable.Generated)
-        val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromInternal(i))
+        val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromScalaSymbol(i))
         val v = node.fresh(name, vv, forceIndex = true)
         append(Equation(v.v.name, rhs))
         v
@@ -167,10 +167,11 @@ object builder:
       props += j
 
     def pretty: String =
-      s"""Node ${path.map(_.pretty).mkString(".")}(${params.map(_.pretty).mkString(", ")})
+      val paramsP = params.map(p => s"${p.pretty} : ${xvar(p).sort.pretty}")
+      s"""Node ${path.map(_.pretty).mkString(".")}(${paramsP.mkString(", ")})
          |${indent("Vars:", vars.map(x => s"${x._2.mode} ${x._1.pretty} : ${x._2.sort}${x._2.location.pretty}").toList)}
          |${indent("Bindings:", nested.children.map(x => x.pretty).toList)}
-         |${indent("Subnodes:", subnodes.map(x => x._2.pretty).toList)}
+         |${indent("Subnodes:", subnodes.map(x => s"${x._1.pretty} = ${x._2.pretty}").toList)}
          |${indent("Props:", props.map(x => x.pretty).toList)}
          |""".stripMargin
 
