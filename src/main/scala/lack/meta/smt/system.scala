@@ -327,14 +327,18 @@ object system:
             val stepT = Terms.FunctionApplication(subsystem.step.name, argsT)
             stepT
 
-          // Flip assumptions/obligations so that we get subnode's guarantees as assumptions and requires as obligations
-          // TODO: ensure that requires show up as preconditions to guarantees, ie assumptions = always(/\subnode.requires) => /\ subnode.guarantee
-          // TODO: do we want any sorries inside subnode to remain assumed, or should the supernode need to explicitly copy them?
-          // TODO broken
+          // Get all of the subnode's judgments.
+          // Contract requires become obligations at the use-site.
+          // Other judgments become assumptions here as they've been proven
+          // in the subnode itself.
+          // TODO: what about sorries? should they need to be re-stated in all callers, like requires?
+          // TODO: UNSOUND: rewrite assumptions to always(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
           // should local properties bubble up?
           def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
-          def assumptions: List[SolverJudgment] = subsystem.obligations.map(j => SolverJudgment(pfx(j.row), j.judgment))
-          def obligations: List[SolverJudgment] = subsystem.assumptions.map(j => SolverJudgment(pfx(j.row), j.judgment))
+          val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
+          val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
+          def assumptions: List[SolverJudgment] = asms
+          def obligations: List[SolverJudgment] = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire)))
 
         argsEq.foldLeft(subnodeT)(_ <> _)
 

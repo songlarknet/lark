@@ -17,7 +17,7 @@ object TestAutomaton:
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
     builder.invoke { new Top(_) }
-    def solver() = smt.solver.gimme(verbose = true)
+    def solver() = smt.solver.gimme(verbose = false)
     smt.check.checkMany(builder.nodeRef, 4, solver)
 
   class Top(invocation: NodeInvocation) extends Node(invocation):

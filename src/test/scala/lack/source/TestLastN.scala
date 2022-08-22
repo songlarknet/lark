@@ -13,7 +13,7 @@ object TestLastN:
   def main(args: Array[String]): Unit =
     given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
     val lem = LemmaLastN(3)
-    def solver() = smt.solver.gimme(verbose = true)
+    def solver() = smt.solver.gimme(verbose = false)
     smt.check.checkMany(builder.nodeRef, 4, solver)
 
 

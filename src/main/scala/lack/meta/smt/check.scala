@@ -81,8 +81,11 @@ object check:
     val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
     val indR = solver.pushed { kind(sys, topS, count, solver) }
     println(s"Node ${top.path.map(_.pretty).mkString(".")}:")
+    topS.assumptions.foreach { o =>
+      println(s"  Assume ${o.judgment.pretty}")
+    }
     topS.obligations.foreach { o =>
-      println(s"  ${o.judgment.pretty}")
+      println(s"  Show ${o.judgment.pretty}")
     }
     println(s"  Feasibility check:   ${feaR}")
     println(s"  Bounded model check: ${bmcR}")

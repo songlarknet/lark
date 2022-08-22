@@ -22,6 +22,12 @@ object prop:
      *  Term can refer to any variables including locals.
      */
     case Sorry
+
+    /** Internal contract precondition which has been instantiated to a proof
+     * obligation in the caller.
+     *  Term should only refer to inputs and constants.
+     */
+    case SubnodeRequire
     /** Automatically-generated assertion.
      *  Term can refer to any variables including locals.
      */
@@ -35,4 +41,5 @@ object prop:
       case Form.Guarantee => true
       case Form.Property => true
       case Form.Sorry => false
+      case Form.SubnodeRequire => true
       case Form.Generated => true
