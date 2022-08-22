@@ -160,6 +160,9 @@ object TestAutomaton:
       (accel >= 100) ==> (accel_out == accel)
     }
 
+    property("no set, no change") {
+      !cmd_set ==> (speed_out == u8(0) || speed_out == pre(speed_out))
+    }
 
   object Cruise:
     def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Builder, location: lack.meta.macros.Location) =
