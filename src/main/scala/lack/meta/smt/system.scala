@@ -404,7 +404,7 @@ object system:
           // obligations at the use-site. Other judgments become assumptions
           // here as they've been proven in the subnode itself.
           // Should all local properties bubble up? What about sorries?
-          // TODO: UNSOUND: rewrite assumptions to always(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
+          // TODO: UNSOUND: rewrite assumptions to sofar(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
           def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
           val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
           val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)

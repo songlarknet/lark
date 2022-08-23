@@ -66,16 +66,16 @@ object node:
     /** Mark an expression as an argument to a subnode.
      *
      * If you have a node you want to call which looks something like:
-     * > class Always(e: Stream[Bool]) extends Node
+     * > class SoFar(e: Stream[Bool]) extends Node
      * then you might try to call it from another node as:
-     * > Always(x > 5)
+     * > SoFar(x > 5)
      *
      * However, the problem with the above call is that the subnode gets directly
      * instantiated with any occurrences of e replaced with the value `x > 5`,
      * losing the fact that e referred to the first parameter. This substitution
-     * makes it hard to do modular proofs: if Always has some local propositions
+     * makes it hard to do modular proofs: if SoFar has some local propositions
      * that we'd like to prove, but all we have is a few different instances of
-     * Always with different arguments, then it becomes hard to know which parts
+     * SoFar with different arguments, then it becomes hard to know which parts
      * of the proof can be reused across the different instances.
      * Copilot has a similar problem with this "eager substitution", which is why
      * they don't support contracts for modular proofs.
@@ -84,12 +84,12 @@ object node:
      * parameters that will be substituted for argument values. We bundle this up
      * inside a "NodeInvocation" object which is passed to the Node base class
      * like so:
-     * > class Always(e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation)
+     * > class SoFar(e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation)
      *
      * Then, you can call it by calling builder.invoke:
-     * > def always(e: Stream[Bool])(using builder: Builder): Always =
+     * > def sofar(e: Stream[Bool])(using builder: Builder): SoFar =
      * >  builder.invoke { invocation =>
-     * >    new Always(invocation.arg("e", e))
+     * >    new SoFar(invocation.arg("e", e))
      * >  }
      *
      * This requires some extra boilerplate for each node definition. In the future
