@@ -20,17 +20,55 @@ object check:
     case class UnknownAt(steps: Int) extends CheckFeasible
 
 
-  sealed trait Bmc
+  sealed trait Bmc:
+    def pretty: String
   object Bmc:
-    case class SafeUpTo(steps: Int) extends Bmc
-    case class CounterexampleAt(steps: Int, expr: SExpr) extends Bmc
-    case class UnknownAt(steps: Int) extends Bmc
+    case class SafeUpTo(steps: Int) extends Bmc:
+      def pretty = s"Safe for at least ${steps} steps"
+    case class CounterexampleAt(steps: Int, trace: Trace) extends Bmc:
+      def pretty = lack.meta.base.indent("Counterexample: ", trace.steps.map(_.pretty))
+    case class UnknownAt(steps: Int) extends Bmc:
+      def pretty = s"Unknown (at step ${steps})"
+
 
   sealed trait Kind
   object Kind:
     case class InvariantMaintainedAt(steps: Int) extends Kind
     case class NoGood(steps: Int) extends Kind
     case class UnknownAt(steps: Int) extends Kind
+
+  case class Trace(steps: List[Trace.Row])
+  object Trace:
+    // HACK TODO not strings
+    case class Row(values: List[(String, String)]):
+      def pretty: String = s"{ ${values.map((k,v) => s"$k = $v").mkString(", ")} }"
+    // HACK TODO take node and filter out generated bindings
+    def fromModel(steps: Int, sexpr: SExpr): Trace =
+      def allDefs(s: SExpr): Iterable[(Terms.SSymbol, SExpr)] = s match
+        case CommandsResponses.GetModelResponseSuccess(m) =>
+          m.flatMap(allDefs)
+        case Commands.DefineFun(fd) =>
+          if (fd.params.isEmpty) {
+            Seq((fd.name, fd.body))
+          } else {
+            Seq()
+          }
+        case _ =>
+          throw new solver.SolverException(s, "can't parse model counterexample")
+
+      val ds = allDefs(sexpr)
+
+      val stepD = for (i <- 0 to steps) yield {
+        val stepI = s"row?${i}."
+        val dsI = ds.filter((k,v) => k.name.startsWith(stepI))
+        val dsK = dsI.map((k,v) => (k.name.drop(stepI.length), v.toString))
+        val dsF = dsK.filter((k,v) => !k.contains("?"))
+        val dsS = dsF.toArray.sortBy(_._1).toList
+        Row(dsS)
+      }
+
+      Trace(stepD.toList)
+
 
   def declareSystem(n: Node, solver: Solver): system.SolverSystem =
     val sys = system.translate.nodes(n.allNodes)
@@ -88,7 +126,7 @@ object check:
       println(s"  Show ${o.judgment.pretty}")
     }
     println(s"  Feasibility check:   ${feaR}")
-    println(s"  Bounded model check: ${bmcR}")
+    println(s"  Bounded model check: ${bmcR.pretty}")
     println(s"  K-inductive check:   ${indR}")
 
   def feasible(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): CheckFeasible =
@@ -144,8 +182,8 @@ object check:
       solver.checkSatAssumingX(disprove(top.obligations, rowPrefix(step))) { _.status match
         case CommandsResponses.UnknownStatus => return Bmc.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
-          val model = solver.command(Commands.GetAssignment())
-          return Bmc.CounterexampleAt(step, model)
+          val model = solver.command(Commands.GetModel())
+          return Bmc.CounterexampleAt(step, Trace.fromModel(step, model))
         case CommandsResponses.UnsatStatus   =>
       }
     }
