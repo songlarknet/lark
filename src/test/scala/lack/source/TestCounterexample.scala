@@ -24,3 +24,5 @@ object TestCounterexample:
     property("falsifiable: counter < 3") {
       counter < 3
     }
+
+    

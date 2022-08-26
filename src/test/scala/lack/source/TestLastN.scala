@@ -16,7 +16,6 @@ object TestLastN:
     def solver() = smt.solver.gimme(verbose = false)
     smt.check.checkMany(builder.nodeRef, 4, solver)
 
-
   class LemmaLastN(n: Integer, invocation: NodeInvocation) extends Node(invocation):
     val e      = local[Bool]
     val lastN  = LastN(n,     e)

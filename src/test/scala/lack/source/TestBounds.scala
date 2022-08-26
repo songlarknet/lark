@@ -54,66 +54,66 @@ object TestBounds:
 
 
 
-  class Surplus(n: Int, invocation: NodeInvocation) extends Node(invocation):
-    def MeanN(n: Int, v: Stream[Int32]): Stream[Int32] =
-      SumN(n, v) / n
+  // class Surplus(n: Int, invocation: NodeInvocation) extends Node(invocation):
+  //   def MeanN(n: Int, v: Stream[Int32]): Stream[Int32] =
+  //     SumN(n, v) / n
 
-    def SumN(n: Int, v: Stream[Int32]): Stream[Int32] = n match
-      case 0 => 0
-      case 1 => v
-      case _ => v + SumN(n - 1, fby(0, v))
+  //   def SumN(n: Int, v: Stream[Int32]): Stream[Int32] = n match
+  //     case 0 => 0
+  //     case 1 => v
+  //     case _ => v + SumN(n - 1, fby(0, v))
 
-    def LastN(n: Int, e: Stream[Bool]): Stream[Bool] = n match
-      case 0 => True
-      case 1 => e
-      case _ => e && LastN(n - 1, fby(False, e))
+  //   def LastN(n: Int, e: Stream[Bool]): Stream[Bool] = n match
+  //     case 0 => True
+  //     case 1 => e
+  //     case _ => e && LastN(n - 1, fby(False, e))
 
-    val OVERRIDE = 100
-    val HISTORY  = 2
+  //   val OVERRIDE = 100
+  //   val HISTORY  = 2
 
-    def SteerSelector(human: Stream[Int32], machine: Stream[Int32]): Stream[Int32] =
-      val human_filtered = MeanN(HISTORY, human)
-      cond(
-        when(human_filtered >= OVERRIDE) { human },
-        otherwise { machine })
+  //   def SteerSelector(human: Stream[Int32], machine: Stream[Int32]): Stream[Int32] =
+  //     val human_filtered = MeanN(HISTORY, human)
+  //     cond(
+  //       when(human_filtered >= OVERRIDE) { human },
+  //       otherwise { machine })
 
-    val human = i32(1)
-    val machine = i32(1)
-    property("if no human override then machine control") {
-      LastN(HISTORY, human < OVERRIDE) ==> (SteerSelector(human, machine) == machine)
-    }
-    property("if no human override then machine control") {
-      LastN(HISTORY, human < OVERRIDE) ==> MeanN(HISTORY, human) < OVERRIDE
-    }
+  //   val human = i32(1)
+  //   val machine = i32(1)
+  //   property("if no human override then machine control") {
+  //     LastN(HISTORY, human < OVERRIDE) ==> (SteerSelector(human, machine) == machine)
+  //   }
+  //   property("if no human override then machine control") {
+  //     LastN(HISTORY, human < OVERRIDE) ==> MeanN(HISTORY, human) < OVERRIDE
+  //   }
 
-    property("if no human override then machine control") {
-      human < OVERRIDE && fby(False, human < OVERRIDE) ==>
-        ((human + fby(0, human)) / 2 < OVERRIDE)
-    }
+  //   property("if no human override then machine control") {
+  //     human < OVERRIDE && fby(False, human < OVERRIDE) ==>
+  //       ((human + fby(0, human)) / 2 < OVERRIDE)
+  //   }
 
-    property("bounds-2: if no human override then machine control") {
-      val human_in_bounds = human < OVERRIDE
-      val last_fby        = fby(False, human_in_bounds)
-      val last_in_bounds  = human_in_bounds && last_fby
+  //   property("bounds-2: if no human override then machine control") {
+  //     val human_in_bounds = human < OVERRIDE
+  //     val last_fby        = fby(False, human_in_bounds)
+  //     val last_in_bounds  = human_in_bounds && last_fby
 
-      val mean_fby        = fby(i32(0), human)
-      val mean_sum        = human + mean_fby
-      val mean            = mean_sum / 2
-      val mean_in_bounds  = mean < OVERRIDE
+  //     val mean_fby        = fby(i32(0), human)
+  //     val mean_sum        = human + mean_fby
+  //     val mean            = mean_sum / 2
+  //     val mean_in_bounds  = mean < OVERRIDE
 
-      last_in_bounds ==> mean_in_bounds
-    }
+  //     last_in_bounds ==> mean_in_bounds
+  //   }
 
-    property("bounds-3: if no human override then machine control") {
-      val human_in_bounds = human < OVERRIDE
-      val last_fby1       = fby(False, human_in_bounds)
-      val last_fby2       = fby(False, last_fby1)
-      val last_in_bounds  = human_in_bounds && last_fby1 && last_fby2
-      val mean_fby1       = fby(i32(0), human)
-      val mean_fby2       = fby(i32(0), mean_fby1)
-      val mean_sum        = human + mean_fby1 + mean_fby2
-      val mean            = mean_sum / 3
-      val mean_in_bounds  = mean < OVERRIDE
+  //   property("bounds-3: if no human override then machine control") {
+  //     val human_in_bounds = human < OVERRIDE
+  //     val last_fby1       = fby(False, human_in_bounds)
+  //     val last_fby2       = fby(False, last_fby1)
+  //     val last_in_bounds  = human_in_bounds && last_fby1 && last_fby2
+  //     val mean_fby1       = fby(i32(0), human)
+  //     val mean_fby2       = fby(i32(0), mean_fby1)
+  //     val mean_sum        = human + mean_fby1 + mean_fby2
+  //     val mean            = mean_sum / 3
+  //     val mean_in_bounds  = mean < OVERRIDE
 
-      last_in_bounds ==> mean_in_bounds
-    }
+  //     last_in_bounds ==> mean_in_bounds
+  //   }

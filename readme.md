@@ -40,12 +40,6 @@ None of them quite solve the same problems that Lack aims to solve.
 
 See [doc/why.md].
 
-## Licence
-
-Non-commercial / evaluation licence, with secondary commercial licence?
-Similar to CompCert:
-https://raw.githubusercontent.com/AbsInt/CompCert/master/LICENSE
-
 ## Applications
 
 Potential applications:
