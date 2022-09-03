@@ -1,8 +1,9 @@
 # Lack
 
 Lack wants to be a Scala EDSL for writing real-time reactive control systems.
-The programmer can specify _safety properties_ that all executions of the system should satisfy, and these properties are verified via model checking.
-The system can then be compiled to executable C code.
+(But it isn't yet.)
+The plan is that the programmer will be able to specify _safety properties_ that all executions of the system should satisfy, and these properties are verified via model checking.
+The system will then be compiled to executable C code.
 
 The language is very similar to a cut-down version of Lustre.
 The idea is that having Scala as the meta-language will make it easy to write larger programs, without needing too many fancy language support.

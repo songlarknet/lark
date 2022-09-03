@@ -211,6 +211,10 @@ object check:
       solver.checkSatAssumingX(disprove(top.obligations, rowPrefix(step))) { _.status match
         case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
+          val model = solver.command(Commands.GetModel())
+          val cti = Trace.fromModel(step, model)
+          println(s"Counterexample to induction with ${step} steps:")
+          cti.steps.foreach(p => println("  " + p.pretty))
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 

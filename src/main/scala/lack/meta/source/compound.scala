@@ -74,11 +74,12 @@ object compound:
   def m32(i: base.Integer): Stream[stream.Mod32]  = int[stream.Mod32](i)
   def m64(i: base.Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
 
-  val True: Stream[stream.Bool] =
-    new Stream(Exp.Val(Sort.Bool, Val.Bool(true)))
+  val True: Stream[stream.Bool] = bool(true)
 
-  val False: Stream[stream.Bool] =
-    new Stream(Exp.Val(Sort.Bool, Val.Bool(false)))
+  val False: Stream[stream.Bool] = bool(false)
+
+  def bool(b: Boolean): Stream[stream.Bool] =
+    new Stream(Exp.Val(Sort.Bool, Val.Bool(b)))
 
   def tuple[A, B](a: Stream[A], b: Stream[B]): Stream[(A, B)] =
     stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
@@ -225,5 +226,3 @@ object compound:
       when(x >= int(0)) {  x },
       otherwise         { -x }
     )
-
-    
