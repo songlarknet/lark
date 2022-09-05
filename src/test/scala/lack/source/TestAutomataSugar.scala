@@ -57,8 +57,13 @@ object TestAutomatonSugar:
       light_on  := False
       speed_out := u8(0)
 
+    // XXX: the stream context for state transitions is wrong.
+    // a transition unless(e) only activates e when current state is await,
+    // but the current state depends on the transition.
+    val not_btn_on = !btn_on
+
     val AWAIT = new State(S_AWAIT):
-      unless(!btn_on) { Restart(S_OFF) }
+      unless(not_btn_on) { Restart(S_OFF) }
       unless(cmd_set) { Restart(S_ON) }
 
       accel_out := accel
@@ -66,7 +71,7 @@ object TestAutomatonSugar:
       speed_out := u8(0)
 
     val ON = new State(S_ON):
-      unless(!btn_on) { Restart(S_OFF) }
+      unless(not_btn_on) { Restart(S_OFF) }
 
       accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
       light_on  := True
@@ -178,9 +183,9 @@ object TestAutomatonSugar:
       def goStates(sts: List[State]): (Stream[Bool], Stream[St]) = sts match
         case Nil => (False, pre_state)
         case s :: sts =>
+          val pre_active = pre_state == u8(s.info.index)
           val (rT,stT) = goTransitions(s.transitions.toList)
           val (rX,stX) = goStates(sts)
-          val pre_active = pre_state == u8(s.info.index)
           val state_reset_trigger = ifthenelse(pre_active, rT, rX)
           val state_new_state = ifthenelse(pre_active, stT, stX)
           (state_reset_trigger, state_new_state)
