@@ -12,8 +12,7 @@ import lack.meta.source.node.Activate
 
 import scala.collection.mutable
 
-/** First attempt at automaton example.
- * Manual translation from Lustre syntax to nested nodes.
+/** Full-sugar cruise control automaton
  */
 object TestAutomatonSugar:
 
@@ -37,46 +36,31 @@ object TestAutomatonSugar:
     val light_on  = output[Bool]
     val speed_out = output[UInt8]
 
-    // Blah: need to break cycle in state definitions, so declare the state ids first
-    val S_OFF = freshStateInfo()
-    val S_AWAIT = freshStateInfo()
-    val S_ON = freshStateInfo()
-
-    // XXX: why don't objects work? it seems like only the first sub-object is initialised.
-    // The following doesn't throw an exception, but I expect it to:
-    // object XOFF extends State(S_OFF)
-    // object XAWAIT extends State(S_AWAIT):
-    //   throw new Exception("never thrown")
-    // object XON extends State(S_ON):
-    //   throw new Exception("never thrown")
-
-    val OFF = new Initial(S_OFF):
-      unless(btn_on) { Restart(S_AWAIT) }
-
+    initial(OFF)
+    object OFF extends State:
+      unless {
+        restart(btn_on, AWAIT)
+      }
       accel_out := accel
       light_on  := False
       speed_out := u8(0)
 
-    // XXX: the stream context for state transitions is wrong.
-    // a transition unless(e) only activates e when current state is await,
-    // but the current state depends on the transition.
-    val not_btn_on = !btn_on
-
-    val AWAIT = new State(S_AWAIT):
-      unless(not_btn_on) { Restart(S_OFF) }
-      unless(cmd_set) { Restart(S_ON) }
-
+    object AWAIT extends State:
+      unless {
+        restart(!btn_on, OFF)
+        restart(cmd_set, ON)
+      }
       accel_out := accel
       light_on  := True
       speed_out := u8(0)
 
-    val ON = new State(S_ON):
-      unless(not_btn_on) { Restart(S_OFF) }
-
-      accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
+    object ON extends State:
+      unless {
+        restart(!btn_on, OFF)
+      }
+      accel_out := ifthenelse(speedo < speed_out, max(accel, 100), accel)
       light_on  := True
-      speed_out := speedo ->
-        cond(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
+      speed_out := speedo -> ifthenelse(cmd_set, speedo, pre(speed_out))
 
     property("!btn_on ==> off") {
       !btn_on ==> OFF.active
@@ -111,12 +95,12 @@ object TestAutomatonSugar:
       stateCounter += 1
       stateCounter - 1
 
-    // TODO wrap state representation in newtype
     opaque type St = UInt8
-    val state = local[St]
-    val reset_trigger = local[Bool]
-
-    var initial: Option[Int] = None
+    private val MAX_STATES = 256
+    private val pre_state = local[St]
+    private val state = local[St]
+    private val reset_trigger = local[Bool]
+    private var initialState: Option[StateInfo] = None
 
     case class StateInfo(index: Int, active: Stream[Bool], reset: Stream[Bool]):
       def activate = Activate(reset = reset, when = active)
@@ -149,13 +133,32 @@ object TestAutomatonSugar:
       val isRestart = true
 
     abstract class State(val info: StateInfo = freshStateInfo()) extends Nested(info.activate):
-      val transitions = mutable.ArrayBuffer[Transition]()
-      def active: Stream[Bool] =
-        info.active
       states += (info.index -> this)
 
-      def unless(trigger: Stream[Bool])(target: Target): Unit =
-        transitions += Transition(trigger, target)
+      val transitions = mutable.ArrayBuffer[Transition]()
+      val transitionsDelay = mutable.Queue[() => Unit]()
+
+      def active: Stream[Bool] =
+        info.active
+
+      def unless(transitions: => Unit): Unit =
+        transitionsDelay += (() => transitions)
+
+      def restart(trigger: Stream[Bool], state: State): Unit =
+        println(s"restart ${info} ${trigger} -> ${state.info}")
+        transitions += Transition(trigger, Restart(state.info))
+
+      def resume(trigger: Stream[Bool], state: State): Unit =
+        transitions += Transition(trigger, Resume(state.info))
+
+      def finish(): Unit =
+        println(s"finish state ${info}")
+        builder.withNesting(builder.nodeRef.nested) {
+          val act = Activate(when = (pre_state == u8(info.index)), reset = fby(False, reset_trigger))
+          builder.withNesting(builder.activate(act)) {
+            transitionsDelay.removeAll().foreach(f => f())
+          }
+        }
 
       def bind[T](lhs: Automaton.this.Lhs[T], rhs: Stream[T]): Unit =
         bindings += Binding(lhs.v, lhs._exp, info.index, rhs._exp)
@@ -164,14 +167,26 @@ object TestAutomatonSugar:
         protected def := (rhs: Stream[T]) =
           bind(lhs, rhs)
 
-    abstract class Initial(info: StateInfo = freshStateInfo()) extends State(info):
-      assert(initial.isEmpty, "cannot have more than one initial state")
-      initial = Some(this.info.index)
+    def initial(state: State) =
+      assert(initialState.isEmpty, "cannot have more than one initial state")
+      initialState = Some(state.info)
 
     def finish(): Unit =
+      require(initialState.nonEmpty, "No initial state specified. Specify the initial state with initial(S)")
       require(states.size > 0, "no states. add some states to your automaton")
 
-      val pre_state = fby(u8(initial.getOrElse(0)), state)
+      def finishStates(): Unit =
+        var i = 0
+        while (i < states.size) {
+          states(i).finish()
+          i += 1
+          require(i < MAX_STATES,
+            s"state overflow: you have too many states (${states.size} >= ${MAX_STATES}).")
+        }
+
+      finishStates()
+
+      val initialStateIndex = initialState.get.index
       def goTransitions(trs: List[Transition]): (Stream[Bool], Stream[St]) = trs match
         case Nil => (False, pre_state)
         case t :: trs =>
@@ -193,6 +208,7 @@ object TestAutomatonSugar:
       val (resetX, stateX) = goStates(states.values.toList)
       reset_trigger := resetX
       state := stateX
+      pre_state := fby(u8(initialStateIndex), state)
 
       property("GEN: finite states") {
         val assert_finite_states = u8(0) <= pre_state && pre_state < u8(stateCounter)
@@ -210,10 +226,3 @@ object TestAutomatonSugar:
         val rhs = go(mpi.values.toList)
         builder.nested.equation(lhs, rhs)
       }
-
-/**
-  * 
-  Bounded model check:   Counterexample:
-    { accel = 100, accel_out = 100, btn_on = true, cmd_set = true, light_on = true, reset_trigger = true, speed_out = 0, speedo = 0, state = 1 }
-    { accel = 0, accel_out = 0, btn_on = false, cmd_set = true, light_on = true, reset_trigger = true, speed_out = 1, speedo = 1, state = 2 }  * 
-  */

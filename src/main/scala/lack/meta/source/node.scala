@@ -11,6 +11,20 @@ object node:
   class Builder(val nodeRef: core.builder.Node):
     var nested = nodeRef.nested
 
+    def withNesting[T](neu: core.builder.Binding.Nested)(f: => T): T =
+      val old = nested
+      try {
+        nested = neu
+        f
+      } finally {
+        nested = old
+      }
+
+    def activate(activate: Activate, parent: core.builder.Binding.Nested = nested): core.builder.Binding.Nested =
+      val w = parent.nested(core.builder.Selector.When(activate.when._exp))
+      val r = w.nested(core.builder.Selector.Reset(activate.reset._exp))
+      r
+
     def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Exp)(using location: lack.meta.macros.Location): Stream[T] =
       val e   = it._exp
       val mem = nested.memo(f(e))
@@ -173,6 +187,5 @@ object node:
 
     protected abstract class Nested(activate: Activate = Activate.always) extends reflect.Selectable:
       given builder: Builder = new Builder(invocation.builder.nodeRef)
-      val w = builder.nested.nested(core.builder.Selector.When(activate.when._exp))
-      val r = w.nested(core.builder.Selector.Reset(activate.reset._exp))
-      builder.nested = r
+      val n = builder.activate(activate)
+      builder.nested = n

@@ -226,3 +226,9 @@ object compound:
       when(x >= int(0)) {  x },
       otherwise         { -x }
     )
+
+  def min[T: SortRepr: Num](a: Stream[T], b: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+    ifthenelse(a <= b, a, b)
+
+  def max[T: SortRepr: Num](a: Stream[T], b: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+    ifthenelse(a >= b, a, b)
