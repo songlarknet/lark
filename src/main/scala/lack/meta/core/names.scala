@@ -7,7 +7,8 @@ object names:
    * These are ensured to be valid SMT-lib identifiers with some extra restrictions.
    *
    * Component symbols allow special characters to be ~, !, @, $, %, ^, &, *, -, +, <, >, /, and _.
-   * These are the symbols allowed by SMT-lib except with '?' and '.' removed.
+   * These are the symbols allowed by SMT-lib except SMT-lib also allows '?' and '.' and doesn't
+   * support unicode.
    * Scala symbols allow special characters to be $ and _.
    */
   opaque type ComponentSymbol = String
@@ -16,6 +17,7 @@ object names:
     /** Make an identifier from given Scala identifier. */
     def fromScalaSymbol(s: String): ComponentSymbol = {
       // TODO: check no bad characters, disallow ^ and ? and .
+      // TODO: what about unicode?
       require(!s.contains("."), s"Illegal character: '$s' should not contain '.'")
       require(!s.contains("^"), s"Illegal character: '$s' should not contain '^'")
       require(!s.contains("?"), s"Illegal character: '$s' should not contain '?'")
@@ -42,9 +44,14 @@ object names:
    * We want to be able to refer to multiple levels deep because some invariants
    * might need to dig into the guts of another node.
    * For the generated C code, the path will be used to look in the results of the
-   * result struct.
-   *
-   * The path here is more like a qualified name than a value-level struct access.
+   * result struct, but the path is more like a qualified name than a value-level
+   * struct access.
    */
-  case class Ref(path: List[Component], name: Component):
-    def pretty: String = (path :+ name).map(_.pretty).mkString(".")
+  case class Ref(prefix: List[Component], name: Component):
+    def fullyQualifiedPath: List[Component] = prefix :+ name
+    def pretty: String = fullyQualifiedPath.map(_.pretty).mkString(".")
+
+  object Ref:
+    def fromPathUnsafe(path: List[Component]): Ref =
+      require(path.nonEmpty, "fromPathUnsafe: requires non-empty path")
+      Ref(path.dropRight(1), path.last)

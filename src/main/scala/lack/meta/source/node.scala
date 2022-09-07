@@ -57,7 +57,7 @@ object node:
      */
     def invokeWithName[T <: Node](name: String)(f: NodeInvocation => T): T =
       val instance = nodeRef.freshSubnodeRef(core.names.ComponentSymbol.fromScalaSymbol(name))
-      val subpath = instance.path :+ instance.name
+      val subpath = instance.fullyQualifiedPath
       val subnodeRef = new core.builder.Node(new core.builder.Supply(subpath), subpath)
       val subbuilder = new Builder(subnodeRef)
       val inv = new NodeInvocation(superbuilder = this, instance = instance, builder = subbuilder)
@@ -144,7 +144,7 @@ object node:
     protected class Lhs[T: SortRepr](_exp: core.term.Exp) extends Stream[T](_exp):
       def v: core.names.Component = _exp match
         case core.term.Exp.Var(_, v) =>
-          require(v.path == builder.nodeRef.path)
+          require(v.prefix == builder.nodeRef.path)
           v.name
         case _ =>
           assert(false, s"Internal error: bad Lhs[T]: ${_exp} should be a bare variable")

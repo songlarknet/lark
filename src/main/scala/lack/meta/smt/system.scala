@@ -45,7 +45,7 @@ object system:
 
   object Namespace:
     def fromRef(ref: names.Ref, sort: Sort): Namespace =
-      ref.path match {
+      ref.prefix match {
         case Nil =>
           Namespace(values = Map(ref.name -> sort))
         case p :: rest =>
@@ -55,7 +55,7 @@ object system:
   case class Prefix(prefix: List[names.Component]):
     val pfx = prefix.map(_.pretty).mkString(".")
     def apply(name: names.Ref): Terms.QualifiedIdentifier =
-      compound.qid(names.Ref(prefix ++ name.path, name.name).pretty)
+      compound.qid(names.Ref(prefix ++ name.prefix, name.name).pretty)
 
   object Prefix:
     val state  = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
@@ -204,8 +204,8 @@ object system:
     object ExpContext:
       def stripRef(node: Node, r: names.Ref): names.Ref =
         val pfx = node.path
-        require(r.path.startsWith(pfx), s"Ill-formed node in node ${node.path.map(_.pretty).mkString(".")}: all variable references should start with the node's path, but ${r.pretty} doesn't")
-        val strip = r.path.drop(pfx.length)
+        require(r.prefix.startsWith(pfx), s"Ill-formed node in node ${node.path.map(_.pretty).mkString(".")}: all variable references should start with the node's path, but ${r.pretty} doesn't")
+        val strip = r.prefix.drop(pfx.length)
         names.Ref(strip, r.name)
 
     def nodes(inodes: Iterable[Node]): SolverSystem =
@@ -405,7 +405,7 @@ object system:
           // here as they've been proven in the subnode itself.
           // Should all local properties bubble up? What about sorries?
           // TODO: UNSOUND: rewrite assumptions to sofar(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
-          def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.path, r.name)
+          def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.prefix, r.name)
           val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
           val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
           def assumptions: List[SolverJudgment] = asms
