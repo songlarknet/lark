@@ -1,5 +1,6 @@
 package lack.meta.core
 
+import lack.meta.base.pretty
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
@@ -32,8 +33,8 @@ object prop:
      */
     case Generated
 
-  case class Judgment(name: String, term: Exp, form: Form):
-    def pretty: String = s"${form} ${name}: ${term.pretty}"
+  case class Judgment(name: String, term: Exp, form: Form) extends pretty.Pretty:
+    def ppr = pretty.value(form) <+> pretty.text(name) <> pretty.colon <+> pretty.indent(term.ppr)
 
     def isObligation: Boolean = form match
       case Form.Require => false

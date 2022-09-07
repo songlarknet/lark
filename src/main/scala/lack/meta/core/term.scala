@@ -1,22 +1,21 @@
 package lack.meta.core
 
 import lack.meta.base.num.Integer
-import lack.meta.base.names
+import lack.meta.base.{names, pretty}
 import lack.meta.core.sort.Sort
 
 object term:
 
-  sealed trait Val:
-    def pretty: String
+  sealed trait Val extends pretty.Pretty:
     def check(sort: Sort): Boolean
 
   object Val:
     case class Bool(b: Boolean) extends Val:
-      def pretty: String = if (b) "#b'true" else "#b'false"
+      def ppr = pretty.text(if (b) "#b'true" else "#b'false")
       def check(sort: Sort) = sort == Sort.Bool
 
     case class Int(i: Integer) extends Val:
-      def pretty: String = s"#int'$i"
+      def ppr = pretty.text(s"#int'$i")
       def check(sort: Sort) = sort match
         case sort: Sort.Integral =>
           sort.minInclusive <= i && i <= sort.maxInclusive
@@ -26,7 +25,7 @@ object term:
           false
 
     case class Mod(i: Integer, width: Sort.Mod) extends Val:
-      def pretty: String = s"#mod${width.width}'$i"
+      def ppr = pretty.string(s"#mod${width.width}'$i")
       def check(sort: Sort) = sort match
         case m: Sort.Mod =>
           m.range.contains(i) && m.width == width.width
@@ -34,25 +33,24 @@ object term:
           false
 
     case class Float32(r: Float) extends Val:
-      def pretty: String = s"#f32'$r"
+      def ppr = pretty.string(s"#f32'$r")
       def check(sort: Sort) = sort == Sort.Float32
 
     case class Struct(fields: List[(String, Val)], struct: Sort.Struct) extends Val:
       require(fields.map(_._1) == struct.fields.map(_._1))
       require(struct.fields.zip(fields).forall(f => f._2._2.check(f._1._2)))
-      def pretty: String = s"(#${struct.pretty} ${fields.map(f => s":${f._1} ${f._2}").mkString(" ")})"
+      def ppr = pretty.parens(struct.ppr <+> pretty.hsep(fields.map(f => pretty.text(s":${f._1}") <+> f._2.ppr)))
       def check(sort: Sort) = sort == struct
 
   /** Pure total primitives. */
-  trait Prim:
-    def pretty: String
+  trait Prim extends pretty.Pretty:
     // TODO: prims need sort checking
     // def sort(args: List[Sort]): Sort
     def eval(args: List[Val]): Val
   object Prim:
 
     abstract class Simple(prim: String, expect: List[Sort], ret: Sort) extends Prim:
-      def pretty: String = prim
+      def ppr = pretty.text(prim)
 
     case object And extends Simple("and", List(Sort.Bool, Sort.Bool), Sort.Bool):
       def eval(args: List[Val]): Val = args match
@@ -66,13 +64,14 @@ object term:
     case object Implies extends Simple("=>", List(Sort.Bool, Sort.Bool), Sort.Bool):
       def eval(args: List[Val]): Val = args match
         case List(Val.Bool(a), Val.Bool(b)) => Val.Bool(if (a) b else true)
+
     case object Ite extends Prim:
-      def pretty: String = "ite"
+      def ppr = pretty.text("ite")
       def eval(args: List[Val]): Val = args match
         case List(Val.Bool(p), t, f) => if (p) t else f
 
     case object Negate extends Prim:
-      def pretty: String = "negate"
+      def ppr = pretty.text("negate")
       def eval(args: List[Val]): Val = args match
         case List(Val.Int(i)) => Val.Int(- i)
 
@@ -89,15 +88,15 @@ object term:
         Val.Mod(r & iw.range.max, iw)
 
     case object Add extends Prim:
-      def pretty: String = "+"
+      def ppr = pretty.text("+")
       def eval(args: List[Val]): Val = eval_ii_i(args)((_ + _))
 
     case object Sub extends Prim:
-      def pretty: String = "-"
+      def ppr = pretty.text("-")
       def eval(args: List[Val]): Val = eval_ii_i(args)((_ - _))
 
     case object Mul extends Prim:
-      def pretty: String = "*"
+      def ppr = pretty.text("*")
       def eval(args: List[Val]): Val = eval_ii_i(args)((_ * _))
 
     /** "Safe" division where x / 0 = 0, which agrees with Isabelle and Z3 semantics
@@ -108,73 +107,72 @@ object term:
      * TODO: wrap bitvector division in smt encoding
      */
     case object Div extends Prim:
-      def pretty: String = "/"
+      def ppr = pretty.text("/")
       def eval(args: List[Val]): Val = eval_ii_i(args) {
         case (i, j) => if (j == 0) 0 else (i / j)
       }
 
     case object Eq extends Prim:
-      def pretty: String = "="
+      def ppr = pretty.text("=")
       def eval(args: List[Val]): Val = args match
         case List(i, j) => Val.Bool(i == j)
 
     case object Le extends Prim:
-      def pretty: String = "<="
+      def ppr = pretty.text("<=")
       def eval(args: List[Val]): Val = eval_ii_b(args)((_ <= _))
 
     case object Lt extends Prim:
-      def pretty: String = "<"
+      def ppr = pretty.text("<")
       def eval(args: List[Val]): Val = eval_ii_b(args)((_ < _))
 
     case object Ge extends Prim:
-      def pretty: String = ">="
+      def ppr = pretty.text(">=")
       def eval(args: List[Val]): Val = eval_ii_b(args)((_ >= _))
 
     case object Gt extends Prim:
-      def pretty: String = ">"
+      def ppr = pretty.text(">")
       def eval(args: List[Val]): Val = eval_ii_b(args)((_ > _))
 
     case class StructGet(field: String, struct: Sort.Struct) extends Prim:
       require(struct.fields.map(_._1).contains(field))
 
-      def pretty: String = s"${struct.pretty}'${field}"
+      def ppr = struct.ppr <> pretty.squote <> pretty.text(field)
       def eval(args: List[Val]): Val = args match
         case List(vstr: Val.Struct) =>
           require(vstr.struct == struct)
           vstr.fields.filter(v => v._1 == field).head._2
 
     case class StructMk(struct: Sort.Struct) extends Prim:
-      def pretty: String = s"${struct.pretty}"
+      def ppr = struct.ppr
       def eval(args: List[Val]): Val =
         Val.Struct(struct.fields.map(_._1).zip(args).toList, struct)
 
-  sealed trait Exp:
-    def pretty: String
+  sealed trait Exp extends pretty.Pretty:
     // Annotate each node with its type. Is this overkill? The expressions probably won't be "too big"...
     def sort: Sort
 
   object Exp:
     /** Variable */
     case class Var(sort: Sort, v: names.Ref) extends Exp:
-      def pretty: String = v.pretty
+      def ppr = v.ppr
 
     /** Value */
     case class Val(sort: Sort, v: term.Val) extends Exp:
-      def pretty: String = v.pretty
+      def ppr = v.ppr
 
     /** Pure primitive application */
     case class App(sort: Sort, prim: term.Prim, args: Exp*) extends Exp:
       // TODO: should constructors do typechecking?
-      def pretty: String = s"(${prim.pretty} ${args.map(_.pretty).mkString(" ")})"
+      def ppr = pretty.sexpr((prim :: args.toList).map(_.ppr))
 
     /** Streaming terms */
     object flow:
       /** Previous value */
       case class Pre(sort: Sort, e: Exp) extends Exp:
-        def pretty: String = s"(flow'pre ${e.pretty})"
+        def ppr = pretty.sexpr(List("flow'pre", e.ppr))
       /** x -> y, or "first x then y". */
       case class Arrow(sort: Sort, a: Exp, b: Exp) extends Exp:
-        def pretty: String = s"(flow'-> ${a.pretty} ${b.pretty})"
+        def ppr = pretty.sexpr(List("flow'->", a.ppr, b.ppr))
 
       /** Followed by, or initialised delay.
        * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
@@ -184,9 +182,9 @@ object term:
        * rewrite occurrences of pre to fby if we want to generate Vélus.
        */
       case class Fby(sort: Sort, v: term.Val, e: Exp) extends Exp:
-        def pretty: String = s"(flow'fby ${v.pretty} ${e.pretty})"
+        def ppr = pretty.sexpr(List("flow'fby", v.ppr, e.ppr))
 
     /** Non-deterministic terms */
     object nondet:
       case class Undefined(sort: Sort) extends Exp:
-        def pretty: String = "undefined"
+        def ppr = pretty.text("undefined")

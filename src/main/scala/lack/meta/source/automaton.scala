@@ -115,7 +115,6 @@ object automaton:
       /** Should only be called by Automaton.finish */
       private[source]
       def finish(): Unit =
-        println(s"finish state ${info}")
         builder.withNesting(builder.nodeRef.nested) {
           val act = Activate(when = (pre_state == info.st), reset = fby(False, reset_trigger))
           builder.withNesting(builder.activate(act)) {

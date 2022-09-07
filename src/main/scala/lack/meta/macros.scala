@@ -1,12 +1,14 @@
 package lack.meta
 
+import lack.meta.base.pretty
 import scala.quoted.*
 
 object macros:
-  case class Location(enclosing: Option[String], position: Option[Position]):
-    def pretty: String =
-      position.fold("")(p => s" at ${p.name}:${p.line}:${p.column}") +
-      enclosing.fold("")(c => s" in ${c}")
+  case class Location(enclosing: Option[String], position: Option[Position]) extends pretty.Pretty:
+    def ppr =
+      val txt = position.fold("")(p => s"at ${p.name}:${p.line}:${p.column}") +
+                enclosing.fold("")(c => s" in ${c}")
+      pretty.text(txt.stripLeading())
     def prettyPath: String = enclosing.getOrElse("")
 
   case class Position(name: String, line: Int, column: Int)

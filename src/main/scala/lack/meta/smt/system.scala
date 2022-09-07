@@ -2,7 +2,7 @@ package lack.meta.smt
 
 import lack.meta.base.num.Integer
 import lack.meta.base.names
-import lack.meta.base.pretty.indent
+import lack.meta.base.pretty
 import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.prop.Judgment
@@ -20,7 +20,8 @@ object system:
   // use SortedMap here instead?
   case class Namespace(
     values: Map[names.Component, Sort] = Map(),
-    namespaces: Map[names.Component, Namespace] = Map()):
+    namespaces: Map[names.Component, Namespace] = Map())
+    extends pretty.Pretty:
       def <>(that: Namespace): Namespace =
         val values = that.values.foldLeft(this.values) { case (m,v) =>
           this.values.get(v._1).foreach { u =>
@@ -35,10 +36,11 @@ object system:
           }
         }
         Namespace(values, namespaces)
-      def pretty: String =
-        val vs = values.map { (k,v) => s"${k.pretty}: ${v.pretty}" }
-        val ns = namespaces.map { (k,v) => s"${k.pretty}: ${v.pretty}" }
-        s"{ ${(vs ++ ns).mkString("; ")} }"
+      def ppr =
+        val vs = values.map { (k,v) => k.ppr <> pretty.colon <+> v.ppr }
+        val ns = namespaces.map { (k,v) => k.ppr <> pretty.colon <+> v.ppr }
+        val vns = pretty.ssep((vs ++ ns).toSeq, pretty.semi <> pretty.space)
+        pretty.braces(pretty.space <> vns <> pretty.space)
 
       def refs(prefix: Prefix): Iterable[names.Ref] =
         values.map(v => names.Ref(prefix.prefix, v._1)) ++
@@ -53,10 +55,11 @@ object system:
           Namespace(namespaces = Map(p -> fromRef(names.Ref(rest, ref.name), sort)))
       }
 
-  case class Prefix(prefix: List[names.Component]):
-    val pfx = prefix.map(_.pretty).mkString(".")
+  case class Prefix(prefix: List[names.Component]) extends pretty.Pretty:
     def apply(name: names.Ref): Terms.QualifiedIdentifier =
-      compound.qid(names.Ref(prefix ++ name.prefix, name.name).pretty)
+      compound.qid(names.Ref(prefix ++ name.prefix, name.name).pprString)
+
+    def ppr = names.Prefix(prefix).ppr
 
   object Prefix:
     val state  = Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)) )
@@ -135,17 +138,22 @@ object system:
 
 
   /** Defined system */
-  case class SolverFunDef(name: Terms.QualifiedIdentifier, oracles: List[(Terms.SSymbol, Sort)], body: Terms.Term):
-    def pretty: String =
-      val oraclesP = s"λ${oracles.map((a,b) => s"(${a.name}: ${b.pretty})").mkString(" ")}."
-      s"${name} = ${oraclesP} ${lack.meta.smt.solver.pprTermBigAnd(body)}"
+  case class SolverFunDef(
+    name: Terms.QualifiedIdentifier,
+    oracles: List[(Terms.SSymbol, Sort)],
+    body: Terms.Term
+  ) extends pretty.Pretty:
+    def ppr =
+      val oraclesP = s"λ${oracles.map((a,b) => s"(${a.name}: ${b.pprString})").mkString(" ")}."
+      // LODO add nice pretty-printing to solver expressions
+      pretty.string(s"${name} = ${oraclesP} ${lack.meta.smt.solver.pprTermBigAnd(body)}")
 
     def fundef(params: List[Terms.SortedVar]): Commands.FunDef =
       val allParams = params ++ oracles.map((v,s) => Terms.SortedVar(v, translate.sort(s)))
       Commands.FunDef(name.id.symbol, allParams, translate.sort(Sort.Bool), body)
 
-  case class SolverJudgment(row: names.Ref, judgment: Judgment):
-    def pretty = s"${row.pretty} = ${judgment.pretty}"
+  case class SolverJudgment(row: names.Ref, judgment: Judgment) extends pretty.Pretty:
+    def ppr = row.ppr <+> pretty.equal <+> judgment.ppr
 
   case class SolverNode(
     path: List[names.Component],
@@ -155,16 +163,17 @@ object system:
     init: SolverFunDef,
     step: SolverFunDef,
     assumptions: List[SolverJudgment],
-    obligations: List[SolverJudgment]):
-    def pretty: String =
-      s"""System [${path.map(_.pretty).mkString(".")}]
-         |  State:   ${state.pretty}
-         |  Row:     ${row.pretty}
-         |  Params:  ${params.map(_.pretty).mkString(", ")}
-         |  Init:    ${init.pretty}
-         |  Step:    ${step.pretty}
-         |${indent("Assumptions:", assumptions.map(_.pretty))}
-         |${indent("Obligations:", obligations.map(_.pretty))}""".stripMargin
+    obligations: List[SolverJudgment]
+  ) extends pretty.Pretty:
+    def ppr =
+      pretty.text("System") <+> names.Prefix(path).ppr <@>
+        pretty.subgroup("State:", List(state.ppr)) <>
+        pretty.subgroup("Row:", List(row.ppr)) <>
+        pretty.subgroup("Params:", List(pretty.csep(params.map(_.ppr)))) <>
+        pretty.subgroup("Init:", List(init.ppr)) <>
+        pretty.subgroup("Step:", List(step.ppr)) <>
+        pretty.subgroup("Assumptions:", assumptions.map(_.ppr)) <>
+        pretty.subgroup("Obligations:", obligations.map(_.ppr))
 
     def paramsOfNamespace(prefix: Prefix, ns: Namespace): List[Terms.SortedVar] =
       val vs = ns.values.toList.map((v,s) => Terms.SortedVar(prefix(names.Ref(List(), v)).id.symbol, translate.sort(s)))
@@ -181,10 +190,10 @@ object system:
 
       List(Commands.DefineFun(initF), Commands.DefineFun(stepF))
 
-  case class SolverSystem(nodes: List[SolverNode], top: SolverNode):
+  case class SolverSystem(nodes: List[SolverNode], top: SolverNode) extends pretty.Pretty:
     def fundefs: List[Commands.DefineFun] = nodes.flatMap(_.fundefs)
 
-    def pretty: String = nodes.map(_.pretty).mkString("\n")
+    def ppr = pretty.vsep(nodes.map(_.ppr))
 
   object translate:
     def sort(s: Sort): Terms.Sort = s match
@@ -205,7 +214,7 @@ object system:
     object ExpContext:
       def stripRef(node: Node, r: names.Ref): names.Ref =
         val pfx = node.path
-        require(r.prefix.startsWith(pfx), s"Ill-formed node in node ${node.path.map(_.pretty).mkString(".")}: all variable references should start with the node's path, but ${r.pretty} doesn't")
+        require(r.prefix.startsWith(pfx), s"Ill-formed node in node ${names.Prefix(node.path).pprString}: all variable references should start with the node's path, but ${r.pprString} doesn't")
         val strip = r.prefix.drop(pfx.length)
         names.Ref(strip, r.name)
 
@@ -231,8 +240,8 @@ object system:
       val initT    = sys.init(initO, Prefix.state)
       val stepT    = sys.step(stepO, Prefix.state, Prefix.row, Prefix.stateX)
 
-      val initI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pretty)
-      val stepI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pretty)
+      val initI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pprString)
+      val stepI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pprString)
 
       val initD    = SolverFunDef(initI, initO.oracles.toList, initT)
       val stepD    = SolverFunDef(stepI, stepO.oracles.toList, stepT)
@@ -297,7 +306,7 @@ object system:
 
         val te = init match
           case None =>
-            assert(false, s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${node.path.map(_.pretty).mkString(".")}")
+            assert(false, s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${names.Prefix(node.path).pprString}")
           case Some(i) =>
             // Evaluate clock in parent init context
             expr(ExpContext(node, i, context.supply), k)
@@ -526,7 +535,7 @@ object system:
         }
 
         def mkapp(argsT: List[Terms.Term]): Terms.Term =
-          compound.funapp(prim.pretty, argsT : _*)
+          compound.funapp(prim.pprString, argsT : _*)
 
         System.pure(mkapp) <*> argsS
 

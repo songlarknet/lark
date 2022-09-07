@@ -2,8 +2,7 @@ package lack.meta.core
 
 import lack.meta.macros.Location
 import lack.meta.base.num.Integer
-import lack.meta.base.names
-import lack.meta.base.pretty.indent
+import lack.meta.base.{names, pretty}
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 import lack.meta.core.prop.{Form, Judgment}
@@ -32,19 +31,17 @@ object builder:
     // var sorts: List[Sort] = List()
 
   /** Binding contexts, called "context" in core.md. */
-  sealed trait Binding:
-    def pretty: String
+  sealed trait Binding extends pretty.Pretty
   object Binding:
     case class Equation(lhs: names.Component, rhs: Exp) extends Binding:
-      def pretty = s"${lhs.pretty} = ${rhs.pretty}"
+      def ppr = lhs.ppr <+> pretty.text("=") <+> rhs.ppr
     case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
-      def pretty = s"Subnode ${subnode.pretty}(${args.map(_.pretty).mkString(", ")})"
+      def ppr = pretty.text("Subnode") <+> subnode.ppr <> pretty.tupleP(args)
     class Nested(val init: names.Component, val selector: Selector, val node: Node) extends Binding:
       val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-      def pretty: String =
-        s"${selector.pretty} @init(${init.pretty}):\n" +
-        indent(children.map(_.pretty).toList)
+      def ppr = pretty.nest(selector.ppr <+> "@init" <> pretty.parens(init.ppr) <> pretty.colon <@>
+        pretty.vsep(children.map(_.ppr).toList))
 
       // TODO do merging / cse on append?
       def append(b: Binding): Unit =
@@ -110,13 +107,12 @@ object builder:
         append(Subnode(name, args))
 
 
-  sealed trait Selector:
-    def pretty: String
+  sealed trait Selector extends pretty.Pretty
   object Selector:
     case class When(clock: Exp) extends Selector:
-      def pretty: String = s"When(${clock.pretty})"
+      def ppr = pretty.text("When") <> pretty.parens(clock.ppr)
     case class Reset(clock: Exp) extends Selector:
-      def pretty: String = s"Reset(${clock.pretty})"
+      def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr)
 
   object Node:
     def top(): Node = new Node(new Supply(List()), List())
@@ -130,7 +126,7 @@ object builder:
 
   case class Variable(sort: Sort, location: Location, mode: Variable.Mode)
 
-  class Node(val supply: Supply, val path: List[names.Component]):
+  class Node(val supply: Supply, val path: List[names.Component]) extends pretty.Pretty:
     val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
     var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
     // TODO subnodes need location information
@@ -168,12 +164,17 @@ object builder:
     def prop(j: Judgment): Unit =
       props += j
 
-    def pretty: String =
-      val paramsP = params.map(p => s"${p.pretty} : ${xvar(p).sort.pretty}")
-      s"""Node ${path.map(_.pretty).mkString(".")}(${paramsP.mkString(", ")})
-         |${indent("Vars:", vars.map(x => s"${x._2.mode} ${x._1.pretty} : ${x._2.sort}${x._2.location.pretty}").toList)}
-         |${indent("Bindings:", nested.children.map(x => x.pretty).toList)}
-         |${indent("Subnodes:", subnodes.map(x => s"${x._1.pretty} = ${x._2.pretty}").toList)}
-         |${indent("Props:", props.map(x => x.pretty).toList)}
-         |""".stripMargin
+    def ppr =
+      val pathP = names.Prefix(path).ppr
+      val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
+      val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
+      val bindingsP = nested.children.map(x => x.ppr)
+      val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
+      val propsP = props.map(x => x.ppr)
+
+      pretty.text("Node") <+> pretty.nest(pathP <> pretty.tuple(paramsP.toSeq) <@>
+        pretty.subgroup("Vars:", varsP.toSeq) <>
+        pretty.subgroup("Bindings:", bindingsP.toSeq) <>
+        pretty.subgroup("Subnodes:", subnodesP.toSeq) <>
+        pretty.subgroup("Props:", propsP.toSeq))
 

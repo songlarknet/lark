@@ -16,7 +16,7 @@ object stream:
     // PERF: is this overkill?
     assert(_exp.sort == sort,
       s"""Stream[T] sort check: expected ${sort}, but expression has sort ${_exp.sort}.
-      Expression: ${_exp.pretty}""")
+      Expression: ${_exp.pprString}""")
 
   class SortRepr[T](val sort: Sort)
 

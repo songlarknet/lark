@@ -1,21 +1,20 @@
 package lack.meta.core
 
+import lack.meta.base.pretty
 import lack.meta.base.num.{Integer, Range}
 
 object sort:
 
-  trait Sort:
-    def pretty: String
+  trait Sort extends pretty.Pretty
 
   object Sort:
-
     case object Bool extends Sort:
-      def pretty: String = "Bool"
+      def ppr = pretty.text("Bool")
 
     /** Fixed-width integers with integer arithmetic.
       * Arithmetic overflow is not defined. */
     class Integral(val width: Int, val signed: Boolean) extends Sort:
-      def pretty: String = (if (signed) "Int" else "UInt") + width.toString
+      def ppr = pretty.text(if (signed) "Int" else "UInt") <> pretty.value(width)
       def minInclusive: Integer = if (signed) (Integer(-1) << (width - 1)) else 0
       def maxInclusive: Integer = (if (signed) (Integer(1) << (width - 1)) else (Integer(1) << width)) - 1
 
@@ -42,7 +41,7 @@ object sort:
     case class Subrange(minInclusive: Integer, maxInclusive: Integer, carrier: Integral) extends Sort:
       require(carrier.minInclusive <= minInclusive)
       require(maxInclusive <= carrier.maxInclusive)
-      def pretty: String = s"${carrier.pretty}[${minInclusive}, ${maxInclusive}]"
+      def ppr = carrier.ppr <> pretty.text(s"[${minInclusive}, ${maxInclusive}]")
 
     /** Syntactic helper for subranges. Uses the smallest carrier set that
       * will fit the entire range, favouring unsigned integers over signed. */
@@ -58,7 +57,7 @@ object sort:
       */
     class Mod(val width: scala.Int) extends Sort:
       def range: Range = Range(0, (Integer(1) << width) - 1)
-      def pretty: String = s"Mod$width"
+      def ppr = pretty.text(s"Mod$width")
       def minInclusive: Integer = range.min
       def maxInclusive: Integer = range.max
 
@@ -69,13 +68,15 @@ object sort:
 
     // XXX: do we want real arithmetic or IEEE754? Should they be different types?
     case object Float32 extends Sort:
-      def pretty: String = "Float32"
+      def ppr = pretty.text("Float32")
 
     case class Struct(name: String, fields: (String, Sort)*) extends Sort:
       require(fields.map(_._1).length == fields.map(_._1).toSet.size)
-      def pretty: String = s"Struct[${name}][${fields.mkString(", ")}]"
+      def ppr =
+        val fieldsP = fields.map(f => pretty.text(f._1) <> ":" <+> f._2.ppr)
+        pretty.text(s"Struct[${name}]") <> pretty.brackets(pretty.csep(fieldsP))
 
     val Complex = Struct("Complex", "re" -> Float32, "im" -> Float32)
 
     def Tuple2(a: Sort, b: Sort) =
-      Struct(s"Tuple2[${a.pretty},${b.pretty}]", "_1" -> a, "_2" -> b)
+      Struct(s"Tuple2[${a.pprString},${b.pprString}]", "_1" -> a, "_2" -> b)

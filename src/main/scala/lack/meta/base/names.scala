@@ -34,8 +34,9 @@ object names:
     val LOCAL = fromStringUnsafe("")
 
   /** A name component, which can be used as a variable binding. */
-  case class Component(symbol: ComponentSymbol, ix: Option[Int]):
-    def pretty: String = symbol + (if (ix.isDefined) s"?${ix.get}" else "")
+  case class Component(symbol: ComponentSymbol, ix: Option[Int]) extends pretty.Pretty:
+    def ppr: pretty.Doc =
+      pretty.string(symbol + (if (ix.isDefined) s"?${ix.get}" else ""))
 
   /** A reference to a named variable.
    * This may have a path of node instances, to refer to the results of subnodes.
@@ -45,11 +46,18 @@ object names:
    * result struct, but the path is more like a qualified name than a value-level
    * struct access.
    */
-  case class Ref(prefix: List[Component], name: Component):
+  case class Ref(prefix: List[Component], name: Component) extends pretty.Pretty:
     def fullyQualifiedPath: List[Component] = prefix :+ name
-    def pretty: String = fullyQualifiedPath.map(_.pretty).mkString(".")
+    def ppr: pretty.Doc =
+      val docs = fullyQualifiedPath.map(_.ppr)
+      pretty.ssep(docs, pretty.dot)
 
   object Ref:
     def fromPathUnsafe(path: List[Component]): Ref =
       require(path.nonEmpty, "fromPathUnsafe: requires non-empty path")
       Ref(path.dropRight(1), path.last)
+
+  case class Prefix(prefix: List[Component]) extends pretty.Pretty:
+    def ppr: pretty.Doc =
+      val docs = prefix.map(_.ppr)
+      pretty.ssep(docs, pretty.dot)

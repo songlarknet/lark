@@ -1,7 +1,7 @@
 package lack.meta.smt
 
 import lack.meta.base.names
-import lack.meta.base.pretty.indent
+import lack.meta.base.pretty
 import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.sort.Sort
@@ -20,15 +20,14 @@ object check:
     case class UnknownAt(steps: Int) extends CheckFeasible
 
 
-  sealed trait Bmc:
-    def pretty: String
+  sealed trait Bmc extends pretty.Pretty
   object Bmc:
     case class SafeUpTo(steps: Int) extends Bmc:
-      def pretty = s"Safe for at least ${steps} steps"
+      def ppr = pretty.text(s"Safe for at least ${steps} steps")
     case class CounterexampleAt(steps: Int, trace: Trace) extends Bmc:
-      def pretty = indent("Counterexample: ", trace.steps.map(_.pretty))
+      def ppr = pretty.text("Counterexample:") <@> trace.ppr
     case class UnknownAt(steps: Int) extends Bmc:
-      def pretty = s"Unknown (at step ${steps})"
+      def ppr = pretty.text(s"Unknown (at step ${steps})")
 
 
   sealed trait Kind
@@ -37,11 +36,12 @@ object check:
     case class NoGood(steps: Int) extends Kind
     case class UnknownAt(steps: Int) extends Kind
 
-  case class Trace(steps: List[Trace.Row])
+  case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
+    def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
   object Trace:
     // HACK TODO not strings
-    case class Row(values: List[(String, String)]):
-      def pretty: String = s"{ ${values.map((k,v) => s"$k = $v").mkString(", ")} }"
+    case class Row(values: List[(String, String)]) extends pretty.Pretty:
+      def ppr = pretty.braces(pretty.csep(values.map((k,v) => pretty.text(k) <+> pretty.equal <+> pretty.text(v))))
     // HACK TODO take node and filter out generated bindings
     def fromModel(steps: Int, sexpr: SExpr): Trace =
       def allDefs(s: SExpr): Iterable[(Terms.SSymbol, SExpr)] = s match
@@ -83,7 +83,7 @@ object check:
 
   def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: system.Prefix, solver: Solver): Unit =
     val oracles = fun.oracles.map { (v,s) =>
-      Terms.SortedVar(compound.sym(oraclePrefix.pfx + "/" + v.name), system.translate.sort(s))
+      Terms.SortedVar(compound.sym(oraclePrefix.pprString + "/" + v.name), system.translate.sort(s))
     }
     solver.declareConsts(oracles)
 
@@ -103,9 +103,9 @@ object check:
 
   def checkMany(top: Node, count: Int, solver: () => Solver): Unit =
     println("Checking top-level node:")
-    println(top.pretty)
+    println(top.pprString)
     println("System translation:")
-    println(system.translate.nodes(top.allNodes).pretty)
+    println(system.translate.nodes(top.allNodes).pprString)
 
     top.allNodes.foreach { n =>
       val s = solver()
@@ -118,15 +118,16 @@ object check:
     val feaR = solver.pushed { feasible(sys, topS, count, solver) }
     val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
     val indR = solver.pushed { kind(sys, topS, count, solver) }
-    println(s"Node ${top.path.map(_.pretty).mkString(".")}:")
+    // LODO fix up pretty-printing
+    println(s"Node ${names.Prefix(top.path).pprString}:")
     topS.assumptions.foreach { o =>
-      println(s"  Assume ${o.judgment.pretty}")
+      println(s"  Assume ${o.judgment.pprString}")
     }
     topS.obligations.foreach { o =>
-      println(s"  Show ${o.judgment.pretty}")
+      println(s"  Show ${o.judgment.pprString}")
     }
     println(s"  Feasibility check:   ${feaR}")
-    println(s"  Bounded model check: ${bmcR.pretty}")
+    println(s"  Bounded model check: ${bmcR.pprString}")
     println(s"  K-inductive check:   ${indR}")
 
   def feasible(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): CheckFeasible =
@@ -214,7 +215,7 @@ object check:
           val model = solver.command(Commands.GetModel())
           val cti = Trace.fromModel(step, model)
           println(s"Counterexample to induction with ${step} steps:")
-          cti.steps.foreach(p => println("  " + p.pretty))
+          cti.steps.foreach(p => println("  " + p.pprString))
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 
