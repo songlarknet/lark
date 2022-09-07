@@ -1,6 +1,4 @@
-package lack.meta.core
-
-import lack.meta.core.sort.Sort
+package lack.meta.base
 
 object names:
   /** Sanitized symbols.

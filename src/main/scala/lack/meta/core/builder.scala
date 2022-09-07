@@ -1,7 +1,9 @@
 package lack.meta.core
 
 import lack.meta.macros.Location
-import lack.meta.base.{Integer, indent}
+import lack.meta.base.num.Integer
+import lack.meta.base.names
+import lack.meta.base.pretty.indent
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 import lack.meta.core.prop.{Form, Judgment}

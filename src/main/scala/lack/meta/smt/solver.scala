@@ -73,7 +73,7 @@ object solver:
         if ti.symbol.name == "false" => f
       case _ => funappNoSimp("ite", List(p, t, f))
 
-    def int(i: lack.meta.base.Integer) =
+    def int(i: lack.meta.base.num.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
       if (i >= 0)
         Terms.SNumeral(i)

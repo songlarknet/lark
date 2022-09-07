@@ -1,6 +1,6 @@
 package lack.meta.core
 
-import lack.meta.base.{Integer, Range}
+import lack.meta.base.num.{Integer, Range}
 
 object sort:
 

@@ -1,5 +1,6 @@
 package lack.meta.source
 
+import lack.meta.base.names
 import lack.meta.core
 import lack.meta.source.compound.{given, _}
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
@@ -62,11 +63,11 @@ object automaton:
     case class Transition(trigger: Stream[Bool], target: Target)
     val states = mutable.Map[Int, State]()
 
-    case class Binding(lhs: core.names.Component, lhsX: core.term.Exp, index: Int, rhs: core.term.Exp)
+    case class Binding(lhs: names.Component, lhsX: core.term.Exp, index: Int, rhs: core.term.Exp)
     val bindings = mutable.ArrayBuffer[Binding]()
 
-    private def bindingMap: Map[core.names.Component, Map[Int, Binding]] =
-      val empty = Map[core.names.Component, Map[Int, Binding]]()
+    private def bindingMap: Map[names.Component, Map[Int, Binding]] =
+      val empty = Map[names.Component, Map[Int, Binding]]()
       bindings.foldLeft(empty) { (mp, b) =>
         val mpi = mp.getOrElse(b.lhs, Map())
         require(!mpi.contains(b.index), s"duplicate definitions for lhs ${b.lhs} in state ${b.index}")

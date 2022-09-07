@@ -1,6 +1,7 @@
 package lack.meta.core
 
-import lack.meta.base.Integer
+import lack.meta.base.num.Integer
+import lack.meta.base.names
 import lack.meta.core.sort.Sort
 
 object term:

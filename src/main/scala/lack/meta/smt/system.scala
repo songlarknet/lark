@@ -1,7 +1,8 @@
 package lack.meta.smt
 
-import lack.meta.base.Integer
-import lack.meta.core.names
+import lack.meta.base.num.Integer
+import lack.meta.base.names
+import lack.meta.base.pretty.indent
 import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.prop.Judgment
@@ -162,8 +163,8 @@ object system:
          |  Params:  ${params.map(_.pretty).mkString(", ")}
          |  Init:    ${init.pretty}
          |  Step:    ${step.pretty}
-         |${lack.meta.base.indent("Assumptions:", assumptions.map(_.pretty))}
-         |${lack.meta.base.indent("Obligations:", obligations.map(_.pretty))}""".stripMargin
+         |${indent("Assumptions:", assumptions.map(_.pretty))}
+         |${indent("Obligations:", obligations.map(_.pretty))}""".stripMargin
 
     def paramsOfNamespace(prefix: Prefix, ns: Namespace): List[Terms.SortedVar] =
       val vs = ns.values.toList.map((v,s) => Terms.SortedVar(prefix(names.Ref(List(), v)).id.symbol, translate.sort(s)))

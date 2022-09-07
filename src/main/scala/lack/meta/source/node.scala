@@ -1,6 +1,7 @@
 package lack.meta.source
 
-import lack.meta.base.Integer
+import lack.meta.base.num.Integer
+import lack.meta.base.names
 import lack.meta.core
 import lack.meta.source.stream.{Stream, SortRepr}
 
@@ -56,7 +57,7 @@ object node:
      * ...
      */
     def invokeWithName[T <: Node](name: String)(f: NodeInvocation => T): T =
-      val instance = nodeRef.freshSubnodeRef(core.names.ComponentSymbol.fromScalaSymbol(name))
+      val instance = nodeRef.freshSubnodeRef(names.ComponentSymbol.fromScalaSymbol(name))
       val subpath = instance.fullyQualifiedPath
       val subnodeRef = new core.builder.Node(new core.builder.Supply(subpath), subpath)
       val subbuilder = new Builder(subnodeRef)
@@ -70,7 +71,7 @@ object node:
           summon[ClassTag[T]].runtimeClass.getSimpleName())
       invokeWithName(name)(f)
 
-  class NodeInvocation(val superbuilder: Builder, val instance: core.names.Ref, val builder: Builder):
+  class NodeInvocation(val superbuilder: Builder, val instance: names.Ref, val builder: Builder):
     val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()
 
     // TODO keep track of meta-level arguments
@@ -112,7 +113,7 @@ object node:
      */
     def arg[T](name: String, argvalue: Stream[T])(using location: lack.meta.macros.Location): Stream[T] =
       val v = builder.nodeRef.fresh(
-        core.names.ComponentSymbol.fromScalaSymbol(name),
+        names.ComponentSymbol.fromScalaSymbol(name),
         core.builder.Variable(argvalue.sort, location, core.builder.Variable.Argument))
       arguments += argvalue._exp
       new Stream[T](v)(using argvalue.sortRepr)
@@ -142,7 +143,7 @@ object node:
     inline given location: lack.meta.macros.Location = lack.meta.macros.location
 
     protected class Lhs[T: SortRepr](_exp: core.term.Exp) extends Stream[T](_exp):
-      def v: core.names.Component = _exp match
+      def v: names.Component = _exp match
         case core.term.Exp.Var(_, v) =>
           require(v.prefix == builder.nodeRef.path)
           v.name
@@ -153,7 +154,7 @@ object node:
     protected def declare[T: SortRepr](name: String, mode: core.builder.Variable.Mode)(using loc: lack.meta.macros.Location): Lhs[T] =
       val sort = summon[SortRepr[T]].sort
       val v = core.builder.Variable(sort, loc, mode)
-      new Lhs(builder.nodeRef.fresh(lack.meta.core.names.ComponentSymbol.fromScalaSymbol(name), v))
+      new Lhs(builder.nodeRef.fresh(names.ComponentSymbol.fromScalaSymbol(name), v))
 
     protected def local[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
       declare(loc.prettyPath, core.builder.Variable.Local)

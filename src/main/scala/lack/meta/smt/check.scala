@@ -1,7 +1,7 @@
 package lack.meta.smt
 
-import lack.meta.base.Integer
-import lack.meta.core.names
+import lack.meta.base.names
+import lack.meta.base.pretty.indent
 import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.sort.Sort
@@ -26,7 +26,7 @@ object check:
     case class SafeUpTo(steps: Int) extends Bmc:
       def pretty = s"Safe for at least ${steps} steps"
     case class CounterexampleAt(steps: Int, trace: Trace) extends Bmc:
-      def pretty = lack.meta.base.indent("Counterexample: ", trace.steps.map(_.pretty))
+      def pretty = indent("Counterexample: ", trace.steps.map(_.pretty))
     case class UnknownAt(steps: Int) extends Bmc:
       def pretty = s"Unknown (at step ${steps})"
 

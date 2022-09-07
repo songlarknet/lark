@@ -5,6 +5,7 @@ import lack.meta.core.term.{Exp, Prim, Val}
 import lack.meta.source.node.Builder
 import lack.meta.source.stream.{SortRepr, Stream}
 import lack.meta.base
+import lack.meta.base.num.Integer
 import lack.meta.core.sort.Sort
 
 object compound:
@@ -20,7 +21,7 @@ object compound:
   def fby[T: SortRepr](v: Stream[T], it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     fby(v._exp.asInstanceOf[Exp.Val].v, it)
 
-  // def fby[T: SortRepr: Num](v: lack.meta.base.Integer, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
+  // def fby[T: SortRepr: Num](v: Integer, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
   //   fby(int(v), it)
   // def fby[T: SortRepr](b: Boolean, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
   //   fby(Val.Bool(b), it)
@@ -59,20 +60,20 @@ object compound:
   def ifthenelse[T: SortRepr](p: Stream[stream.Bool], t: Stream[T], f: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     builder.memo3x1(p, t, f) { case (e, f, g) => Exp.App(t.sort, Prim.Ite, e, f, g) }
 
-  def int[T: Num](i: base.Integer): Stream[T] = summon[Num[T]].const(i)
+  def int[T: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
 
-  def u8(i: base.Integer):  Stream[stream.UInt8]  = int[stream.UInt8](i)
-  def u16(i: base.Integer): Stream[stream.UInt16] = int[stream.UInt16](i)
-  def u32(i: base.Integer): Stream[stream.UInt32] = int[stream.UInt32](i)
-  def u64(i: base.Integer): Stream[stream.UInt64] = int[stream.UInt64](i)
-  def i8(i: base.Integer):  Stream[stream.Int8]   = int[stream.Int8](i)
-  def i16(i: base.Integer): Stream[stream.Int16]  = int[stream.Int16](i)
-  def i32(i: base.Integer): Stream[stream.Int32]  = int[stream.Int32](i)
-  def i64(i: base.Integer): Stream[stream.Int64]  = int[stream.Int64](i)
-  def m8(i: base.Integer):  Stream[stream.Mod8]   = int[stream.Mod8](i)
-  def m16(i: base.Integer): Stream[stream.Mod16]  = int[stream.Mod16](i)
-  def m32(i: base.Integer): Stream[stream.Mod32]  = int[stream.Mod32](i)
-  def m64(i: base.Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
+  def u8(i: Integer):  Stream[stream.UInt8]  = int[stream.UInt8](i)
+  def u16(i: Integer): Stream[stream.UInt16] = int[stream.UInt16](i)
+  def u32(i: Integer): Stream[stream.UInt32] = int[stream.UInt32](i)
+  def u64(i: Integer): Stream[stream.UInt64] = int[stream.UInt64](i)
+  def i8(i: Integer):  Stream[stream.Int8]   = int[stream.Int8](i)
+  def i16(i: Integer): Stream[stream.Int16]  = int[stream.Int16](i)
+  def i32(i: Integer): Stream[stream.Int32]  = int[stream.Int32](i)
+  def i64(i: Integer): Stream[stream.Int64]  = int[stream.Int64](i)
+  def m8(i: Integer):  Stream[stream.Mod8]   = int[stream.Mod8](i)
+  def m16(i: Integer): Stream[stream.Mod16]  = int[stream.Mod16](i)
+  def m32(i: Integer): Stream[stream.Mod32]  = int[stream.Mod32](i)
+  def m64(i: Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
 
   val True: Stream[stream.Bool] = bool(true)
 
@@ -85,7 +86,7 @@ object compound:
     stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
 
   object implicits:
-    implicit def implicit_integer[T: SortRepr: Num](i: base.Integer): Stream[T] = summon[Num[T]].const(i)
+    implicit def implicit_integer[T: SortRepr: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
     implicit def implicit_int[T: SortRepr: Num](i: Int): Stream[T] = summon[Num[T]].const(i)
 
     // this doesn't want to apply
@@ -119,7 +120,7 @@ object compound:
     def mul(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T]
     def div(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T]
     def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T]
-    def const(i: lack.meta.base.Integer): Stream[T]
+    def const(i: Integer): Stream[T]
 
     // TODO: each numeric type should have a statically known range
     // def range: lack.meta.base.Range
@@ -189,14 +190,14 @@ object compound:
         builder.memo2x1(x, y) { Exp.App(Sort.Bool, Prim.Ge, _, _) }
 
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
-      def const(i: base.Integer): Stream[T] =
+      def const(i: Integer): Stream[T] =
         summon[SortRepr[T]].sort match
           case sort: Sort.Integral =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
             new Stream(Exp.Val(sort, Val.Int(i)))
 
     class NumImplMod[T: SortRepr](mod: Sort.Mod) extends NumImpl[T]:
-      def const(i: base.Integer): Stream[T] =
+      def const(i: Integer): Stream[T] =
         summon[SortRepr[T]].sort match
           case sort: Sort.Mod =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)

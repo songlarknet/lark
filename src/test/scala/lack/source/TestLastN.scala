@@ -1,6 +1,6 @@
 package lack.source
 
-import lack.meta.base.Integer
+import lack.meta.base.num.Integer
 import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
