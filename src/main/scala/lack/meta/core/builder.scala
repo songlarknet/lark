@@ -11,24 +11,11 @@ import scala.collection.mutable
 
 /** Mutable builder for node-based transition systems. */
 object builder:
-  /** Node-level context with a fresh name supply */
-  class Supply(val path: List[names.Component]):
-    var ixes: mutable.Map[names.ComponentSymbol, Int] = mutable.Map().withDefaultValue(0)
-
-    def freshRef(name: names.ComponentSymbol, forceIndex: Boolean = false): names.Ref =
-      val ix = ixes(name)
-      val ixy = if (ix > 0 || forceIndex) Some(ix) else None
-      ixes(name) += 1
-      names.Ref(path, names.Component(name, ixy))
-
-    def freshInit(): names.Ref =
-      freshRef(names.ComponentSymbol.INIT, forceIndex = true)
-
-    // TODO: want a second sort of context that's program-level
-    // TODO: add map from Var to Node where it's defined?
-    // TODO: top-level wants a list of all the types used, eg structs
-    // var nodes: List[Node] = List()
-    // var sorts: List[Sort] = List()
+  // TODO: want a second sort of context that's program-level
+  // TODO: with map from Var to Node where it's defined?
+  // TODO: top-level wants a list of all the types used, eg structs
+  // var nodes: List[Node] = List()
+  // var sorts: List[Sort] = List()
 
   /** Binding contexts, called "context" in core.md. */
   sealed trait Binding extends pretty.Pretty
@@ -115,7 +102,7 @@ object builder:
       def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr)
 
   object Node:
-    def top(): Node = new Node(new Supply(List()), List())
+    def top(): Node = new Node(new names.mutable.Supply(List()), List())
 
   object Variable:
     sealed trait Mode
@@ -126,7 +113,7 @@ object builder:
 
   case class Variable(sort: Sort, location: Location, mode: Variable.Mode)
 
-  class Node(val supply: Supply, val path: List[names.Component]) extends pretty.Pretty:
+  class Node(val supply: names.mutable.Supply, val path: List[names.Component]) extends pretty.Pretty:
     val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
     var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
     // TODO subnodes need location information

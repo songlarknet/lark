@@ -33,8 +33,11 @@ object names:
     def fromStringUnsafe(s: String): ComponentSymbol = s
     def pretty(c: ComponentSymbol): String = c
 
-    val INIT  = fromInternal("init")
-    val LOCAL = fromStringUnsafe("")
+    val INIT      = fromInternal("init")
+    val PRE       = fromInternal("pre")
+    val FBY       = fromInternal("fby")
+    val UNDEFINED = fromInternal("undefined")
+    val LOCAL     = fromStringUnsafe("")
 
   given Ordering_ComponentSymbol: scala.math.Ordering[ComponentSymbol] with
     def compare(x: ComponentSymbol, y: ComponentSymbol): Int =
@@ -127,12 +130,24 @@ object names:
     def nest[V <: pretty.Pretty](name: names.Component, value: Namespace[V]): Namespace[V] =
       Namespace(namespaces = SortedMap(name -> value))
 
-  object immutable {
+  object immutable:
     type RefMap[V] = scala.collection.immutable.SortedMap[names.Ref, V]
     type RefSet    = scala.collection.immutable.SortedSet[names.Ref]
-  }
 
-  object mutable {
+  object mutable:
     type RefMap[V] = scala.collection.mutable.SortedMap[names.Ref, V]
     type RefSet    = scala.collection.mutable.SortedSet[names.Ref]
-  }
+
+    /** Node-level context with a fresh name supply */
+    class Supply(val path: List[names.Component]):
+      var ixes: scala.collection.mutable.Map[names.ComponentSymbol, Int] =
+        scala.collection.mutable.Map().withDefaultValue(0)
+
+      def freshRef(name: names.ComponentSymbol, forceIndex: Boolean = false): names.Ref =
+        val ix = ixes(name)
+        val ixy = if (ix > 0 || forceIndex) Some(ix) else None
+        ixes(name) += 1
+        names.Ref(path, names.Component(name, ixy))
+
+      def freshInit(): names.Ref =
+        freshRef(names.ComponentSymbol.INIT, forceIndex = true)

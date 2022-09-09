@@ -59,7 +59,7 @@ object node:
     def invokeWithName[T <: Node](name: String)(f: NodeInvocation => T): T =
       val instance = nodeRef.freshSubnodeRef(names.ComponentSymbol.fromScalaSymbol(name))
       val subpath = instance.fullyQualifiedPath
-      val subnodeRef = new core.builder.Node(new core.builder.Supply(subpath), subpath)
+      val subnodeRef = new core.builder.Node(new names.mutable.Supply(subpath), subpath)
       val subbuilder = new Builder(subnodeRef)
       val inv = new NodeInvocation(superbuilder = this, instance = instance, builder = subbuilder)
       val node = f(inv)

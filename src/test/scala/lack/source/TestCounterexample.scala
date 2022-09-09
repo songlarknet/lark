@@ -17,8 +17,13 @@ object TestCounterexample:
 
   class LemmaCounterexample(invocation: NodeInvocation) extends Node(invocation):
     val counter = local[Int32]
+    val undef   = local[Int32]
 
-    counter := i32(0) -> (pre(counter) + 1)
+    counter := i32(0) -> (pre(counter) + undef)
+
+    sorry("undef <= 1") {
+      undef <= 1
+    }
 
     property("falsifiable: counter < 3") {
       counter < 3

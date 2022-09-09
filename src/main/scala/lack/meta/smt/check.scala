@@ -82,12 +82,7 @@ object check:
   def stepOraclePrefix(i: Int) = stepPrefix("step-oracle", i)
 
   def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: names.Prefix, solver: Solver): Unit =
-    val oracles = fun.oracles.map { (v,s) =>
-      Terms.SortedVar(compound.sym(oraclePrefix.pprString + "/" + v.name), system.translate.sort(s))
-    }
-    solver.declareConsts(oracles)
-
-    val argsV = argVars ++ oracles
+    val argsV = argVars
     val argsT = argsV.map { v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)) }
     val call = Terms.FunctionApplication(fun.name, argsT)
     solver.assert(call)
