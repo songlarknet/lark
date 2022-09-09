@@ -75,13 +75,13 @@ object check:
     sys.fundefs.foreach(solver.command)
     sys
 
-  def stepPrefix(pfx: String, i: Int) = system.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol(pfx), Some(i))))
+  def stepPrefix(pfx: String, i: Int) = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol(pfx), Some(i))))
   def statePrefix(i: Int) = stepPrefix("state", i)
   def rowPrefix(i: Int) = stepPrefix("row", i)
   def initOraclePrefix = stepPrefix("init-oracle", 0)
   def stepOraclePrefix(i: Int) = stepPrefix("step-oracle", i)
 
-  def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: system.Prefix, solver: Solver): Unit =
+  def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: names.Prefix, solver: Solver): Unit =
     val oracles = fun.oracles.map { (v,s) =>
       Terms.SortedVar(compound.sym(oraclePrefix.pprString + "/" + v.name), system.translate.sort(s))
     }
@@ -92,13 +92,13 @@ object check:
     val call = Terms.FunctionApplication(fun.name, argsT)
     solver.assert(call)
 
-  def asserts(props: List[system.SolverJudgment], row: system.Prefix, solver: Solver): Unit =
+  def asserts(props: List[system.SolverJudgment], row: names.Prefix, solver: Solver): Unit =
     props.foreach { prop =>
-      solver.assert( row(prop.row) )
+      solver.assert( compound.qid(row(prop.row)) )
     }
 
-  def disprove(props: List[system.SolverJudgment], row: system.Prefix): Terms.Term =
-    val propsT = props.map(p => compound.funapp("not", row(p.row)))
+  def disprove(props: List[system.SolverJudgment], row: names.Prefix): Terms.Term =
+    val propsT = props.map(p => compound.funapp("not", compound.qid(row(p.row))))
     compound.or(propsT : _*)
 
   def checkMany(top: Node, count: Int, solver: () => Solver): Unit =

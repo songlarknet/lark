@@ -1,5 +1,6 @@
 package lack.meta.smt
 
+import lack.meta.base.{names, num}
 import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
@@ -19,6 +20,10 @@ object solver:
       tailPrinter = true)
 
 
+  /** Hack: pretty-print expression with each top-level 'and' clause on a
+   * separate line. This is slightly easier to read, but I should make a nicer
+   * pretty-printer.
+   */
   def pprTermBigAnd(t: Terms.Term): String = t match
     case Terms.FunctionApplication(f, args) if f.id.symbol.name == "and" =>
       val xs = args.map(x => s"    ${x}").mkString("\n")
@@ -26,10 +31,21 @@ object solver:
     case _ => t.toString
 
   object compound:
-    def sym(s: String) = Terms.SSymbol(s)
-    def id(s: String) = Terms.Identifier(sym(s))
-    def qid(s: String, sort: Terms.Sort) = Terms.QualifiedIdentifier(id(s), Some(sort))
-    def qid(s: String) = Terms.QualifiedIdentifier(id(s))
+    def sym(s: String) =
+      Terms.SSymbol(s)
+    def id(s: String) =
+      Terms.Identifier(sym(s))
+
+    def qid(s: String, sort: Terms.Sort): Terms.QualifiedIdentifier =
+      Terms.QualifiedIdentifier(id(s), Some(sort))
+    def qid(s: String): Terms.QualifiedIdentifier =
+      Terms.QualifiedIdentifier(id(s))
+
+    def qid(s: names.Ref, sort: Terms.Sort): Terms.QualifiedIdentifier =
+      qid(s.pprString, sort)
+    def qid(s: names.Ref): Terms.QualifiedIdentifier =
+      qid(s.pprString)
+
     def funapp(f: String, args: Terms.Term*) = (f, args.toList) match
       case ("ite", List(p, t, f)) => ite(p, t, f)
       case ("and", args) => and(args : _*)
@@ -73,7 +89,7 @@ object solver:
         if ti.symbol.name == "false" => f
       case _ => funappNoSimp("ite", List(p, t, f))
 
-    def int(i: lack.meta.base.num.Integer) =
+    def int(i: num.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
       if (i >= 0)
         Terms.SNumeral(i)
