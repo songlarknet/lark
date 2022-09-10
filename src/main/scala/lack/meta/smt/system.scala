@@ -26,53 +26,88 @@ object system:
   type Namespace = names.Namespace[Sort]
 
   trait System[T]:
-    def state: Namespace
-    def row: Namespace
-    def init(state: names.Prefix): Terms.Term
-    def extract(state: names.Prefix, row: names.Prefix): T
-    def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term
-    def assumptions: List[SolverJudgment]
-    def obligations: List[SolverJudgment]
+    def state: Namespace =
+      names.Namespace()
+    def row: Namespace =
+      names.Namespace()
+    def init(state: names.Prefix): Terms.Term =
+      compound.bool(true)
+    def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, T)
+    def assumptions: List[SolverJudgment] = List()
+    def obligations: List[SolverJudgment] = List()
 
   object System:
     def pure[T](value: T): System[T] = new System[T]:
-      def state: Namespace = names.Namespace()
-      def row: Namespace = names.Namespace()
-      def init(state: names.Prefix): Terms.Term =
-        compound.bool(true)
-      def extract(state: names.Prefix, row: names.Prefix): T =
-        value
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-        compound.bool(true)
-      def assumptions: List[SolverJudgment] = List()
-      def obligations: List[SolverJudgment] = List()
+      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+        (compound.bool(true), value)
+
+    def state(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
+      override def state: Namespace = names.Namespace.fromRef(ref, sort)
+      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+        (compound.bool(true), compound.qid(state(ref)))
+
+    def stateX(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
+      override def state: Namespace = names.Namespace.fromRef(ref, sort)
+      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+        (compound.bool(true), compound.qid(stateX(ref)))
+
+    def row(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
+      override def row: Namespace = names.Namespace.fromRef(ref, sort)
+      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+        (compound.bool(true), compound.qid(row(ref)))
+
+    def conjoin(systems: Seq[System[Unit]]): System[Unit] =
+      systems.fold(System.pure(()))(_ <<*> _)
 
   extension[T,U] (outer: System[T => U])
     def <*>(that: System[T]): System[U] = new System[U]:
-      def state: Namespace = outer.state <> that.state
-      def row: Namespace = outer.row <> that.row
-      def init(state: names.Prefix): Terms.Term =
+      override def state: Namespace = outer.state <> that.state
+      override def row: Namespace = outer.row <> that.row
+      override def init(state: names.Prefix): Terms.Term =
         compound.and(
           outer.init(state),
           that.init(state))
-      def extract(state: names.Prefix, row: names.Prefix): U =
-        val f = outer.extract(state, row)
-        val t = that.extract(state, row)
-        f(t)
+      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, U) =
+        val (xf, f) = outer.step(state, row, stateX)
+        val (xt, t) = that.step(state, row, stateX)
+        (compound.and(xf, xt), f(t))
+      override def assumptions: List[SolverJudgment] = outer.assumptions ++ that.assumptions
+      override def obligations: List[SolverJudgment] = outer.obligations ++ that.obligations
 
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-        val xa = outer.step(state, row, stateX)
-        val xb = that.step(state, row, stateX)
-        compound.and(xa, xb)
-      def assumptions: List[SolverJudgment] = outer.assumptions ++ that.assumptions
-      def obligations: List[SolverJudgment] = outer.obligations ++ that.obligations
+  extension[T] (outer: System[T])
+    /** join two systems */
+    def ap2[U, V](that: System[U])(f: (T, U) => V): System[V] =
+      System.pure((t: T) => (u: U) => f(t,u)) <*> outer <*> that
 
-  extension (outer: System[Unit])
-    /** join two systems, ignoring the values */
-    def <>(that: System[Unit]): System[Unit] =
-      def ignore2(x: Unit)(y: Unit): Unit = ()
-      System.pure(ignore2) <*> outer <*> that
+    /** join two systems, tupling the values together */
+    def <&>[U](that: System[U]): System[(T,U)] =
+      ap2(that)((_,_))
 
+    /** join two systems, taking the first value */
+    def <<*>[U](that: System[U]): System[T] =
+      ap2(that)((t,u) => t)
+
+    def map[U](f: T => U): System[U] =
+      System.pure(f) <*> outer
+
+    // XXX: can't implement real bind because the "init" and "step" might take different state prefixes...
+    def bind[U](f : (names.Prefix, names.Prefix, names.Prefix, T) => (Terms.Term, U)): System[U] =
+      new System[U]:
+        override def state: Namespace = outer.state
+        override def row: Namespace = outer.row
+        override def init(state: names.Prefix): Terms.Term =
+          outer.init(state)
+        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, U) =
+          val (xt, t) = outer.step(state, row, stateX)
+          val (xu, u) = f(state, row, stateX, t)
+          (compound.and(xt, xu), u)
+        override def assumptions: List[SolverJudgment] = outer.assumptions
+        override def obligations: List[SolverJudgment] = outer.obligations
+
+    def assertStep(f : T => Terms.Term): System[Unit] = bind {
+        (state, row, stateX, t) =>
+          (f(t), ())
+      }
 
   /** Defined system */
   case class SolverFunDef(
@@ -165,17 +200,17 @@ object system:
       def nm(i: names.ComponentSymbol): names.Ref =
         names.Ref(node.path, names.Component(i, None))
 
-      val sys = nested(context, node, None, node.nested)
-      val params = node.params.map { p => names.Ref(List(), p) }.toList
+      val sys        = nested(context, node, None, node.nested)
+      val params     = node.params.map { p => names.Ref(List(), p) }.toList
 
-      val initT    = sys.init(Prefix.state)
-      val stepT    = sys.step(Prefix.state, Prefix.row, Prefix.stateX)
+      val initT      = sys.init(Prefix.state)
+      val (stepT, _) = sys.step(Prefix.state, Prefix.row, Prefix.stateX)
 
-      val initI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pprString)
-      val stepI    = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pprString)
+      val initI      = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pprString)
+      val stepI      = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pprString)
 
-      val initD    = SolverFunDef(initI, initT)
-      val stepD    = SolverFunDef(stepI, stepT)
+      val initD      = SolverFunDef(initI, initT)
+      val stepD      = SolverFunDef(stepI, stepT)
 
       def prop(judgment: Judgment): SolverJudgment =
         judgment.term match
@@ -193,7 +228,7 @@ object system:
         val initR = names.Ref(List(), nested.init)
         val initN = names.Namespace.fromRef[Sort](initR, Sort.Bool)
         val children = nested.children.map(binding(context, node, initR, _))
-        val t = children.fold(System.pure(()))(_ <> _)
+        val t = System.conjoin(children.toSeq)
 
         val te = init match
           case None =>
@@ -205,18 +240,18 @@ object system:
             expr(ExpContext(node, i, context.supply), k)
 
         new System:
-          def state: Namespace = t.state <> te.state <> initN
-          def row: Namespace = t.row <> te.row
-          def init(state: names.Prefix): Terms.Term =
+          override def state: Namespace = t.state <> te.state <> initN
+          override def row: Namespace = t.row <> te.row
+          override def init(state: names.Prefix): Terms.Term =
             compound.and(
               te.init(state),
               t.init(state),
               compound.qid(state(initR)))
-          def extract(state: names.Prefix, row: names.Prefix) =
-            ()
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
+          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+            val (tstep, _) = t.step(state, row, stateX)
+            val (testep, teclock) = te.step(state, row, stateX)
             val whenStep = compound.and(
-              t.step(state, row, stateX),
+              tstep,
               compound.funapp("not", compound.qid(stateX(initR))))
 
             val whenStay = compound.and(
@@ -224,16 +259,16 @@ object system:
                 compound.funapp("=", compound.qid(state(x)), compound.qid(stateX(x)))
               }.toSeq : _*)
 
-            compound.and(
-              te.step(state, row, stateX),
-              compound.ite(te.extract(state, row), whenStep, whenStay))
-          def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
-          def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
+            (compound.and(
+              testep,
+              compound.ite(teclock, whenStep, whenStay)), ())
+          override def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
+          override def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
       case builder.Selector.Reset(k) =>
         val initR = names.Ref(List(), nested.init)
         val initN = names.Namespace.fromRef[Sort](initR, Sort.Bool)
         val children = nested.children.map(binding(context, node, initR, _))
-        val t = children.fold(System.pure(()))(_ <> _)
+        val t = System.conjoin(children.toSeq)
 
         val te = init match
           case None =>
@@ -248,17 +283,18 @@ object system:
         val nestStateN = names.Namespace.nest(nested.init, substateN)
 
         new System:
-          def state: Namespace = substateN <> te.state
-          def row: Namespace = t.row <> te.row <> nestStateN
-          def init(state: names.Prefix): Terms.Term =
+          override def state: Namespace = substateN <> te.state
+          override def row: Namespace = t.row <> te.row <> nestStateN
+          override def init(state: names.Prefix): Terms.Term =
             compound.and(
               te.init(state),
               t.init(state),
               compound.qid(state(initR)))
-          def extract(state: names.Prefix, row: names.Prefix) =
-            ()
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
+          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
             val stateR = names.Prefix(row.prefix ++ List(nested.init))
+
+            val (testep, teclock) = te.step(state, row, stateX)
+            val (tstepR, _) = t.step(stateR, row, stateX)
 
             val whenReset = compound.and(
               t.init(stateR),
@@ -269,13 +305,13 @@ object system:
                 compound.funapp("=", compound.qid(state(x)), compound.qid(stateR(x)))
               }.toSeq : _*)
 
-            compound.and(
-              te.step(state, row, stateX),
-              t.step(stateR, row, stateX),
+            (compound.and(
+              testep,
+              tstepR,
               compound.funapp("not", compound.qid(stateX(initR))),
-              compound.ite(te.extract(state, row), whenReset, whenStep))
-          def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
-          def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
+              compound.ite(teclock, whenReset, whenStep)), ())
+          override def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
+          override def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
 
     def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
       case builder.Binding.Equation(lhs, rhs) =>
@@ -283,59 +319,38 @@ object system:
         val t0 = expr(ec, rhs)
         val xbind = node.xvar(lhs)
         val xref = names.Ref(List(), lhs)
-        new System:
-          def state: Namespace = t0.state
-          def row: Namespace = t0.row <> names.Namespace.fromRef(xref, xbind.sort)
-          def init(state: names.Prefix): Terms.Term =
-            t0.init(state)
-          def extract(state: names.Prefix, row: names.Prefix) =
-            ()
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-            val v = t0.extract(state, row)
-            compound.and(
-              compound.funapp("=", compound.qid(row(xref)), v),
-              t0.step(state, row, stateX)
-            )
-          def assumptions: List[SolverJudgment] = t0.assumptions
-          def obligations: List[SolverJudgment] = t0.obligations
+        (System.row(xref, xbind.sort) <&> expr(ec, rhs)).assertStep { ts =>
+          compound.funapp("=", ts._1, ts._2)
+        }
+
       case builder.Binding.Subnode(v, args) =>
         val ec = ExpContext(node, init, context.supply)
         val subnode = node.subnodes(v)
         val subsystem = context.nodes(subnode.path)
 
-        val argsS  = args.map(expr(ec, _))
-        val argsEq = subnode.params.zip(argsS).map { (param, argT) =>
-          val t0 = new System[Terms.Term => Unit]:
-            def state: Namespace = names.Namespace()
-            def row: Namespace = names.Namespace.nest(v, subsystem.row)
-            def init(stateP: names.Prefix): Terms.Term =
-              compound.bool(true)
-            def extract(state: names.Prefix, row: names.Prefix) =
-              def const(i : Terms.Term) = ()
-              const
-            def step(stateP: names.Prefix, rowP: names.Prefix, stateXP: names.Prefix): Terms.Term =
-              val argV = argT.extract(stateP, rowP)
-              val p = compound.qid(rowP(names.Ref(List(v), param)))
-              compound.funapp("=", p, argV)
+        val argsT  = args.map(expr(ec, _))
 
-            def assumptions: List[SolverJudgment] = List()
-            def obligations: List[SolverJudgment] = List()
-          t0 <*> argT
+        val argsEq = subnode.params.zip(argsT).map { (param, argT) =>
+          argT.bind { (state, row, stateX, argV) =>
+            val p = compound.qid(row(names.Ref(List(v), param)))
+            (compound.funapp("=", p, argV), ())
+          }
         }
 
         val subnodeT = new System[Unit]:
-          def state: Namespace = names.Namespace.nest(v, subsystem.state)
-          def row: Namespace = names.Namespace.nest(v, subsystem.row)
-          def init(stateP: names.Prefix): Terms.Term =
+          override def state: Namespace = names.Namespace.nest(v, subsystem.state)
+          override def row: Namespace = names.Namespace.nest(v, subsystem.row)
+          override def init(stateP: names.Prefix): Terms.Term =
             val argsV = subsystem.paramsOfNamespace(stateP, state).map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
             Terms.FunctionApplication(subsystem.init.name, argsV)
-          def extract(state: names.Prefix, row: names.Prefix) =
-            ()
-          def step(stateP: names.Prefix, rowP: names.Prefix, stateXP: names.Prefix): Terms.Term =
-            val argsV = subsystem.paramsOfNamespace(stateP, state) ++ subsystem.paramsOfNamespace(rowP, row) ++ subsystem.paramsOfNamespace(stateXP, state)
+          def step(stateP: names.Prefix, rowP: names.Prefix, stateXP: names.Prefix) =
+            val argsV =
+              subsystem.paramsOfNamespace(stateP, state) ++
+              subsystem.paramsOfNamespace(rowP, row) ++
+              subsystem.paramsOfNamespace(stateXP, state)
             val argsT = argsV.map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
             val stepT = Terms.FunctionApplication(subsystem.step.name, argsT)
-            stepT
+            (stepT, ())
 
           // Get all of the subnode's judgments. Contract requires become
           // obligations at the use-site. Other judgments become assumptions
@@ -345,120 +360,74 @@ object system:
           def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.prefix, r.name)
           val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
           val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
-          def assumptions: List[SolverJudgment] = asms
-          def obligations: List[SolverJudgment] = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire)))
+          override def assumptions: List[SolverJudgment] = asms
+          override def obligations: List[SolverJudgment] = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire)))
 
-        argsEq.foldLeft(subnodeT)(_ <> _)
+        System.conjoin(subnodeT :: argsEq.toList)
 
       case nest: builder.Binding.Nested =>
         nested(context, node, Some(init), nest)
 
     def expr(context: ExpContext, exp: Exp): System[Terms.Term] = exp match
       case Exp.flow.Arrow(_, first, later) =>
+        val st = System.state(context.init, Sort.Bool)
         val t0 = expr(context, first)
         val t1 = expr(context, later)
-        val choice = new System[Terms.Term => Terms.Term => Terms.Term]:
-          def state: Namespace = names.Namespace.fromRef(context.init, Sort.Bool)
-          def row: Namespace = names.Namespace()
-          def init(state: names.Prefix): Terms.Term =
-            compound.bool(true)
-          def extract(state: names.Prefix, row: names.Prefix) =
-            def choose(firstT: Terms.Term)(laterT: Terms.Term): Terms.Term =
-              compound.funapp("ite", compound.qid(state(context.init)), firstT, laterT)
-            choose
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-            compound.bool(true)
-          def assumptions: List[SolverJudgment] = List()
-          def obligations: List[SolverJudgment] = List()
-        choice <*> t0 <*> t1
+        (st <&> (t0 <&> t1)).map { case (init, (first, later)) =>
+          compound.ite(init, first, later)
+        }
 
       case Exp.flow.Pre(sort, pre) =>
         val t0 = expr(context, pre)
         val ref = context.supply.freshRef(names.ComponentSymbol.PRE, forceIndex = true)
-        new System[Terms.Term]:
-          def state: Namespace = names.Namespace.fromRef[Sort](ref, sort) <> t0.state
-          def row: Namespace = t0.row
-          def init(state: names.Prefix): Terms.Term =
-            // There are no constraints on the initial value of state(ref), so
-            // it has some undefined / unknown value.
-            t0.init(state)
-          def extract(state: names.Prefix, row: names.Prefix) =
-            compound.qid(state(ref))
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-            compound.and(
-              compound.funapp("=",
-                compound.qid(stateX(ref)),
-                t0.extract(state, row)),
-              t0.step(state, row, stateX))
-          def assumptions: List[SolverJudgment] = List()
-          def obligations: List[SolverJudgment] = List()
+        val tinit = new System[Unit]:
+          override def state: Namespace = names.Namespace.fromRef[Sort](ref, sort)
+          override def init(state: names.Prefix): Terms.Term =
+            compound.bool(true)
+          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+            (compound.bool(true), ())
+
+        t0.bind { (state, row, stateX, v) =>
+          (compound.funapp("=", compound.qid(stateX(ref)), v),
+          compound.qid(state(ref)))
+        } <<*> tinit
 
       case Exp.flow.Fby(sort, v0, pre) =>
         val t0 = expr(context, pre)
         val ref = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
-        new System[Terms.Term]:
-          def state: Namespace = names.Namespace.fromRef[Sort](ref, sort) <> t0.state
-          def row: Namespace = t0.row
-          def init(state: names.Prefix): Terms.Term =
-            compound.and(
-              t0.init(state),
-              compound.funapp("=", compound.qid(state(ref)), value(v0)))
-          def extract(state: names.Prefix, row: names.Prefix) =
-            compound.qid(state(ref))
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-            compound.and(
-              compound.funapp("=",
-                compound.qid(stateX(ref)),
-                t0.extract(state, row)),
-              t0.step(state, row, stateX))
-          def assumptions: List[SolverJudgment] = List()
-          def obligations: List[SolverJudgment] = List()
+        val tinit = new System[Unit]:
+          override def state: Namespace = names.Namespace.fromRef[Sort](ref, sort)
+          override def init(state: names.Prefix): Terms.Term =
+            compound.funapp("=", compound.qid(state(ref)), value(v0))
+          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
+            (compound.bool(true), ())
+        t0.bind { (state, row, stateX, v) =>
+          (compound.funapp("=", compound.qid(stateX(ref)), v),
+          compound.qid(state(ref)))
+        } <<*> tinit
 
       case Exp.nondet.Undefined(sort) =>
         val ref = context.supply.freshRef(names.ComponentSymbol.UNDEFINED, forceIndex = true)
-        new System[Terms.Term]:
-          def state: Namespace = names.Namespace()
-          def row: Namespace = names.Namespace.fromRef(ref, sort)
-          def init(state: names.Prefix): Terms.Term =
-            compound.bool(true)
-          def extract(state: names.Prefix, row: names.Prefix) =
-            compound.qid(row(ref))
-          def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-            compound.bool(true)
-          def assumptions: List[SolverJudgment] = List()
-          def obligations: List[SolverJudgment] = List()
+        System.row(ref, sort)
 
       case Exp.Val(_, v) => System.pure(value(v))
-      case Exp.Var(s, v) => new System:
+      case Exp.Var(sort, v) =>
         val ref = context.stripRef(v)
         // TODO HACK: should take a context describing which variables are in state and which are in row
         val rowVariable = ref.name.symbol != names.ComponentSymbol.INIT
 
-        val ns = names.Namespace.fromRef(ref, s)
-
-        def state: Namespace = if (!rowVariable) ns else names.Namespace()
-        def row: Namespace = if (rowVariable) ns else names.Namespace()
-        def init(state: names.Prefix): Terms.Term =
-          compound.bool(true)
-        def extract(state: names.Prefix, row: names.Prefix): Terms.Term =
-          if (rowVariable)
-            compound.qid(row(ref))
-          else
-            compound.qid(state(ref))
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): Terms.Term =
-          compound.bool(true)
-        def assumptions: List[SolverJudgment] = List()
-        def obligations: List[SolverJudgment] = List()
+        if (rowVariable)
+          System.row(ref, sort)
+        else
+          System.state(ref, sort)
 
       case Exp.App(sort, prim, args : _*) =>
         val zeroS = System.pure(List[Terms.Term]())
         val argsS = args.foldLeft(zeroS) { case (collectS, arg) =>
-          def snoc(list: List[Terms.Term])(arg: Terms.Term): List[Terms.Term] = list :+ arg
-          System.pure(snoc) <*> collectS <*> expr(context, arg)
+          collectS.ap2(expr(context, arg)) { _ :+ _ }
         }
 
-        def mkapp(argsT: List[Terms.Term]): Terms.Term =
+        argsS.map { argsT =>
           compound.funapp(prim.pprString, argsT : _*)
-
-        System.pure(mkapp) <*> argsS
+        }
 
