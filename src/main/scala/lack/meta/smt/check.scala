@@ -71,7 +71,7 @@ object check:
 
 
   def declareSystem(n: Node, solver: Solver): system.SolverSystem =
-    val sys = system.translate.nodes(n.allNodes)
+    val sys = translate.nodes(n.allNodes)
     sys.fundefs.foreach(solver.command)
     sys
 
@@ -100,7 +100,7 @@ object check:
     println("Checking top-level node:")
     println(top.pprString)
     println("System translation:")
-    println(system.translate.nodes(top.allNodes).pprString)
+    println(translate.nodes(top.allNodes).pprString)
 
     top.allNodes.foreach { n =>
       val s = solver()
