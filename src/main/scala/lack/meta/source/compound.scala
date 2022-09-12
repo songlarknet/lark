@@ -75,6 +75,12 @@ object compound:
   def m32(i: Integer): Stream[stream.Mod32]  = int[stream.Mod32](i)
   def m64(i: Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
 
+  def f32(r: Float): Stream[stream.Float32] =
+    new Stream(Exp.Val(Sort.Float32, Val.Float32(r.toFloat)))
+
+  def r32(r: Float): Stream[stream.Real32] =
+    new Stream(Exp.Val(Sort.Real32, Val.Real32(r.toFloat)))
+
   val True: Stream[stream.Bool] = bool(true)
 
   val False: Stream[stream.Bool] = bool(false)
@@ -157,6 +163,9 @@ object compound:
   given Num_Mod32:  Num[stream.Mod32]  = new internal.NumImplMod(Sort.Mod32)
   given Num_Mod64:  Num[stream.Mod64]  = new internal.NumImplMod(Sort.Mod64)
 
+  given Num_Float32: Num[stream.Float32] = new internal.NumImplFloat32
+  given Num_Real32:  Num[stream.Real32]  = new internal.NumImplReal32
+
   object internal:
     abstract class NumImpl[T: SortRepr] extends Num[T] with Ord[T]:
       def add(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
@@ -203,6 +212,13 @@ object compound:
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
             new Stream(Exp.Val(sort, Val.Mod(i, mod)))
 
+    class NumImplFloat32 extends NumImpl[stream.Float32]:
+      def const(i: Integer): Stream[stream.Float32] =
+        new Stream(Exp.Val(Sort.Float32, Val.Float32(i.toFloat)))
+
+    class NumImplReal32 extends NumImpl[stream.Real32]:
+      def const(i: Integer): Stream[stream.Real32] =
+        new Stream(Exp.Val(Sort.Real32, Val.Real32(i.toFloat)))
 
   def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
     conds.toList match

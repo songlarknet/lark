@@ -66,9 +66,15 @@ object sort:
     case object Mod32 extends Mod(32)
     case object Mod64 extends Mod(64)
 
+    /** IEEE754 floating-point number, single precision */
     // XXX: do we want real arithmetic or IEEE754? Should they be different types?
     case object Float32 extends Sort:
       def ppr = pretty.text("Float32")
+
+    /** A mathematical real number that is represented by 32-bit floats at runtime.
+     * This type is cheating a bit. */
+    case object Real32 extends Sort:
+      def ppr = pretty.text("Real32")
 
     case class Struct(name: String, fields: (String, Sort)*) extends Sort:
       require(fields.map(_._1).length == fields.map(_._1).toSet.size)

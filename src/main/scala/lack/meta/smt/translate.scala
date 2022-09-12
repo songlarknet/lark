@@ -22,11 +22,14 @@ object translate:
   def sort(s: Sort): Terms.Sort = s match
     case _: Sort.Integral => Terms.Sort(compound.id("Int"))
     case _: Sort.Mod => Terms.Sort(compound.id("Int"))
+    case Sort.Float32 => Terms.Sort(compound.id("Float !TODO"))
+    case Sort.Real32 => Terms.Sort(compound.id("Real"))
     case Sort.Bool => Terms.Sort(compound.id("Bool"))
 
   def value(v: Val): Terms.Term = v match
     case Val.Bool(b) => compound.qid(b.toString)
     case Val.Int(i) => compound.int(i)
+    case Val.Real32(f) => compound.real(f)
 
   class Context(val nodes: Map[List[names.Component], SolverNode], val supply: names.mutable.Supply)
 

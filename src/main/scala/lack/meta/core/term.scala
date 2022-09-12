@@ -36,6 +36,11 @@ object term:
       def ppr = pretty.string(s"#f32'$r")
       def check(sort: Sort) = sort == Sort.Float32
 
+    /** Logical real with float32 runtime representation */
+    case class Real32(r: Float) extends Val:
+      def ppr = pretty.string(s"#r32'$r")
+      def check(sort: Sort) = sort == Sort.Real32
+
     case class Struct(fields: List[(String, Val)], struct: Sort.Struct) extends Val:
       require(fields.map(_._1) == struct.fields.map(_._1))
       require(struct.fields.zip(fields).forall(f => f._2._2.check(f._1._2)))

@@ -66,6 +66,9 @@ object stream:
   opaque type Float32 = internal.Prim[Sort.Float32.type]
   given SortRepr_Float32: SortRepr[Float32] = new SortRepr(Sort.Float32)
 
+  opaque type Real32 = internal.Prim[Sort.Real32.type]
+  given SortRepr_Real32: SortRepr[Real32] = new SortRepr(Sort.Real32)
+
   opaque type Complex = internal.Prim[Sort.Complex.type]
   given SortRepr_Complex: SortRepr[Complex] = new SortRepr(Sort.Complex)
 

@@ -96,6 +96,9 @@ object solver:
       else
         funappNoSimp("-", List(Terms.SNumeral(- i)))
 
+    def real(f: Float) =
+      Terms.SDecimal(BigDecimal.decimal(f))
+
     def bool(b: Boolean) = qid(b.toString)
 
   class Solver(interpreter: Interpreter, verbose: Boolean):
