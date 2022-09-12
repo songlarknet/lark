@@ -13,11 +13,14 @@ import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
 object check:
-  sealed trait CheckFeasible
+  sealed trait CheckFeasible extends pretty.Pretty
   object CheckFeasible:
-    case class FeasibleUpTo(steps: Int) extends CheckFeasible
-    case class InfeasibleAt(steps: Int) extends CheckFeasible
-    case class UnknownAt(steps: Int) extends CheckFeasible
+    case class FeasibleUpTo(steps: Int) extends CheckFeasible:
+      def ppr = pretty.text(s"Feasible (no contradictory assumptions) up to ${steps} steps")
+    case class InfeasibleAt(steps: Int) extends CheckFeasible:
+      def ppr = pretty.text(s"Infeasible at ${steps} steps")
+    case class UnknownAt(steps: Int) extends CheckFeasible:
+      def ppr = pretty.text(s"Unknown (at step ${steps})")
 
 
   sealed trait Bmc extends pretty.Pretty
@@ -25,16 +28,26 @@ object check:
     case class SafeUpTo(steps: Int) extends Bmc:
       def ppr = pretty.text(s"Safe for at least ${steps} steps")
     case class CounterexampleAt(steps: Int, trace: Trace) extends Bmc:
-      def ppr = pretty.text("Counterexample:") <@> trace.ppr
+      def ppr = pretty.text("Counterexample:") <> pretty.nest(pretty.line <> trace.ppr)
     case class UnknownAt(steps: Int) extends Bmc:
       def ppr = pretty.text(s"Unknown (at step ${steps})")
 
 
-  sealed trait Kind
+  sealed trait Kind extends pretty.Pretty
   object Kind:
-    case class InvariantMaintainedAt(steps: Int) extends Kind
-    case class NoGood(steps: Int) extends Kind
-    case class UnknownAt(steps: Int) extends Kind
+    case class InvariantMaintainedAt(steps: Int) extends Kind:
+      def ppr = pretty.text(s"Invariant maintained with ${steps} steps")
+    case class NoGood(steps: Int, traces: List[Trace]) extends Kind:
+      def ppr = pretty.text(s"Inductive step failed after trying up to ${steps} steps.") <>
+        pretty.nest(traces match
+          case _ :: cti1 :: _ =>
+            // Print the 1-inductive counterexample-to-induction, as it's the shortest
+            // that might hint to the user what's missing
+            pretty.line <> pretty.text("1-inductive counterexample:") <@> cti1.ppr
+          case _ =>
+            pretty.line <> pretty.text("no counterexample-to-induction"))
+    case class UnknownAt(steps: Int) extends Kind:
+      def ppr = pretty.text(s"Unknown (at step ${steps})")
 
   case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
     def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
@@ -107,23 +120,46 @@ object check:
       checkNode(n, count, s)
     }
 
-  def checkNode(top: Node, count: Int, solver: Solver): Unit =
+  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): Unit =
     val sys  = declareSystem(top, solver)
     val topS = sys.top
-    val feaR = solver.pushed { feasible(sys, topS, count, solver) }
-    val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
-    val indR = solver.pushed { kind(sys, topS, count, solver) }
-    // LODO fix up pretty-printing
-    println(s"Node ${names.Prefix(top.path).pprString}:")
-    topS.assumptions.foreach { o =>
-      println(s"  Assume ${o.judgment.pprString}")
-    }
-    topS.obligations.foreach { o =>
-      println(s"  Show ${o.judgment.pprString}")
-    }
-    println(s"  Feasibility check:   ${feaR}")
-    println(s"  Bounded model check: ${bmcR.pprString}")
-    println(s"  K-inductive check:   ${indR}")
+    if (skipTrivial && topS.obligations.isEmpty)
+      println(s"Skipping node '${names.Prefix(top.path).pprString}', nothing to prove")
+    else
+      // LODO fix up pretty-printing
+      println(s"Node ${names.Prefix(top.path).pprString}:")
+      topS.assumptions.foreach { o =>
+        println(s"  Assume ${o.judgment.pprString}")
+      }
+      topS.obligations.foreach { o =>
+        println(s"  Show ${o.judgment.pprString}")
+      }
+
+      // TODO: runner / strategy:
+      // * run different methods in parallel
+      // * when find counterexample, check if remaining props are true
+      val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
+      bmcR match
+        case Bmc.SafeUpTo(_) =>
+          val indR = solver.pushed { kind(sys, topS, count, solver) }
+          indR match
+            case Kind.InvariantMaintainedAt(k) =>
+              val feaR = solver.pushed { feasible(sys, topS, count, solver) }
+              feaR match
+                case CheckFeasible.FeasibleUpTo(_) =>
+                  println(s"  OK! (requires ${k} inductive steps)")
+                case _ =>
+                  println("  Properties hold, but system is infeasible.")
+                  println("  Maybe you have inconsistent assumptions or contradictory definitions.")
+                  println(pretty.layout(pretty.indent(feaR.ppr, 4)))
+            case _ =>
+              println("  K-inductive step failed, but didn't find a counterexample.")
+              println(pretty.layout(pretty.indent(indR.ppr, 4)))
+
+        case _ =>
+          println("  Property false, found a counterexample.")
+          println(pretty.layout(pretty.indent(bmcR.ppr, 4)))
+
 
   def feasible(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): CheckFeasible =
     {
@@ -193,6 +229,8 @@ object check:
       solver.declareConsts(state)
     }
 
+    var traces: List[Trace] = List()
+
     for (step <- 0 until count) {
       val state  = top.paramsOfNamespace(statePrefix(step), top.state)
       val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.state)
@@ -208,13 +246,11 @@ object check:
         case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
-          val cti = Trace.fromModel(step, model)
-          println(s"Counterexample to induction with ${step} steps:")
-          cti.steps.foreach(p => println("  " + p.pprString))
+          traces +:= Trace.fromModel(step, model)
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 
       asserts(top.obligations, rowPrefix(step), solver)
     }
 
-    Kind.NoGood(count)
+    Kind.NoGood(count, traces)
