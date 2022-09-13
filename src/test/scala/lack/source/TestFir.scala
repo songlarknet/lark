@@ -34,14 +34,6 @@ object TestFIR:
       bounded_output
     }
 
-
-    val OVERRIDE    = i32(100)
-
-    def SumN(n: Int, v: Stream[Int32]): Stream[Int32] = n match
-      case 0 => 0
-      case 1 => v
-      case _ => v + SumN(n - 1, fby(0, v))
-
   class FIR(coefficients: List[Float], signal: Stream[Real32], invocation: NodeInvocation) extends Node(invocation):
     val out = output[Real32]
 
