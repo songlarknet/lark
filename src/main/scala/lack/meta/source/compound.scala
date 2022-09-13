@@ -21,11 +21,6 @@ object compound:
   def fby[T: SortRepr](v: Stream[T], it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     fby(v._exp.asInstanceOf[Exp.Val].v, it)
 
-  // def fby[T: SortRepr: Num](v: Integer, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-  //   fby(int(v), it)
-  // def fby[T: SortRepr](b: Boolean, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-  //   fby(Val.Bool(b), it)
-
   def arrow[T: SortRepr](a: Stream[T], b: Stream[T])(using builder: Builder, location: Location): Stream[T] =
     builder.memo2(a, b) { case (e, f) => Exp.flow.Arrow(a.sort, e, f) }
 

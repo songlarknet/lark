@@ -275,6 +275,9 @@ object translate:
         System.state(ref, sort)
 
     case Exp.App(sort, prim, args : _*) =>
+      require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
+        "TODO: division for bitvectors has weird semantics in SMT-lib, need to wrap division to get consistent div-by-zero behaviour")
+
       val zeroS = System.pure(List[Terms.Term]())
       val argsS = args.foldLeft(zeroS) { case (collectS, arg) =>
         collectS.ap2(expr(context, arg)) { _ :+ _ }

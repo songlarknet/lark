@@ -129,13 +129,6 @@ object node:
       new Stream(core.term.Exp.Val(core.sort.Sort.Bool, core.term.Val.Bool(false)))
     val always = Activate(reset = falses, when = trues)
 
-  // case class NodeApplication(activate: Activate, superbuilder: Builder)
-
-  // TODO: node instantiation should force bindings for arguments with builder.nodeRef.memoForce.
-  // Arguments need to be treated as special bindings on node so that we can re-abstract them
-  // after they've been instantiated (for C code generation, and for contracts).
-  // Requires some re-jigging so that the caller can construct the builder first,
-  // add the arguments and get fresh names for them, and then instantiate the node subclass
   abstract class Node(invocation: NodeInvocation):
 
     given builder: Builder = invocation.builder
