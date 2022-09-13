@@ -31,9 +31,6 @@ exp ::=
   | exp -> exp
   | pre(exp)
 
-  -- Non-deterministic expressions
-  | undefined_{sort}
-
 -- Sorts or value types. These sorts represent the elements that a stream might contain.
 sort ::= Bool | UInt8 | ...
 
@@ -300,19 +297,6 @@ for q <- qualid
     step  = λs r s' v.
       t.step s r s' s'[x]
       /\ v = s[x]
-  }
-
--- Undefined has no restrictions at all
-[| c |- undefined |] =
-  let t = [|c |- e|]
-  in {
-    state = t.state;
-    row   = t.row;
-    init  = t.init;
-    step  = λs r s' v.
-      let u = oracle
-      in v = u
-      /\ t.step s r s' s'[x];
   }
 ```
 
