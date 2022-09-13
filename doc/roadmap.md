@@ -1,20 +1,57 @@
 # Lack: a Scala EDSL for Lustre
 
-bare minimum to be useful:
-* model checking with BMC and K-induction
-* compilation to C - bare minimum with code duplication
-* well-formedness checks: causality
-later:
-* invariant generation
-* plumb generated invariants to generated C code - any way to use CBMC for translation validation?
-* compilation to java?
-* automata
-* better compilation without code duplication
+This document describes the short-term and mid-term roadmap for lack.
+For the first milestone I want to pare it down to the bare minimum to be "useful".
+The high-level goal is to have a model checker and compiler toolchain that's scalable, debuggable, executable, and sound.
 
-## design / features for minimum viable product
+## Milestones
+### M1: bare minimum
+Bare minimum features to be useful:
+* surface language, maybe with syntax for simple automata;
+* model checking with BMC and K-induction;
+* basic counterexamples;
+* typechecking, causality checking, etc;
+* compilation to C - simplest possible generation ok;
+* decent property testing of interpreter, SMT semantics, and C semantics.
+
+### M2: scale
+Just these features might be OK, but with just plain old K-induction there's some risk that we could run into programs we can specify but can't prove.
+To make it "more scalable" I want these features, but I think they can wait until the second milestone:
+* contracts allows replacing complex implementations with simpler specs;
+* path compression makes K-induction stronger;
+* common subexpression elimination so that hopefully `x ==> x` is always trivial to prove;
+* sneaky invariants let the user specify invariants that refer to nested private state inside subnodes.
+
+### M3: sound
+After we know that we can prove interesting things, we want to make sure anything we prove is actually true of the compiled code.
+This is not the case with machine integers which can overflow.
+To make it "more sound" I want these features in milestone three:
+* integer bounds checks;
+* float bounds and NaN checks.
+
+### M4: better compilation
+At some point we probably want to generate nicer C code, and maybe also generate Scala code.
+Milestone four, maybe:
+* better compilation to C (modular, support separate compilation);
+* compilation to Scala or Java.
+
+### M5: better debugging
+Debuggable:
+* better counterexamples;
+* determine safe/invalid/unknown for each property. At the moment it just prints invalid/unknown if any properties are bad.
+
+## design / features
 
 ### arithmetic: machine integers
-all integer types have explicit bitwidths. proof obligations are generated for arithmetic overflow and underflow.
+All integer types have explicit bitwidths.
+In the long term, proof obligations are generated for arithmetic overflow and underflow.
+
+### arithmetic: floating point
+I don't know how good the SMT solver support for floating-point numbers is.
+I don't expect it to be as good as the support for reals.
+Would it be useful to have two types of floating points / reals with different logical representations?
+We'd have `Real32` which has the logical representation of a real, and `Float32` which uses machine float logic.
+Both would be represented by a 32-bit floating point value at runtime.
 
 ### polymorphism
 we get polymorphism "for free" by using Scala as the meta language.
@@ -28,7 +65,9 @@ we get polymorphism "for free" by using Scala as the meta language.
 ```
 
 ### structs
-gotta have structs
+We will want structs eventually, but I don't think they are required for the first few milestones.
+To start with, we can probably just use Scala meta-level structs to package them up.
+One day we can add real struct support, which I assume would mainly be useful for interop with other C code.
 
 ### pure / deterministic language fragment
 one issue with Kind2 is that it's not clear that two invocations of the same node with the same argument produce equal outputs. they might be different if the node is imported and has a non-deterministic contract. this non-determinism causes problems when you have a contract with a guarantee `f(x)` and then try to prove `f(x)` at the use-site of the contract. to prove this property, Kind2 needs to prove that `f(x) == f(x)`, which isn't always easy.
@@ -58,8 +97,6 @@ it might not always be possible to refer to subnodes by index or name - might wa
 subranges have a carrier type which defines the machine integer representation. performing arithmetic on values of subrange type reverts to the representation type and need to be explicitly cast back.
 #### modulo arithmetic
 Mod8, Mod16,... Mod64 types for unsigned overflow-safe arithmetic.
-#### floats
-float support? subranges for floats?
 
 ### contracts
 require/guarantee contracts
