@@ -263,10 +263,6 @@ object translate:
         compound.qid(state(ref)))
       } <<*> tinit
 
-    case Exp.nondet.Undefined(sort) =>
-      val ref = context.supply.freshRef(names.ComponentSymbol.UNDEFINED, forceIndex = true)
-      System.row(ref, sort)
-
     case Exp.Val(_, v) => System.pure(value(v))
     case Exp.Var(sort, v) =>
       val ref = context.stripRef(v)

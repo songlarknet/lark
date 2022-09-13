@@ -55,7 +55,6 @@ object builder:
           // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
           // and const prop
           // TODO: look in other bindings.
-          // TODO: UNSOUND: do not reuse bindings that call undefined
           //
           // Maybe we want this to be as dumb as possible so that the
           // source translation is "obviously correct".

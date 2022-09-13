@@ -36,7 +36,6 @@ object names:
     val INIT      = fromInternal("init")
     val PRE       = fromInternal("pre")
     val FBY       = fromInternal("fby")
-    val UNDEFINED = fromInternal("undefined")
     val LOCAL     = fromStringUnsafe("")
 
   given Ordering_ComponentSymbol: scala.math.Ordering[ComponentSymbol] with

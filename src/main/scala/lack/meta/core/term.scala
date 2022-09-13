@@ -188,8 +188,3 @@ object term:
        */
       case class Fby(sort: Sort, v: term.Val, e: Exp) extends Exp:
         def ppr = pretty.sexpr(List("flow'fby", v.ppr, e.ppr))
-
-    /** Non-deterministic terms */
-    object nondet:
-      case class Undefined(sort: Sort) extends Exp:
-        def ppr = pretty.text("undefined")
