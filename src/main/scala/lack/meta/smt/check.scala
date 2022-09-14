@@ -83,7 +83,7 @@ object check:
       Trace(stepD.toList)
 
 
-  def declareSystem(n: Node, solver: Solver): system.SolverSystem =
+  def declareSystem(n: Node, solver: Solver): system.Top =
     val sys = translate.nodes(n.allNodes)
     sys.fundefs.foreach(solver.command)
     sys
@@ -91,22 +91,22 @@ object check:
   def stepPrefix(pfx: String, i: Int) = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol(pfx), Some(i))))
   def statePrefix(i: Int) = stepPrefix("state", i)
   def rowPrefix(i: Int) = stepPrefix("row", i)
-  def initOraclePrefix = stepPrefix("init-oracle", 0)
-  def stepOraclePrefix(i: Int) = stepPrefix("step-oracle", i)
 
-  def callSystemFun(fun: system.SolverFunDef, argVars: List[Terms.SortedVar], oraclePrefix: names.Prefix, solver: Solver): Unit =
+  def callSystemFun(fun: Terms.QualifiedIdentifier, argVars: List[Terms.SortedVar], solver: Solver): Unit =
     val argsV = argVars
     val argsT = argsV.map { v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)) }
-    val call = Terms.FunctionApplication(fun.name, argsT)
+    val call = Terms.FunctionApplication(fun, argsT)
     solver.assert(call)
 
-  def asserts(props: List[system.SolverJudgment], row: names.Prefix, solver: Solver): Unit =
+  def asserts(props: List[system.SystemJudgment], row: names.Prefix, solver: Solver): Unit =
+    // TODO hypotheses
     props.foreach { prop =>
-      solver.assert( compound.qid(row(prop.row)) )
+      solver.assert( compound.qid(row(prop.consequent)) )
     }
 
-  def disprove(props: List[system.SolverJudgment], row: names.Prefix): Terms.Term =
-    val propsT = props.map(p => compound.funapp("not", compound.qid(row(p.row))))
+  def disprove(props: List[system.SystemJudgment], row: names.Prefix): Terms.Term =
+    // TODO hypotheses
+    val propsT = props.map(p => compound.funapp("not", compound.qid(row(p.consequent))))
     compound.or(propsT : _*)
 
   def checkMany(top: Node, count: Int, solver: () => Solver): Unit =
@@ -123,15 +123,15 @@ object check:
   def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): Unit =
     val sys  = declareSystem(top, solver)
     val topS = sys.top
-    if (skipTrivial && topS.obligations.isEmpty)
+    if (skipTrivial && topS.system.obligations.isEmpty)
       println(s"Skipping node '${names.Prefix(top.path).pprString}', nothing to prove")
     else
       // LODO fix up pretty-printing
       println(s"Node ${names.Prefix(top.path).pprString}:")
-      topS.assumptions.foreach { o =>
+      topS.system.assumptions.foreach { o =>
         println(s"  Assume ${o.judgment.pprString}")
       }
-      topS.obligations.foreach { o =>
+      topS.system.obligations.foreach { o =>
         println(s"  Show ${o.judgment.pprString}")
       }
 
@@ -161,11 +161,11 @@ object check:
           println(pretty.layout(pretty.indent(bmcR.ppr, 4)))
 
 
-  def feasible(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): CheckFeasible =
+  def feasible(sys: system.Top, top: system.Node, count: Int, solver: Solver): CheckFeasible =
     {
-      val state = top.paramsOfNamespace(statePrefix(0), top.state)
+      val state = top.paramsOfNamespace(statePrefix(0), top.system.state)
       solver.declareConsts(state)
-      callSystemFun(top.init, state, initOraclePrefix, solver)
+      callSystemFun(top.initI, state, solver)
     }
 
     solver.checkSat().status match
@@ -174,15 +174,15 @@ object check:
       case CommandsResponses.UnsatStatus   => return CheckFeasible.InfeasibleAt(-1)
 
     for (step <- 0 until count) {
-      val state  = top.paramsOfNamespace(statePrefix(step), top.state)
-      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.state)
-      val row    = top.paramsOfNamespace(rowPrefix(step), top.row)
+      val state  = top.paramsOfNamespace(statePrefix(step), top.system.state)
+      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.system.state)
+      val row    = top.paramsOfNamespace(rowPrefix(step), top.system.row)
 
       solver.declareConsts(row ++ stateS)
 
-      callSystemFun(top.step, state ++ row ++ stateS, stepOraclePrefix(step), solver)
+      callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, rowPrefix(step), solver)
 
       solver.checkSat().status match
         case CommandsResponses.UnknownStatus => return CheckFeasible.UnknownAt(step)
@@ -193,25 +193,25 @@ object check:
     CheckFeasible.FeasibleUpTo(count)
 
 
-  def bmc(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): Bmc =
+  def bmc(sys: system.Top, top: system.Node, count: Int, solver: Solver): Bmc =
     {
-      val state = top.paramsOfNamespace(statePrefix(0), top.state)
+      val state = top.paramsOfNamespace(statePrefix(0), top.system.state)
       solver.declareConsts(state)
-      callSystemFun(top.init, state, initOraclePrefix, solver)
+      callSystemFun(top.initI, state, solver)
     }
 
     for (step <- 0 until count) {
-      val state  = top.paramsOfNamespace(statePrefix(step), top.state)
-      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.state)
-      val row    = top.paramsOfNamespace(rowPrefix(step), top.row)
+      val state  = top.paramsOfNamespace(statePrefix(step), top.system.state)
+      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.system.state)
+      val row    = top.paramsOfNamespace(rowPrefix(step), top.system.row)
 
       solver.declareConsts(row ++ stateS)
 
-      callSystemFun(top.step, state ++ row ++ stateS, stepOraclePrefix(step), solver)
+      callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, rowPrefix(step), solver)
 
-      solver.checkSatAssumingX(disprove(top.obligations, rowPrefix(step))) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.obligations, rowPrefix(step))) { _.status match
         case CommandsResponses.UnknownStatus => return Bmc.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -223,26 +223,26 @@ object check:
     Bmc.SafeUpTo(count)
 
 
-  def kind(sys: system.SolverSystem, top: system.SolverNode, count: Int, solver: Solver): Kind =
+  def kind(sys: system.Top, top: system.Node, count: Int, solver: Solver): Kind =
     {
-      val state = top.paramsOfNamespace(statePrefix(0), top.state)
+      val state = top.paramsOfNamespace(statePrefix(0), top.system.state)
       solver.declareConsts(state)
     }
 
     var traces: List[Trace] = List()
 
     for (step <- 0 until count) {
-      val state  = top.paramsOfNamespace(statePrefix(step), top.state)
-      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.state)
-      val row    = top.paramsOfNamespace(rowPrefix(step), top.row)
+      val state  = top.paramsOfNamespace(statePrefix(step), top.system.state)
+      val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.system.state)
+      val row    = top.paramsOfNamespace(rowPrefix(step), top.system.row)
 
       solver.declareConsts(row ++ stateS)
 
-      callSystemFun(top.step, state ++ row ++ stateS, stepOraclePrefix(step), solver)
+      callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, rowPrefix(step), solver)
 
-      solver.checkSatAssumingX(disprove(top.obligations, rowPrefix(step))) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.obligations, rowPrefix(step))) { _.status match
         case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -250,7 +250,7 @@ object check:
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 
-      asserts(top.obligations, rowPrefix(step), solver)
+      asserts(top.system.obligations, rowPrefix(step), solver)
     }
 
     Kind.NoGood(count, traces)

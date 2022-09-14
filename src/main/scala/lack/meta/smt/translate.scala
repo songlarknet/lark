@@ -11,7 +11,8 @@ import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.solver.Solver
 import lack.meta.smt.solver.compound
-import lack.meta.smt.system.{System, SolverNode, SolverSystem, SolverFunDef, SolverJudgment, Namespace}
+import lack.meta.smt.system
+import lack.meta.smt.system.{System, SystemV, SystemJudgment, Namespace}
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
@@ -31,7 +32,7 @@ object translate:
     case Val.Int(i) => compound.int(i)
     case Val.Real32(f) => compound.real(f)
 
-  class Context(val nodes: Map[List[names.Component], SolverNode], val supply: names.mutable.Supply)
+  class Context(val nodes: Map[List[names.Component], system.Node], val supply: names.mutable.Supply)
 
   class ExpContext(val node: Node, val init: names.Ref, val supply: names.mutable.Supply):
     def stripRef(r: names.Ref): names.Ref =
@@ -40,145 +41,105 @@ object translate:
   object ExpContext:
     def stripRef(node: Node, r: names.Ref): names.Ref =
       val pfx = node.path
-      require(r.prefix.startsWith(pfx), s"Ill-formed node in node ${names.Prefix(node.path).pprString}: all variable references should start with the node's path, but ${r.pprString} doesn't")
+      require(r.prefix.startsWith(pfx),
+        s"Ill-formed node in node ${names.Prefix(node.path).pprString}: all variable references should start with the node's path, but ${r.pprString} doesn't")
       val strip = r.prefix.drop(pfx.length)
       names.Ref(strip, r.name)
 
-  def nodes(inodes: Iterable[Node]): SolverSystem =
-    var map = Map[List[names.Component], SolverNode]()
+  def nodes(inodes: Iterable[Node]): system.Top =
+    var map = Map[List[names.Component], system.Node]()
     val snodes = inodes.map { case inode =>
       val snode = node(new Context(map, new names.mutable.Supply(List())), inode)
       map += (inode.path -> snode)
       snode
     }.toList
-    SolverSystem(snodes, snodes.last)
+    system.Top(snodes, snodes.last)
 
-  def node(context: Context, node: Node): SolverNode =
+  def node(context: Context, node: Node): system.Node =
     def nm(i: names.ComponentSymbol): names.Ref =
       names.Ref(node.path, names.Component(i, None))
 
-    val sys        = nested(context, node, None, node.nested)
+    val sys        = nested(context, node, None, node.nested).system
     val params     = node.params.map { p => names.Ref(List(), p) }.toList
 
-    val initT      = sys.init(system.Prefix.state)
-    val (stepT, _) = sys.step(system.Prefix.state, system.Prefix.row, system.Prefix.stateX)
-
-    val initI      = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("init")).pprString)
-    val stepI      = compound.qid(nm(names.ComponentSymbol.fromScalaSymbol("step")).pprString)
-
-    val initD      = SolverFunDef(initI, initT)
-    val stepD      = SolverFunDef(stepI, stepT)
-
-    def prop(judgment: Judgment): SolverJudgment =
+    def prop(judgment: Judgment): SystemJudgment =
       judgment.term match
         // LODO: deal with non-variables by creating a fresh row variable for them
         case Exp.Var(s, v) =>
-          SolverJudgment(ExpContext.stripRef(node, v), judgment)
+          SystemJudgment(List(), ExpContext.stripRef(node, v), judgment)
 
-    val (obligations, assumptions) = node.props.map(prop).partition(j => j.judgment.isObligation)
+    val (obligations, assumptions) =
+      node.props.toList.map(prop).partition(j => j.judgment.isObligation)
+    val sysprops = System(obligations = obligations, assumptions = assumptions)
 
-    SolverNode(node.path, sys.state, sys.row, params, initD, stepD, assumptions.toList ++ sys.assumptions, obligations.toList ++ sys.obligations)
+    system.Node(node.path, params, sys <> sysprops)
 
-  def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): System[Unit] =
+  def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): SystemV[Unit] =
     nested.selector match
     case builder.Selector.When(k) =>
-      val initR = names.Ref(List(), nested.init)
-      val initN = names.Namespace.fromRef[Sort](initR, Sort.Bool)
+      val initR    = names.Ref(List(), nested.init)
       val children = nested.children.map(binding(context, node, initR, _))
-      val t = System.conjoin(children.toSeq)
 
-      val te = init match
+      val tk = init match
         case None =>
           // Blah - restructure, top level needs const clock so init=None
           require(k == Exp.Val(Sort.Bool, Val.Bool(true)))
-          System.pure(compound.bool(true))
+          SystemV.pure(compound.bool(true))
         case Some(i) =>
           // Evaluate clock in parent init context
           expr(ExpContext(node, i, context.supply), k)
 
-      new System:
-        override def state: Namespace = t.state <> te.state <> initN
-        override def row: Namespace = t.row <> te.row
-        override def init(state: names.Prefix): Terms.Term =
-          compound.and(
-            te.init(state),
-            t.init(state),
-            compound.qid(state(initR)))
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-          val (tstep, _) = t.step(state, row, stateX)
-          val (testep, teclock) = te.step(state, row, stateX)
-          val whenStep = compound.and(
-            tstep,
-            compound.funapp("not", compound.qid(stateX(initR))))
+      val tstep =
+        for
+          initX <- SystemV.stateX(initR, Sort.Bool)
+          _     <- SystemV.step(compound.funapp("not", initX))
+          _     <- SystemV.conjoin(children.toSeq)
+        yield ()
 
-          val whenStay = compound.and(
-            this.state.refs(names.Prefix(List())).map { x =>
-              compound.funapp("=", compound.qid(state(x)), compound.qid(stateX(x)))
-            }.toSeq : _*)
+      for
+        initE <- SystemV.state(initR, Sort.Bool)
+        kE    <- tk
+        _     <- SystemV.init(initE)
+        _     <- tstep.when(kE)
+      yield ()
 
-          (compound.and(
-            testep,
-            compound.ite(teclock, whenStep, whenStay)), ())
-        override def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
-        override def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
     case builder.Selector.Reset(k) =>
-      val initR = names.Ref(List(), nested.init)
-      val initN = names.Namespace.fromRef[Sort](initR, Sort.Bool)
+      val initR    = names.Ref(List(), nested.init)
       val children = nested.children.map(binding(context, node, initR, _))
-      val t = System.conjoin(children.toSeq)
 
-      val te = init match
+      val tk = init match
         case None =>
-          assert(false, s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${names.Prefix(node.path).pprString}")
+          assert(false,
+            s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${names.Prefix(node.path).pprString}")
         case Some(i) =>
           // Evaluate clock in parent init context
           expr(ExpContext(node, i, context.supply), k)
 
-      // We really want to existentially quantify over the reset states, so
-      // we sneak a version of the state into the row variables
-      val substateN = t.state <> initN
-      val nestStateN = names.Namespace.nest(nested.init, substateN)
+      val tstep =
+        for
+          initX <- SystemV.stateX(initR, Sort.Bool)
+          _     <- SystemV.step(compound.funapp("not", initX))
+          _     <- SystemV.conjoin(children.toSeq)
+        yield ()
 
-      new System:
-        override def state: Namespace = substateN <> te.state
-        override def row: Namespace = t.row <> te.row <> nestStateN
-        override def init(state: names.Prefix): Terms.Term =
-          compound.and(
-            te.init(state),
-            t.init(state),
-            compound.qid(state(initR)))
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-          val stateR = names.Prefix(row.prefix ++ List(nested.init))
+      for
+        initE <- SystemV.state(initR, Sort.Bool)
+        kE    <- tk
+        _     <- SystemV.init(initE)
+        _     <- tstep.reset(nested.init, kE)
+      yield ()
 
-          val (testep, teclock) = te.step(state, row, stateX)
-          val (tstepR, _) = t.step(stateR, row, stateX)
-
-          val whenReset = compound.and(
-            t.init(stateR),
-            compound.qid(stateR(initR)))
-
-          val whenStep = compound.and(
-            this.state.refs(names.Prefix(List())).map { x =>
-              compound.funapp("=", compound.qid(state(x)), compound.qid(stateR(x)))
-            }.toSeq : _*)
-
-          (compound.and(
-            testep,
-            tstepR,
-            compound.funapp("not", compound.qid(stateX(initR))),
-            compound.ite(teclock, whenReset, whenStep)), ())
-        override def assumptions: List[SolverJudgment] = t.assumptions ++ te.assumptions
-        override def obligations: List[SolverJudgment] = t.obligations ++ te.obligations
-
-  def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): System[Unit] = binding match
+  def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): SystemV[Unit] = binding match
     case builder.Binding.Equation(lhs, rhs) =>
-      val ec = ExpContext(node, init, context.supply)
-      val t0 = expr(ec, rhs)
+      val ec    = ExpContext(node, init, context.supply)
       val xbind = node.xvar(lhs)
-      val xref = names.Ref(List(), lhs)
-      (System.row(xref, xbind.sort) <&> expr(ec, rhs)).assertStep { ts =>
-        compound.funapp("=", ts._1, ts._2)
-      }
+      val xref  = names.Ref(List(), lhs)
+      val tstep =
+        for
+          erhs <- expr(ec, rhs)
+          x    <- SystemV.row(xref, xbind.sort)
+        yield compound.funapp("=", erhs, x)
+      SystemV.step(tstep)
 
     case builder.Binding.Subnode(v, args) =>
       val ec = ExpContext(node, init, context.supply)
@@ -186,104 +147,99 @@ object translate:
       val subsystem = context.nodes(subnode.path)
 
       val argsT  = args.map(expr(ec, _))
+      val argsEq: List[SystemV[Unit]] =
+        subnode.params.zip(argsT).map { (param,argT) =>
+          for
+            argE  <- argT
+            paramE = compound.qid(system.Prefix.row(names.Ref(List(v), param)))
+            eq     = compound.funapp("=", paramE, argE)
+            _     <- SystemV.step(eq)
+          yield ()
+        }.toList
 
-      val argsEq = subnode.params.zip(argsT).map { (param, argT) =>
-        argT.bind { (state, row, stateX, argV) =>
-          val p = compound.qid(row(names.Ref(List(v), param)))
-          (compound.funapp("=", p, argV), ())
-        }
-      }
+      def pfx(p: names.Prefix) = names.Prefix(p.prefix :+ v)
 
-      val subnodeT = new System[Unit]:
-        override def state: Namespace = names.Namespace.nest(v, subsystem.state)
-        override def row: Namespace = names.Namespace.nest(v, subsystem.row)
-        override def init(stateP: names.Prefix): Terms.Term =
-          val argsV = subsystem.paramsOfNamespace(stateP, state).map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
-          Terms.FunctionApplication(subsystem.init.name, argsV)
-        def step(stateP: names.Prefix, rowP: names.Prefix, stateXP: names.Prefix) =
-          val argsV =
-            subsystem.paramsOfNamespace(stateP, state) ++
-            subsystem.paramsOfNamespace(rowP, row) ++
-            subsystem.paramsOfNamespace(stateXP, state)
-          val argsT = argsV.map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
-          val stepT = Terms.FunctionApplication(subsystem.step.name, argsT)
-          (stepT, ())
+      // Get all of the subnode's judgments. Contract requires become
+      // obligations at the use-site. Other judgments become assumptions
+      // here as they've been proven in the subnode itself.
+      // Should all local properties bubble up? What about sorries?
+      // TODO: UNSOUND: rewrite assumptions to sofar(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
+      // TODO: TOMORROW: check rewrite ok
+      def pfxR(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.prefix, r.name)
+      val subjudg =
+        for j <- subsystem.system.assumptions ++ subsystem.system.obligations
+        yield SystemJudgment(j.hypotheses.map(pfxR), pfxR(j.consequent), j.judgment)
+      val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
 
-        // Get all of the subnode's judgments. Contract requires become
-        // obligations at the use-site. Other judgments become assumptions
-        // here as they've been proven in the subnode itself.
-        // Should all local properties bubble up? What about sorries?
-        // TODO: UNSOUND: rewrite assumptions to sofar(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
-        def pfx(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.prefix, r.name)
-        val subjudg = (subsystem.assumptions ++ subsystem.obligations).map(j => SolverJudgment(pfx(j.row), j.judgment))
-        val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
-        override def assumptions: List[SolverJudgment] = asms
-        override def obligations: List[SolverJudgment] = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire)))
+      val subnodeT = System(
+        state = names.Namespace.nest(v, subsystem.system.state),
+        row   = names.Namespace.nest(v, subsystem.system.row),
+        init  =
+          val argsV = subsystem.initP(pfx(system.Prefix.state))
+              .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
+          Terms.FunctionApplication(subsystem.initI, argsV),
+        step =
+          val argsV = subsystem.stepP(pfx(system.Prefix.state), pfx(system.Prefix.row), pfx(system.Prefix.stateX))
+              .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
+          Terms.FunctionApplication(subsystem.stepI, argsV),
+        assumptions = asms,
+        obligations = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire))))
 
-      System.conjoin(subnodeT :: argsEq.toList)
+      SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
     case nest: builder.Binding.Nested =>
       nested(context, node, Some(init), nest)
 
-  def expr(context: ExpContext, exp: Exp): System[Terms.Term] = exp match
+  /** Translate a streaming expression to a system. */
+  def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
     case Exp.flow.Arrow(_, first, later) =>
-      val st = System.state(context.init, Sort.Bool)
-      val t0 = expr(context, first)
-      val t1 = expr(context, later)
-      (st <&> (t0 <&> t1)).map { case (init, (first, later)) =>
-        compound.ite(init, first, later)
-      }
+      for
+        st  <- SystemV.state(context.init, Sort.Bool)
+        fst <- expr(context, first)
+        ltr <- expr(context, later)
+      yield compound.ite(st, fst, ltr)
 
     case Exp.flow.Pre(sort, pre) =>
-      val t0 = expr(context, pre)
-      val ref = context.supply.freshRef(names.ComponentSymbol.PRE, forceIndex = true)
-      val tinit = new System[Unit]:
-        override def state: Namespace = names.Namespace.fromRef[Sort](ref, sort)
-        override def init(state: names.Prefix): Terms.Term =
-          compound.bool(true)
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-          (compound.bool(true), ())
+      val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
+      val tstep =
+        for
+          v  <- expr(context, pre)
+          st <- SystemV.stateX(ref, sort)
+        yield compound.funapp("=", st, v)
 
-      t0.bind { (state, row, stateX, v) =>
-        (compound.funapp("=", compound.qid(stateX(ref)), v),
-        compound.qid(state(ref)))
-      } <<*> tinit
+      SystemV.state(ref, sort) <&& SystemV.step(tstep)
 
     case Exp.flow.Fby(sort, v0, pre) =>
-      val t0 = expr(context, pre)
-      val ref = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
-      val tinit = new System[Unit]:
-        override def state: Namespace = names.Namespace.fromRef[Sort](ref, sort)
-        override def init(state: names.Prefix): Terms.Term =
-          compound.funapp("=", compound.qid(state(ref)), value(v0))
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-          (compound.bool(true), ())
-      t0.bind { (state, row, stateX, v) =>
-        (compound.funapp("=", compound.qid(stateX(ref)), v),
-        compound.qid(state(ref)))
-      } <<*> tinit
+      val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
+      val tinit =
+        for
+          st <- SystemV.state(ref, sort)
+        yield compound.funapp("=", st, value(v0))
+      val tstep =
+        for
+          v  <- expr(context, pre)
+          st <- SystemV.stateX(ref, sort)
+        yield compound.funapp("=", st, v)
 
-    case Exp.Val(_, v) => System.pure(value(v))
+      SystemV.state(ref, sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
+
+    case Exp.Val(_, v) =>
+      SystemV.pure(value(v))
+
     case Exp.Var(sort, v) =>
       val ref = context.stripRef(v)
       // TODO HACK: should take a context describing which variables are in state and which are in row
       val rowVariable = ref.name.symbol != names.ComponentSymbol.INIT
 
       if (rowVariable)
-        System.row(ref, sort)
+        SystemV.row(ref, sort)
       else
-        System.state(ref, sort)
+        SystemV.state(ref, sort)
 
     case Exp.App(sort, prim, args : _*) =>
       require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
         "TODO: division for bitvectors has weird semantics in SMT-lib, need to wrap division to get consistent div-by-zero behaviour")
 
-      val zeroS = System.pure(List[Terms.Term]())
-      val argsS = args.foldLeft(zeroS) { case (collectS, arg) =>
-        collectS.ap2(expr(context, arg)) { _ :+ _ }
-      }
-
-      argsS.map { argsT =>
-        compound.funapp(prim.pprString, argsT : _*)
-      }
-
+      for
+        targs <- SystemV.conjoin(args.map(expr(context, _)))
+      yield compound.funapp(prim.pprString, targs : _*)

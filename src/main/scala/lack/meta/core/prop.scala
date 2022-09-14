@@ -34,7 +34,7 @@ object prop:
     case Generated
 
   case class Judgment(name: String, term: Exp, form: Form) extends pretty.Pretty:
-    def ppr = pretty.value(form) <+> pretty.text(name) <> pretty.colon <+> pretty.indent(term.ppr)
+    def ppr = pretty.value(form) <> pretty.parens(pretty.text(name)) <> pretty.colon <+> pretty.indent(term.ppr)
 
     def isObligation: Boolean = form match
       case Form.Require => false

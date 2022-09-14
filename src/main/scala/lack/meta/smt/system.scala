@@ -19,147 +19,335 @@ import scala.collection.mutable
 object system:
 
   object Prefix:
+    /** Namespace prefix for variables in starting state. */
     val state  = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("state"), None)))
+    /** Namespace prefix for variables in successor (neXt) state. */
     val stateX = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("stateX"), None)))
+    /** Namespace prefix for variables in row (non-state variables). */
     val row    = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("row"), None)))
 
   type Namespace = names.Namespace[Sort]
 
-  trait System[T]:
-    def state: Namespace =
-      names.Namespace()
-    def row: Namespace =
-      names.Namespace()
-    def init(state: names.Prefix): Terms.Term =
-      compound.bool(true)
-    def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, T)
-    def assumptions: List[SolverJudgment] = List()
-    def obligations: List[SolverJudgment] = List()
+  /** A definition of a transition system in SMT-lib format.
+   *
+   * The main reason that this uses SMT-lib terms rather than core expressions
+   * is that the systems need to be able to call init and step functions for
+   * the subsystems, as well as defining local let bindings. It might be worth
+   * defining a small core with these so that we can evaluate systems directly.
+   *
+   * @param state
+   *  The types of the state variables used by the transition system. These
+   *  variables describe the internal state of the system and aren't usually
+   *  directly visible to the programmer.
+   * @param row
+   *  The "row" contains the types of all of the user-visible variables. This
+   *  includes input variables that have no definition, as well as user-defined
+   *  variables, and compiler-generated variables.
+   *  We include input variables in here because it makes it a bit easier to
+   *  compose systems together, and the SMT solver doesn't even really care
+   *  whether a variable is an input or not. If we had a pipeline like:
+   *  > f . g
+   *  > where
+   *  >  f(x) = x * 2
+   *  >  g(y) = y + 1
+   *  then the translation for the `f` node would have an input variable `x`
+   *  but when we composed the two nodes it together, we'd have to make `x`
+   *  a non-input.
+   *  On the other hand, distinguishing between stateful variables and pure row
+   *  variables is useful for, say, path compression.
+   * @param init
+   *  An SMT-lib term describing the set of allowed initial states. This term
+   *  can refer to the state variables with the prefix Prefix.state. It should
+   *  have sort Bool.
+   * @param step
+   *  An SMT-lib term describing the three-way relation between starting state,
+   *  its row values (eg inputs and outputs), and the successor state. This
+   *  term may refer to the state variables with prefix Prefix.state, the row
+   *  variables with prefix Prefix.row, and the successor state variables with
+   *  prefix Prefix.stateX. It should have sort Bool.
+   * @param assumptions
+   *  Properties that the system can assume to be true.
+   * @param obligations
+   *  Proof obligations, or properties that we want the system to have.
+   */
+  case class System(
+    state: Namespace = names.Namespace(),
+    row: Namespace = names.Namespace(),
+    init: Terms.Term = compound.bool(true),
+    step: Terms.Term = compound.bool(true),
+    assumptions: List[SystemJudgment] = List(),
+    obligations: List[SystemJudgment] = List())
+  extends pretty.Pretty:
+    def ppr =
+      pretty.subgroup("State:", List(state.ppr)) <>
+      pretty.subgroup("Row:", List(row.ppr)) <>
+      pretty.subgroup("Init:", List(pretty.string(lack.meta.smt.solver.pprTermBigAnd(init)))) <>
+      pretty.subgroup("Step:", List(pretty.string(lack.meta.smt.solver.pprTermBigAnd(step)))) <>
+      pretty.subgroup("Assumptions:", assumptions.map(_.ppr)) <>
+      pretty.subgroup("Obligations:", obligations.map(_.ppr))
+
+    /** Parallel composition of systems. */
+    def <>(that: System) = System(
+      state = this.state <> that.state,
+      row   = this.row <> that.row,
+      init  = compound.and(this.init, that.init),
+      step  = compound.and(this.step, that.step),
+      assumptions = this.assumptions ++ that.assumptions,
+      obligations = this.obligations ++ that.obligations)
+
+    /** Slow the clock of a system, so it only steps when the boolean
+     * expression `klock` is true.
+     */
+    def when(klock: Terms.Term): System =
+      val allSame =
+        for s <- state.refs(names.Prefix(List()))
+        yield compound.funapp("=",
+          compound.qid(system.Prefix.state(s)),
+          compound.qid(system.Prefix.stateX(s)))
+      val stay = compound.and(allSame.toSeq : _*)
+
+      System(
+        state = this.state,
+        row   = this.row,
+        init  = this.init,
+        step  = compound.ite(klock, this.step, stay),
+        assumptions = this.assumptions,
+        obligations = this.obligations)
+
+    /** Reset a system whenever boolean expression `klock` is true.
+     * Fresh is a fresh name such that row.fresh is not used.
+     */
+    def reset(fresh: names.Component, klock: Terms.Term): System =
+      // We really want to existentially quantify over the reset states, so
+      // we sneak a version of the state into the row variables under 'fresh'.
+      val nestStateN = names.Namespace.nest(fresh, this.state)
+      val stateR = names.Prefix(Prefix.row.prefix :+ fresh)
+
+      // step[state := row.fresh]
+      // XXX: hacky substitution.
+      // Why is this necessary at all? I think having the state as a 'namespace'
+      // rather than just a set of variables was a mistake because it makes
+      // it harder to just rename all of the state variables.
+      val substOld = Prefix.state.pprString + "."
+      val substNew = stateR.pprString + "."
+
+      def subst(t: Terms.Term): Terms.Term = t match
+        // TODO: Let, Forall, Exists
+        case Terms.QualifiedIdentifier(id, sort) =>
+          val str = id.symbol.name
+          val idx =
+            if str.startsWith(substOld) then
+              substNew + str.drop(substOld.length)
+            else
+              str
+          val sym = Terms.SSymbol(idx)
+          Terms.QualifiedIdentifier(id.copy(symbol = sym), sort)
+        case Terms.AnnotatedTerm(tt, attr, attrs) =>
+          Terms.AnnotatedTerm(subst(tt), attr, attrs)
+        case Terms.FunctionApplication(fun, terms) =>
+          Terms.FunctionApplication(fun, terms.map(subst))
+        case _ : Terms.Constant => t
+
+      val initSubst = subst(this.init)
+      val stepSubst = subst(this.step)
+
+      val allSame =
+        for s <- state.refs(names.Prefix(List()))
+        yield compound.funapp("=",
+          compound.qid(Prefix.state(s)),
+          compound.qid(stateR(s)))
+      val noReset = compound.and(allSame.toSeq : _*)
+      val yeReset = initSubst
+      val step    = compound.and(
+        compound.ite(klock, yeReset, noReset),
+        stepSubst)
+
+      System(
+        state = this.state,
+        row   = this.row <> nestStateN,
+        init  = this.init,
+        step  = step,
+        assumptions = this.assumptions,
+        obligations = this.obligations)
+
 
   object System:
-    def pure[T](value: T): System[T] = new System[T]:
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-        (compound.bool(true), value)
+    val empty: System = System()
 
-    def state(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
-      override def state: Namespace = names.Namespace.fromRef(ref, sort)
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-        (compound.bool(true), compound.qid(state(ref)))
+    def state(ref: names.Ref, sort: Sort): System =
+      System(state = names.Namespace.fromRef(ref, sort))
 
-    def stateX(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
-      override def state: Namespace = names.Namespace.fromRef(ref, sort)
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-        (compound.bool(true), compound.qid(stateX(ref)))
+    def row(ref: names.Ref, sort: Sort): System =
+      System(row = names.Namespace.fromRef(ref, sort))
 
-    def row(ref: names.Ref, sort: Sort): System[Terms.Term] = new System:
-      override def row: Namespace = names.Namespace.fromRef(ref, sort)
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix) =
-        (compound.bool(true), compound.qid(row(ref)))
+    def conjoin(systems: Seq[System]): System =
+      systems.fold(System.empty)(_ <> _)
 
-    def conjoin(systems: Seq[System[Unit]]): System[Unit] =
-      systems.fold(System.pure(()))(_ <<*> _)
+    /** Add an assertion to the step relation.
+     * The given term may refer to state variables prefixed by Prefix.state
+     * or Prefix.stateX, or row variables prefixed by Prefix.row.
+     * Any state or row variables should be declared separately with
+     * System.state or System.row.
+     */
+    def step(term: Terms.Term): System =
+      System(step = term)
 
-  extension[T,U] (outer: System[T => U])
-    def <*>(that: System[T]): System[U] = new System[U]:
-      override def state: Namespace = outer.state <> that.state
-      override def row: Namespace = outer.row <> that.row
-      override def init(state: names.Prefix): Terms.Term =
-        compound.and(
-          outer.init(state),
-          that.init(state))
-      def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, U) =
-        val (xf, f) = outer.step(state, row, stateX)
-        val (xt, t) = that.step(state, row, stateX)
-        (compound.and(xf, xt), f(t))
-      override def assumptions: List[SolverJudgment] = outer.assumptions ++ that.assumptions
-      override def obligations: List[SolverJudgment] = outer.obligations ++ that.obligations
+    /** Add an assertion to the init predicate.
+     * The given term may refer to state variables prefixed by Prefix.state.
+     * State variables should be declared separately with System.state.
+     */
+    def init(term: Terms.Term): System =
+      System(init = term)
 
-  extension[T] (outer: System[T])
-    /** join two systems */
-    def ap2[U, V](that: System[U])(f: (T, U) => V): System[V] =
-      System.pure((t: T) => (u: U) => f(t,u)) <*> outer <*> that
+  /** A transition system and some associated value.
+   * The value could be an SMT-lib term that refers to state or row variables.
+   */
+  case class SystemV[T](system: System, value: T):
+    def flatMap[U](f: T => SystemV[U]): SystemV[U] =
+      val ts = f(value)
+      SystemV(this.system <> ts.system, ts.value)
 
-    /** join two systems, tupling the values together */
-    def <&>[U](that: System[U]): System[(T,U)] =
+    def map[U](f: T => U): SystemV[U] =
+      flatMap(t => SystemV.pure(f(t)))
+
+    def when(klock: Terms.Term): SystemV[T] =
+      SystemV(this.system.when(klock), this.value)
+
+    def reset(fresh: names.Component, klock: Terms.Term): SystemV[T] =
+      SystemV(this.system.reset(fresh, klock), this.value)
+
+  object SystemV:
+    def pure[T](value: T): SystemV[T] = SystemV(System.empty, value)
+
+    def state(ref: names.Ref, sort: Sort): SystemV[Terms.Term] =
+      SystemV(System.state(ref, sort), compound.qid(Prefix.state(ref)))
+
+    def stateX(ref: names.Ref, sort: Sort): SystemV[Terms.Term] =
+      SystemV(System.state(ref, sort), compound.qid(Prefix.stateX(ref)))
+
+    def row(ref: names.Ref, sort: Sort): SystemV[Terms.Term] =
+      SystemV(System.row(ref, sort), compound.qid(Prefix.row(ref)))
+
+    def conjoin[T](systems: Seq[SystemV[T]]): SystemV[Seq[T]] =
+      SystemV(System.conjoin(systems.map(_.system)), systems.map(_.value))
+
+    def init(cond: Terms.Term): SystemV[Unit] =
+      SystemV(System.init(cond), ())
+
+    def init(cond: SystemV[Terms.Term]): SystemV[Unit] =
+      for
+        c <- cond
+        _ <- init(c)
+      yield ()
+
+    def step(cond: Terms.Term): SystemV[Unit] =
+      SystemV(System.step(cond), ())
+
+    def step(cond: SystemV[Terms.Term]): SystemV[Unit] =
+      for
+        c <- cond
+        _ <- step(c)
+      yield ()
+
+  extension[T,U] (outer: SystemV[T => U])
+    /** Applicative functor for valued systems. */
+    def <*>(that: SystemV[T]): SystemV[U] =
+      for
+        f <- outer
+        t <- that
+      yield f(t)
+
+  extension[T] (outer: SystemV[T])
+    /** Join two systems with given function. */
+    def ap2[U, V](that: SystemV[U])(f: (T, U) => V): SystemV[V] =
+      for
+        u <- outer
+        v <- that
+      yield f(u, v)
+
+    /** Join two systems, tupling the values together. */
+    def <&>[U](that: SystemV[U]): SystemV[(T,U)] =
       ap2(that)((_,_))
 
-    /** join two systems, taking the first value */
-    def <<*>[U](that: System[U]): System[T] =
+    /** Join two systems, taking the first value as well as any constraints
+     * and variable definitions from the second. */
+    def <&&[U](that: SystemV[U]): SystemV[T] =
       ap2(that)((t,u) => t)
 
-    def map[U](f: T => U): System[U] =
-      System.pure(f) <*> outer
-
-    // XXX: can't implement real bind because the "init" and "step" might take different state prefixes...
-    def bind[U](f : (names.Prefix, names.Prefix, names.Prefix, T) => (Terms.Term, U)): System[U] =
-      new System[U]:
-        override def state: Namespace = outer.state
-        override def row: Namespace = outer.row
-        override def init(state: names.Prefix): Terms.Term =
-          outer.init(state)
-        def step(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): (Terms.Term, U) =
-          val (xt, t) = outer.step(state, row, stateX)
-          val (xu, u) = f(state, row, stateX, t)
-          (compound.and(xt, xu), u)
-        override def assumptions: List[SolverJudgment] = outer.assumptions
-        override def obligations: List[SolverJudgment] = outer.obligations
-
-    def assertStep(f : T => Terms.Term): System[Unit] = bind {
-        (state, row, stateX, t) =>
-          (f(t), ())
-      }
-
-  /** Defined system */
-  case class SolverFunDef(
-    name: Terms.QualifiedIdentifier,
-    body: Terms.Term
-  ) extends pretty.Pretty:
+  /** A judgment with hypotheses.
+   * The hypotheses and consequent refer to row variables excluding the row
+   * prefix. All hypotheses must be true for current and previous steps:
+   * > SoFar(row(hyps_0) and ... and row(hyps_i)) => row(consequent)
+   *
+   * This meaning is different from the bare implication `hyps => consequent`.
+   */
+  case class SystemJudgment(hypotheses: List[names.Ref], consequent: names.Ref, judgment: Judgment) extends pretty.Pretty:
     def ppr =
-      // LODO add nice pretty-printing to solver expressions
-      pretty.string(s"${name} = ${lack.meta.smt.solver.pprTermBigAnd(body)}")
+      val hyp = hypotheses match
+        case Nil => pretty.emptyDoc
+        case hs  => pretty.text("SoFar") <>
+          pretty.parens(pretty.ssep(hs.map(_.ppr), pretty.text(" and "))) <>
+          pretty.text(" => ")
 
-    def fundef(params: List[Terms.SortedVar]): Commands.FunDef =
-      Commands.FunDef(name.id.symbol, params, translate.sort(Sort.Bool), body)
+      pretty.value(judgment.form) <>
+        pretty.parens(pretty.value(judgment.name)) <+>
+        pretty.equal <+>
+        hyp <> consequent.ppr
 
-  case class SolverJudgment(row: names.Ref, judgment: Judgment) extends pretty.Pretty:
-    def ppr = row.ppr <+> pretty.equal <+> judgment.ppr
-
-  case class SolverNode(
+  /** A system for a node */
+  case class Node(
     path: List[names.Component],
-    state: Namespace,
-    row: Namespace,
     params: List[names.Ref],
-    init: SolverFunDef,
-    step: SolverFunDef,
-    assumptions: List[SolverJudgment],
-    obligations: List[SolverJudgment]
+    system: System
   ) extends pretty.Pretty:
     def ppr =
-      pretty.text("System") <+> names.Prefix(path).ppr <@>
-        pretty.subgroup("State:", List(state.ppr)) <>
-        pretty.subgroup("Row:", List(row.ppr)) <>
-        pretty.subgroup("Params:", List(pretty.csep(params.map(_.ppr)))) <>
-        pretty.subgroup("Init:", List(init.ppr)) <>
-        pretty.subgroup("Step:", List(step.ppr)) <>
-        pretty.subgroup("Assumptions:", assumptions.map(_.ppr)) <>
-        pretty.subgroup("Obligations:", obligations.map(_.ppr))
+      pretty.text("Node") <+> names.Prefix(path).ppr <>
+        pretty.parens(pretty.csep(params.map(_.ppr))) <>
+        pretty.nest(pretty.line <> system.ppr)
 
+    /** Convert namespace to list of SMT-lib parameters */
     def paramsOfNamespace(prefix: names.Prefix, ns: Namespace): List[Terms.SortedVar] =
       val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(names.Ref(List(), v))).id.symbol, translate.sort(s)))
       val nsX = ns.namespaces.toList.flatMap((v,n) => paramsOfNamespace(names.Prefix(prefix.prefix :+ v), n))
       vs ++ nsX
 
+    private def nm(i: String): names.Ref =
+      names.Ref(path, names.Component(names.ComponentSymbol.fromScalaSymbol(i), None))
+
+    /** Qualified identifier of init function. */
+    val initI      = compound.qid(nm("init"))
+    /** Qualified identifier of step function. */
+    val stepI      = compound.qid(nm("step"))
+
+    /** Parameters for init function. */
+    def initP(state: names.Prefix): List[Terms.SortedVar] =
+      paramsOfNamespace(state, system.state)
+
+    /** Parameters for step function. */
+    def stepP(state: names.Prefix, row: names.Prefix, stateX: names.Prefix): List[Terms.SortedVar] =
+      paramsOfNamespace(state,  system.state) ++
+      paramsOfNamespace(row,    system.row) ++
+      paramsOfNamespace(stateX, system.state)
+
+    /** Function definition for init function. */
+    val initD = Commands.FunDef(
+      initI.id.symbol,
+      initP(Prefix.state),
+      translate.sort(Sort.Bool),
+      system.init)
+    /** Function definition for step function. */
+    val stepD = Commands.FunDef(
+      stepI.id.symbol,
+      stepP(Prefix.state, Prefix.row, Prefix.stateX),
+      translate.sort(Sort.Bool),
+      system.step)
+
+    /** Function definition for step function. */
     def fundefs: List[Commands.DefineFun] =
-      val statePs  = paramsOfNamespace(Prefix.state,  state)
-      val stateXPs = paramsOfNamespace(Prefix.stateX, state)
-      val rowPs    = paramsOfNamespace(Prefix.row,    row)
+      List(Commands.DefineFun(initD), Commands.DefineFun(stepD))
 
-      val initF    = init.fundef(statePs)
-      val stepF    = step.fundef(statePs ++ rowPs ++ stateXPs)
-
-      List(Commands.DefineFun(initF), Commands.DefineFun(stepF))
-
-  case class SolverSystem(nodes: List[SolverNode], top: SolverNode) extends pretty.Pretty:
+  /** A top-level system with subnodes. */
+  case class Top(nodes: List[Node], top: Node) extends pretty.Pretty:
     def fundefs: List[Commands.DefineFun] = nodes.flatMap(_.fundefs)
 
     def ppr = pretty.vsep(nodes.map(_.ppr))
