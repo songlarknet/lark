@@ -10,7 +10,7 @@ import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.solver.Solver
-import lack.meta.smt.solver.compound
+import lack.meta.smt.term.compound
 import lack.meta.smt.system
 import lack.meta.smt.system.{System, SystemV, SystemJudgment, Namespace}
 import smtlib.trees.{Commands, CommandsResponses, Terms}
@@ -158,18 +158,31 @@ object translate:
         }.toList
 
       def pfx(p: names.Prefix) = names.Prefix(p.prefix :+ v)
+      def pfxR(r: names.Ref) = names.Ref(List(v) ++ r.prefix, r.name)
 
       // Get all of the subnode's judgments. Contract requires become
       // obligations at the use-site. Other judgments become assumptions
       // here as they've been proven in the subnode itself.
       // Should all local properties bubble up? What about sorries?
-      // TODO: UNSOUND: rewrite assumptions to sofar(/\ reqs) => asms. This shouldn't matter for nodes without contracts.
-      // TODO: TOMORROW: check rewrite ok
-      def pfxR(r: names.Ref): names.Ref = names.Ref(List(v) ++ r.prefix, r.name)
       val subjudg =
         for j <- subsystem.system.assumptions ++ subsystem.system.obligations
         yield SystemJudgment(j.hypotheses.map(pfxR), pfxR(j.consequent), j.judgment)
-      val (reqs, asms) = subjudg.partition(j => j.judgment.form == lack.meta.core.prop.Form.Require)
+      val (reqs, asms) =
+        subjudg.partition(_.judgment.form == lack.meta.core.prop.Form.Require)
+      // Contract requires become local SubnodeRequire obligations, so that the
+      // caller's caller won't find the sub-requires as an obligation.
+      val reqsX = reqs.map { j =>
+        j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire))
+      }
+      // The assumptions only hold if the requirements are always true, so we
+      // rewrite each assumption to `SoFar(/\ reqs) => asm`.
+      // HACK: ignore the requirements' hypotheses. This is sound because we're
+      // just making the assumption hypotheses stricter, but prove it or clean
+      // it up. Maybe this transform should move to translate.node.
+      val reqsHypotheses = reqsX.map(_.consequent)
+      val asmsX = asms.map { j =>
+        j.copy(hypotheses = j.hypotheses ++ reqsHypotheses)
+      }
 
       val subnodeT = System(
         state = names.Namespace.nest(v, subsystem.system.state),
@@ -182,8 +195,8 @@ object translate:
           val argsV = subsystem.stepP(pfx(system.Prefix.state), pfx(system.Prefix.row), pfx(system.Prefix.stateX))
               .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
           Terms.FunctionApplication(subsystem.stepI, argsV),
-        assumptions = asms,
-        obligations = reqs.map(j => j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire))))
+        assumptions = asmsX,
+        obligations = reqsX)
 
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
@@ -228,7 +241,7 @@ object translate:
 
     case Exp.Var(sort, v) =>
       val ref = context.stripRef(v)
-      // TODO HACK: should take a context describing which variables are in state and which are in row
+      // HACK: should take a context describing which variables are in state and which are in row
       val rowVariable = ref.name.symbol != names.ComponentSymbol.INIT
 
       if (rowVariable)

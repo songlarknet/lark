@@ -1,6 +1,6 @@
 package lack.meta.smt
 
-import lack.meta.base.{names, num}
+import lack.meta.smt.term.compound
 import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
@@ -18,88 +18,6 @@ object solver:
         "--produce-models",
         "--print-success"),
       tailPrinter = true)
-
-
-  /** Hack: pretty-print expression with each top-level 'and' clause on a
-   * separate line. This is slightly easier to read, but I should make a nicer
-   * pretty-printer.
-   */
-  def pprTermBigAnd(t: Terms.Term): String = t match
-    case Terms.FunctionApplication(f, args) if f.id.symbol.name == "and" =>
-      val xs = args.map(x => s"    ${x}").mkString("\n")
-      s"(and\n$xs)"
-    case _ => t.toString
-
-  object compound:
-    def sym(s: String) =
-      Terms.SSymbol(s)
-    def id(s: String) =
-      Terms.Identifier(sym(s))
-
-    def qid(s: String, sort: Terms.Sort): Terms.QualifiedIdentifier =
-      Terms.QualifiedIdentifier(id(s), Some(sort))
-    def qid(s: String): Terms.QualifiedIdentifier =
-      Terms.QualifiedIdentifier(id(s))
-
-    def qid(s: names.Ref, sort: Terms.Sort): Terms.QualifiedIdentifier =
-      qid(s.pprString, sort)
-    def qid(s: names.Ref): Terms.QualifiedIdentifier =
-      qid(s.pprString)
-
-    def funapp(f: String, args: Terms.Term*) = (f, args.toList) match
-      case ("ite", List(p, t, f)) => ite(p, t, f)
-      case ("and", args) => and(args : _*)
-      case ("or", args) => or(args : _*)
-      case _ => funappNoSimp(f, args.toList)
-
-    def funappNoSimp(f: String, args: List[Terms.Term]) = Terms.FunctionApplication(qid(f), args)
-
-    def and(args: Terms.Term*) =
-      def go(t: Terms.Term): Seq[Terms.Term] = t match
-        case Terms.QualifiedIdentifier(ti, _)
-         if ti.symbol.name == "true" => Seq()
-        case Terms.FunctionApplication(qi, args)
-          if qi.id.symbol.name == "and" => args.flatMap(go)
-        case _ => Seq(t)
-
-      val argsX = args.flatMap(go)
-      argsX match
-        case Seq() => bool(true)
-        case Seq(i) => i
-        case _ => funappNoSimp("and", argsX.toList)
-
-    def or(args: Terms.Term*) =
-      def go(t: Terms.Term): Seq[Terms.Term] = t match
-        case Terms.QualifiedIdentifier(ti, _)
-         if ti.symbol.name == "false" => Seq()
-        case Terms.FunctionApplication(qi, args)
-          if qi.id.symbol.name == "or" => args.flatMap(go)
-        case _ => Seq(t)
-
-      val argsX = args.flatMap(go)
-      argsX match
-        case Seq() => bool(false)
-        case Seq(i) => i
-        case _ => funappNoSimp("or", argsX.toList)
-
-    def ite(p: Terms.Term, t: Terms.Term, f: Terms.Term) = p match
-      case Terms.QualifiedIdentifier(ti, _)
-        if ti.symbol.name == "true" => t
-      case Terms.QualifiedIdentifier(ti, _)
-        if ti.symbol.name == "false" => f
-      case _ => funappNoSimp("ite", List(p, t, f))
-
-    def int(i: num.Integer) =
-      // cvc5 barfs on negative integers. Is this standards-compliant?
-      if (i >= 0)
-        Terms.SNumeral(i)
-      else
-        funappNoSimp("-", List(Terms.SNumeral(- i)))
-
-    def real(f: Float) =
-      Terms.SDecimal(BigDecimal.decimal(f))
-
-    def bool(b: Boolean) = qid(b.toString)
 
   class Solver(interpreter: Interpreter, verbose: Boolean):
     var fresh: Int = 0

@@ -67,7 +67,6 @@ object sort:
     case object Mod64 extends Mod(64)
 
     /** IEEE754 floating-point number, single precision */
-    // XXX: do we want real arithmetic or IEEE754? Should they be different types?
     case object Float32 extends Sort:
       def ppr = pretty.text("Float32")
 

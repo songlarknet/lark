@@ -8,7 +8,7 @@ import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.solver.Solver
-import lack.meta.smt.solver.compound
+import lack.meta.smt.term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 

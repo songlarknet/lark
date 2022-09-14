@@ -10,7 +10,7 @@ import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.solver.Solver
-import lack.meta.smt.solver.compound
+import lack.meta.smt.term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
@@ -81,8 +81,8 @@ object system:
     def ppr =
       pretty.subgroup("State:", List(state.ppr)) <>
       pretty.subgroup("Row:", List(row.ppr)) <>
-      pretty.subgroup("Init:", List(pretty.string(lack.meta.smt.solver.pprTermBigAnd(init)))) <>
-      pretty.subgroup("Step:", List(pretty.string(lack.meta.smt.solver.pprTermBigAnd(step)))) <>
+      pretty.subgroup("Init:", List(pretty.string(term.pprTermBigAnd(init)))) <>
+      pretty.subgroup("Step:", List(pretty.string(term.pprTermBigAnd(step)))) <>
       pretty.subgroup("Assumptions:", assumptions.map(_.ppr)) <>
       pretty.subgroup("Obligations:", obligations.map(_.ppr))
 
@@ -118,55 +118,38 @@ object system:
      * Fresh is a fresh name such that row.fresh is not used.
      */
     def reset(fresh: names.Component, klock: Terms.Term): System =
+      // We want to call the subsystem's step function with a starting state of
+      // either the actual current state, or the initial state if we are
+      // resetting.
+      // To do this we allocate a fresh copy of the state, stateR, and call the
+      // subsystem's step with step(stateR, row, stateX). When we are resetting
+      // we set stateR to the initial state. When we are not resetting, we set
+      // stateR to the starting state (`state`).
+
       // We really want to existentially quantify over the reset states, so
       // we sneak a version of the state into the row variables under 'fresh'.
       val nestStateN = names.Namespace.nest(fresh, this.state)
-      val stateR = names.Prefix(Prefix.row.prefix :+ fresh)
+      val stateR     = names.Prefix(Prefix.row.prefix :+ fresh)
 
-      // step[state := row.fresh]
-      // XXX: hacky substitution.
-      // Why is this necessary at all? I think having the state as a 'namespace'
-      // rather than just a set of variables was a mistake because it makes
-      // it harder to just rename all of the state variables.
-      val substOld = Prefix.state.pprString + "."
-      val substNew = stateR.pprString + "."
+      // Substitute variable prefix `state` to refer to fresh prefix `stateR`.
+      val initSubst  = term.renamePrefix(Prefix.state, stateR, this.init)
+      val stepSubst  = term.renamePrefix(Prefix.state, stateR, this.step)
 
-      def subst(t: Terms.Term): Terms.Term = t match
-        // TODO: Let, Forall, Exists
-        case Terms.QualifiedIdentifier(id, sort) =>
-          val str = id.symbol.name
-          val idx =
-            if str.startsWith(substOld) then
-              substNew + str.drop(substOld.length)
-            else
-              str
-          val sym = Terms.SSymbol(idx)
-          Terms.QualifiedIdentifier(id.copy(symbol = sym), sort)
-        case Terms.AnnotatedTerm(tt, attr, attrs) =>
-          Terms.AnnotatedTerm(subst(tt), attr, attrs)
-        case Terms.FunctionApplication(fun, terms) =>
-          Terms.FunctionApplication(fun, terms.map(subst))
-        case _ : Terms.Constant => t
-
-      val initSubst = subst(this.init)
-      val stepSubst = subst(this.step)
-
-      val allSame =
+      val allSame    =
         for s <- state.refs(names.Prefix(List()))
         yield compound.funapp("=",
           compound.qid(Prefix.state(s)),
           compound.qid(stateR(s)))
-      val noReset = compound.and(allSame.toSeq : _*)
-      val yeReset = initSubst
-      val step    = compound.and(
-        compound.ite(klock, yeReset, noReset),
-        stepSubst)
+      val noReset    = compound.and(allSame.toSeq : _*)
+      val yeReset    = initSubst
 
       System(
         state = this.state,
         row   = this.row <> nestStateN,
         init  = this.init,
-        step  = step,
+        step  = compound.and(
+          compound.ite(klock, yeReset, noReset),
+          stepSubst),
         assumptions = this.assumptions,
         obligations = this.obligations)
 
