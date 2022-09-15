@@ -98,15 +98,27 @@ object check:
     val call = Terms.FunctionApplication(fun, argsT)
     solver.assert(call)
 
-  def asserts(props: List[system.SystemJudgment], row: names.Prefix, solver: Solver): Unit =
-    // TODO hypotheses
+  /** Translate a judgment into an SMT-lib term at a given step. */
+  def judgmentTerm(judgment: system.SystemJudgment, step: Int): Terms.Term =
+    // The judgment is of form `SoFar(hypotheses) => consequent`, so we
+    // add the precondition that all of the hypotheses are true at all steps
+    // up to and including now.
+    // HACK: is this legit? are we missing the state for SoFar(hypotheses)? Prove it or fix it.
+    val antecedents =
+      for i <- 0 to step
+          h <- judgment.hypotheses
+      yield compound.qid(rowPrefix(i)(h))
+    compound.implies(
+      compound.and(antecedents : _*),
+      compound.qid(rowPrefix(step)(judgment.consequent)))
+
+  def asserts(props: List[system.SystemJudgment], step: Int, solver: Solver): Unit =
     props.foreach { prop =>
-      solver.assert( compound.qid(row(prop.consequent)) )
+      solver.assert( judgmentTerm(prop, step) )
     }
 
-  def disprove(props: List[system.SystemJudgment], row: names.Prefix): Terms.Term =
-    // TODO hypotheses
-    val propsT = props.map(p => compound.funapp("not", compound.qid(row(p.consequent))))
+  def disprove(props: List[system.SystemJudgment], step: Int): Terms.Term =
+    val propsT = props.map(p => compound.funapp("not", judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
   def checkMany(top: Node, count: Int, solver: () => Solver): Unit =
@@ -182,7 +194,7 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, step, solver)
 
       solver.checkSat().status match
         case CommandsResponses.UnknownStatus => return CheckFeasible.UnknownAt(step)
@@ -209,9 +221,9 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, step, solver)
 
-      solver.checkSatAssumingX(disprove(top.system.obligations, rowPrefix(step))) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.obligations, step)) { _.status match
         case CommandsResponses.UnknownStatus => return Bmc.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -240,9 +252,9 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, rowPrefix(step), solver)
+      asserts(top.system.assumptions, step, solver)
 
-      solver.checkSatAssumingX(disprove(top.system.obligations, rowPrefix(step))) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.obligations, step)) { _.status match
         case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -250,7 +262,7 @@ object check:
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 
-      asserts(top.system.obligations, rowPrefix(step), solver)
+      asserts(top.system.obligations, step, solver)
     }
 
     Kind.NoGood(count, traces)

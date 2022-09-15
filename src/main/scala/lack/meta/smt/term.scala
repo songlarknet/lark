@@ -85,6 +85,7 @@ object term:
       case ("ite", List(p, t, f)) => ite(p, t, f)
       case ("and", args) => and(args : _*)
       case ("or", args) => or(args : _*)
+      case ("=>", List(ante, con)) => implies(ante, con)
       case _ => funappNoSimp(f, args.toList)
 
     def funappNoSimp(f: String, args: List[Terms.Term]) = Terms.FunctionApplication(qid(f), args)
@@ -117,12 +118,17 @@ object term:
         case Seq(i) => i
         case _ => funappNoSimp("or", argsX.toList)
 
-    def ite(p: Terms.Term, t: Terms.Term, f: Terms.Term) = p match
-      case Terms.QualifiedIdentifier(ti, _)
-        if ti.symbol.name == "true" => t
-      case Terms.QualifiedIdentifier(ti, _)
-        if ti.symbol.name == "false" => f
+    def ite(p: Terms.Term, t: Terms.Term, f: Terms.Term) = take.bool(p) match
+      case Some(true) => t
+      case Some(false) => f
       case _ => funappNoSimp("ite", List(p, t, f))
+
+    def implies(ante: Terms.Term, con: Terms.Term) = (take.bool(ante), take.bool(con)) match
+      case (Some(true), _) => con
+      case (Some(false), _) => bool(true)
+      case (_, Some(true)) => bool(true)
+      case (_, Some(false)) => ante
+      case _ => funappNoSimp("=>", List(ante, con))
 
     def int(i: num.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?
@@ -136,3 +142,11 @@ object term:
 
     def bool(b: Boolean) = qid(b.toString)
 
+
+  object take:
+    def bool(t: Terms.Term): Option[Boolean] = t match
+      case Terms.QualifiedIdentifier(ti, _)
+        if ti.symbol.name == "true" => Some(true)
+      case Terms.QualifiedIdentifier(ti, _)
+        if ti.symbol.name == "false" => Some(false)
+      case _ => None

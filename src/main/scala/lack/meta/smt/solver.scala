@@ -84,7 +84,7 @@ object solver:
       val xactlit = Terms.QualifiedIdentifier(Terms.Identifier(actlit))
       fresh = fresh + 1
       declareConst(actlit, Terms.Sort(compound.id("Bool")))
-      assert(compound.funapp("=>", xactlit, prop))
+      assert(compound.implies(xactlit, prop))
       val sat = command(Commands.CheckSatAssuming(Seq(Commands.PropLiteral(actlit, true))))
       if (sat.isInstanceOf[CommandsResponses.CheckSatStatus])
         val ret = cont(sat.asInstanceOf[CommandsResponses.CheckSatStatus])

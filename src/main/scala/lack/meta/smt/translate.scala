@@ -174,8 +174,8 @@ object translate:
       val reqsX = reqs.map { j =>
         j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire))
       }
-      // The assumptions only hold if the requirements are always true, so we
-      // rewrite each assumption to `SoFar(/\ reqs) => asm`.
+      // The subnode guarantees only hold if the requirements are always true,
+      // so we rewrite each assumption to `SoFar(/\ reqs) => asm`.
       // HACK: ignore the requirements' hypotheses. This is sound because we're
       // just making the assumption hypotheses stricter, but prove it or clean
       // it up. Maybe this transform should move to translate.node.
