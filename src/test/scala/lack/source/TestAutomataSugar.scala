@@ -2,20 +2,17 @@ package lack.source
 
 import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
-import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.smt
 import lack.meta.source.automaton.Automaton
+import lack.meta.source.node.{Builder, Node, NodeInvocation}
+import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
+import lack.meta.driver.check
 
 /** Full-sugar cruise control automaton
  */
 object TestAutomatonSugar:
 
   def main(args: Array[String]): Unit =
-    given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    builder.invoke { new Top(_) }
-    def solver() = smt.solver.gimme(verbose = false)
-    smt.check.checkMany(builder.nodeRef, 2, solver)
+    check.success() { new Top(_) }
 
   class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...

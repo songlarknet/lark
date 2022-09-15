@@ -6,15 +6,12 @@ import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.smt
+import lack.meta.driver.check
 
 object TestLastN:
 
   def main(args: Array[String]): Unit =
-    given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    val lem = LemmaLastN(3)
-    def solver() = smt.solver.gimme(verbose = false)
-    smt.check.checkMany(builder.nodeRef, 4, solver)
+    check.success() { new LemmaLastN(3, _) }
 
   class LemmaLastN(n: Integer, invocation: NodeInvocation) extends Node(invocation):
     val e      = local[Bool]
@@ -26,13 +23,6 @@ object TestLastN:
     property("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
       lastSN.out ==> lastN.out
     }
-
-  object LemmaLastN:
-    def apply(n: Integer)(using builder: Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        invocation.metaarg("n", n)
-        new LemmaLastN(n, invocation)
-      }
 
   class LastN(n: Integer, e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation):
     require(n <= 255)

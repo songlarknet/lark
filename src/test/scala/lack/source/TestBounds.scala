@@ -5,16 +5,12 @@ import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, Int32}
 import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.smt
+import lack.meta.driver.check
 
 object TestBounds:
 
   def main(args: Array[String]): Unit =
-    given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    val bounds = LemmaBounds(3)
-    def solver() = smt.solver.gimme(verbose = false)
-    smt.check.checkMany(builder.nodeRef, 4, solver)
-
+    check.success() { new LemmaBounds(3, _) }
 
   class LemmaBounds(n: Int, invocation: NodeInvocation) extends Node(invocation):
     val human  = local[Int32]
@@ -43,14 +39,6 @@ object TestBounds:
       case 0 => 0
       case 1 => v
       case _ => v + SumN(n - 1, fby(0, v))
-
-  object LemmaBounds:
-    def apply(n: Int)(using builder: Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        invocation.metaarg("n", n)
-        new LemmaBounds(n, invocation)
-      }
-
 
 
   // class Surplus(n: Int, invocation: NodeInvocation) extends Node(invocation):

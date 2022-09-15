@@ -2,11 +2,10 @@ package lack.source
 
 import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
+import lack.meta.source.node.{Activate, Builder, Node, NodeInvocation}
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.smt
-import lack.meta.source.node.Activate
+import lack.meta.driver.check
 
 /** First attempt at automaton example.
  * Manual translation from Lustre syntax to nested nodes.
@@ -14,10 +13,7 @@ import lack.meta.source.node.Activate
 object TestAutomaton:
 
   def main(args: Array[String]): Unit =
-    given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    builder.invoke { new Top(_) }
-    def solver() = smt.solver.gimme(verbose = false)
-    smt.check.checkMany(builder.nodeRef, 4, solver)
+    check.success() { new Top(_) }
 
   class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...

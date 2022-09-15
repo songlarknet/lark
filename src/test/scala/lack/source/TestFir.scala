@@ -5,17 +5,13 @@ import lack.meta.source.compound.implicits._
 import lack.meta.source.stream.{Stream, SortRepr, Bool, Int32, Real32}
 import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.smt
+import lack.meta.driver.check
 
 /** Example of an FIR filter */
 object TestFIR:
 
   def main(args: Array[String]): Unit =
-    given builder: Builder = new Builder(lack.meta.core.builder.Node.top())
-    val bounds = builder.invoke(new LemmaFIR(3, _))
-    def solver() = smt.solver.gimme(verbose = false)
-    smt.check.checkMany(builder.nodeRef, 4, solver)
-
+    check.success() { new LemmaFIR(3, _) }
 
   class LemmaFIR(n: Int, invocation: NodeInvocation) extends Node(invocation):
     val signal = local[Real32]

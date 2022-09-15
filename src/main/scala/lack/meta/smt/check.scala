@@ -82,6 +82,42 @@ object check:
 
       Trace(stepD.toList)
 
+  case class Summary(results: List[NodeSummary]) extends pretty.Pretty:
+    val ok = results.forall(_.ok)
+    def ppr =
+      val nok = results.count(!_.ok)
+      if (ok)
+        pretty.text(s"OK: ${results.length} nodes ok")
+      else
+        pretty.text(s"NOK: ${nok}/${results.length} nodes failed")
+
+    /** True if any nodes required induction */
+    val nontrivial =
+      results.exists(n => n.ok && !n.trivial)
+
+  sealed trait NodeSummary(node: Node, val ok: Boolean, val trivial: Boolean = true) extends pretty.Pretty
+  object NodeSummary:
+    case class Skip(node: Node) extends NodeSummary(node, true):
+      def ppr = pretty.text("Skipping node") <+> names.Prefix(node.path).ppr <> ", nothing to prove"
+
+    case class OK(node: Node, steps: Int) extends NodeSummary(node, ok = true, trivial = steps == 0):
+      def ppr = pretty.text(s"OK! (requires ${steps} inductive steps)")
+
+    case class Infeasible(node: Node, details: CheckFeasible) extends NodeSummary(node, false):
+      def ppr =
+        pretty.text("Properties hold, but system is infeasible.") <@>
+        pretty.text("Maybe you have inconsistent assumptions or contradictory definitions.") <@>
+        pretty.indent(details.ppr, 2)
+
+    case class BadInduction(node: Node, details: Kind) extends NodeSummary(node, false):
+      def ppr =
+        pretty.text("  K-inductive step failed, but didn't find a counterexample.") <@>
+        pretty.indent(details.ppr, 2)
+
+    case class Counterexample(node: Node, details: Bmc) extends NodeSummary(node, false):
+      def ppr =
+        pretty.text("Property false, found a counterexample.") <@>
+        pretty.indent(details.ppr, 2)
 
   def declareSystem(n: Node, solver: Solver): system.Top =
     val sys = translate.nodes(n.allNodes)
@@ -121,22 +157,25 @@ object check:
     val propsT = props.map(p => compound.funapp("not", judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
-  def checkMany(top: Node, count: Int, solver: () => Solver): Unit =
+  def checkMany(top: Node, count: Int, solver: () => Solver): Summary =
     println("Checking top-level node:")
     println(top.pprString)
     println("System translation:")
     println(translate.nodes(top.allNodes).pprString)
 
-    top.allNodes.foreach { n =>
+    val res = top.allNodes.map { n =>
       val s = solver()
-      checkNode(n, count, s)
+      val r = checkNode(n, count, s)
+      println(r.pprString)
+      r
     }
+    Summary(res.toList)
 
-  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): Unit =
+  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): NodeSummary =
     val sys  = declareSystem(top, solver)
     val topS = sys.top
     if (skipTrivial && topS.system.obligations.isEmpty)
-      println(s"Skipping node '${names.Prefix(top.path).pprString}', nothing to prove")
+      NodeSummary.Skip(top)
     else
       // LODO fix up pretty-printing
       println(s"Node ${names.Prefix(top.path).pprString}:")
@@ -159,18 +198,14 @@ object check:
               val feaR = solver.pushed { feasible(sys, topS, count, solver) }
               feaR match
                 case CheckFeasible.FeasibleUpTo(_) =>
-                  println(s"  OK! (requires ${k} inductive steps)")
+                  NodeSummary.OK(top, k)
                 case _ =>
-                  println("  Properties hold, but system is infeasible.")
-                  println("  Maybe you have inconsistent assumptions or contradictory definitions.")
-                  println(pretty.layout(pretty.indent(feaR.ppr, 4)))
+                  NodeSummary.Infeasible(top, feaR)
             case _ =>
-              println("  K-inductive step failed, but didn't find a counterexample.")
-              println(pretty.layout(pretty.indent(indR.ppr, 4)))
+              NodeSummary.BadInduction(top, indR)
 
         case _ =>
-          println("  Property false, found a counterexample.")
-          println(pretty.layout(pretty.indent(bmcR.ppr, 4)))
+          NodeSummary.Counterexample(top, bmcR)
 
 
   def feasible(sys: system.Top, top: system.Node, count: Int, solver: Solver): CheckFeasible =
