@@ -59,7 +59,7 @@ object translate:
     def nm(i: names.ComponentSymbol): names.Ref =
       names.Ref(node.path, names.Component(i, None))
 
-    val sys        = nested(context, node, None, node.nested).system
+    val sys        = nested(context, node, node.nested).system
     val params     = node.params.map { p => names.Ref(List(), p) }.toList
 
     def prop(judgment: Judgment): SystemJudgment =
@@ -75,68 +75,46 @@ object translate:
 
     system.Node(node.path, params, sys <> sysprops)
 
-  def nested(context: Context, node: Node, init: Option[names.Ref], nested: builder.Binding.Nested): SystemV[Unit] =
-    nested.selector match
-    case builder.Selector.When(k) =>
-      val initR    = names.Ref(List(), nested.init)
-      val children = nested.children.map(binding(context, node, initR, _))
+  def nested(context: Context, node: Node, nested: builder.Nested): SystemV[Unit] =
+    val initR    = names.Ref(List(), nested.init)
+    val children = nested.children.map(binding(context, node, initR, _))
 
-      val tstep =
-        for
-          initX <- SystemV.stateX(initR, Sort.Bool)
-          _     <- SystemV.step(compound.funapp("not", initX))
-          _     <- SystemV.conjoin(children.toSeq)
-        yield ()
-
-      for
-        initE <- SystemV.state(initR, Sort.Bool)
-        kE    <- expr(ExpContext(node, context.supply), k)
-        _     <- SystemV.init(initE)
-        _     <- tstep.when(kE)
-      yield ()
-
-    case builder.Selector.Reset(k) =>
-      val initR    = names.Ref(List(), nested.init)
-      val children = nested.children.map(binding(context, node, initR, _))
-
-      val tstep =
-        for
-          initX <- SystemV.stateX(initR, Sort.Bool)
-          _     <- SystemV.step(compound.funapp("not", initX))
-          _     <- SystemV.conjoin(children.toSeq)
-        yield ()
-
-      for
-        initE <- SystemV.state(initR, Sort.Bool)
-        kE    <- expr(ExpContext(node, context.supply), k)
-        _     <- SystemV.init(initE)
-        _     <- tstep.reset(nested.init, kE)
-      yield ()
+    for
+      // init flag true initially
+      initE <- SystemV.state(initR, Sort.Bool)
+      _     <- SystemV.init(initE)
+      // init flag false after step
+      initX <- SystemV.stateX(initR, Sort.Bool)
+      _     <- SystemV.step(compound.not(initX))
+      // all children
+      _     <- SystemV.conjoin(children.toSeq)
+    yield ()
 
   def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): SystemV[Unit] = binding match
-    case builder.Binding.Equation(lhs, rhs) =>
+    case b: builder.Binding.Equation =>
       val ec    = ExpContext(node, context.supply)
-      val xbind = node.xvar(lhs)
-      val xref  = names.Ref(List(), lhs)
+      val xbind = node.xvar(b.lhs)
+      val xref  = names.Ref(List(), b.lhs)
       val tstep =
         for
-          erhs <- flow(ec, init, rhs)
+          erhs <- flow(ec, init, b.rhs)
           x    <- SystemV.row(xref, xbind.sort)
-        yield compound.funapp("=", erhs, x)
+        yield compound.equal(erhs, x)
       SystemV.step(tstep)
 
-    case builder.Binding.Subnode(v, args) =>
+    case b: builder.Binding.Subnode =>
+      val v = b.subnode
       val ec = ExpContext(node, context.supply)
       val subnode = node.subnodes(v)
       val subsystem = context.nodes(subnode.path)
 
-      val argsT  = args.map(expr(ec, _))
+      val argsT  = b.args.map(expr(ec, _))
       val argsEq: List[SystemV[Unit]] =
         subnode.params.zip(argsT).map { (param,argT) =>
           for
             argE  <- argT
             paramE = compound.qid(system.Prefix.row(names.Ref(List(v), param)))
-            eq     = compound.funapp("=", paramE, argE)
+            eq     = compound.equal(paramE, argE)
             _     <- SystemV.step(eq)
           yield ()
         }.toList
@@ -179,8 +157,30 @@ object translate:
 
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
-    case nest: builder.Binding.Nested =>
-      nested(context, node, Some(init), nest)
+    case b: builder.Binding.Merge =>
+      def go(cond: Terms.Term, cases: List[(Exp, builder.Nested)]): SystemV[Unit] = cases match
+        case Nil => SystemV.pure(())
+        case (when, bnested) :: rest =>
+          for
+            kE    <- expr(ExpContext(node, context.supply), when)
+            whenE  = compound.and(cond, kE)
+            notE   = compound.and(cond, compound.not(kE))
+
+            subT   = nested(context, node, bnested)
+            _     <- subT.when(whenE)
+
+            _     <- go(notE, rest)
+          yield ()
+
+      go(compound.bool(true), b.cases.toList)
+
+    case b: builder.Binding.Reset =>
+      val ref = context.supply.freshRef(names.ComponentSymbol.RESET, forceIndex = true)
+      val sub = nested(context, node, b.nested)
+      for
+        kE    <- expr(ExpContext(node, context.supply), b.clock)
+        _     <- sub.reset(ref.name, kE)
+      yield ()
 
   /** Translate a streaming expression to a system. */
   def flow(context: ExpContext, init: names.Ref, exp: Flow): SystemV[Terms.Term] = exp match
@@ -195,12 +195,12 @@ object translate:
       yield compound.ite(st, fst, ltr)
 
     case Flow.Pre(pre) =>
-      val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
+      val ref   = context.supply.freshRef(names.ComponentSymbol.PRE, forceIndex = true)
       val tstep =
         for
           v  <- expr(context, pre)
           st <- SystemV.stateX(ref, exp.sort)
-        yield compound.funapp("=", st, v)
+        yield compound.equal(st, v)
 
       SystemV.state(ref, exp.sort) <&& SystemV.step(tstep)
 
@@ -209,12 +209,12 @@ object translate:
       val tinit =
         for
           st <- SystemV.state(ref, exp.sort)
-        yield compound.funapp("=", st, value(v0))
+        yield compound.equal(st, value(v0))
       val tstep =
         for
           v  <- expr(context, pre)
           st <- SystemV.stateX(ref, exp.sort)
-        yield compound.funapp("=", st, v)
+        yield compound.equal(st, v)
 
       SystemV.state(ref, exp.sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
 

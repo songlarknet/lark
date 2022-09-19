@@ -112,7 +112,7 @@ object system:
     def when(klock: Terms.Term): System =
       val allSame =
         for s <- state.refs(names.Prefix(List()))
-        yield compound.funapp("=",
+        yield compound.equal(
           compound.qid(system.Prefix.state(s)),
           compound.qid(system.Prefix.stateX(s)))
       val stay = compound.and(allSame.toSeq : _*)
@@ -149,7 +149,7 @@ object system:
 
       val allSame    =
         for s <- state.refs(names.Prefix(List()))
-        yield compound.funapp("=",
+        yield compound.equal(
           compound.qid(Prefix.state(s)),
           compound.qid(stateR(s)))
       val noReset    = compound.and(allSame.toSeq : _*)
@@ -198,7 +198,7 @@ object system:
   /** A transition system and some associated value.
    * The value could be an SMT-lib term that refers to state or row variables.
    */
-  case class SystemV[T](system: System, value: T):
+  case class SystemV[+T](system: System, value: T):
     def flatMap[U](f: T => SystemV[U]): SystemV[U] =
       val ts = f(value)
       SystemV(this.system <> ts.system, ts.value)

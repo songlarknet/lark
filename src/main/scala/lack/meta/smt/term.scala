@@ -86,9 +86,12 @@ object term:
       case ("and", args) => and(args : _*)
       case ("or", args) => or(args : _*)
       case ("=>", List(ante, con)) => implies(ante, con)
+      case ("not", List(p)) => not(p)
+      case ("=", List(a, b)) => equal(a, b)
       case _ => funappNoSimp(f, args.toList)
 
-    def funappNoSimp(f: String, args: List[Terms.Term]) = Terms.FunctionApplication(qid(f), args)
+    def funappNoSimp(f: String, args: List[Terms.Term]): Terms.Term =
+      Terms.FunctionApplication(qid(f), args)
 
     def and(args: Terms.Term*) =
       def go(t: Terms.Term): Seq[Terms.Term] = t match
@@ -129,6 +132,12 @@ object term:
       case (_, Some(true)) => bool(true)
       case (_, Some(false)) => ante
       case _ => funappNoSimp("=>", List(ante, con))
+
+    def not(p: Terms.Term) = take.bool(p) match
+      case Some(b) => compound.bool(!b)
+      case _ => funappNoSimp("not", List(p))
+
+    def equal(a: Terms.Term, b: Terms.Term) = funappNoSimp("=", List(a, b))
 
     def int(i: num.Integer) =
       // cvc5 barfs on negative integers. Is this standards-compliant?

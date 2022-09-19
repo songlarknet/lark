@@ -13,7 +13,7 @@ object check:
     val res = checkResult(options)(f)
     println(res.pprString)
     if (!res.ok)
-      System.exit(1)
+      throw new Exception(s"failed: ${res.pprString}")
     res
 
   /** Check a node and its subnodes, expecting failure.
@@ -22,7 +22,7 @@ object check:
     val res = checkResult(options)(f)
     println(res.pprString)
     if (res.ok)
-      System.exit(1)
+      throw new Exception(s"succeeded but expected failure: ${res.pprString}")
     res
 
   /** Check a node and its subnodes, returning the summary. */

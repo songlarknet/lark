@@ -12,7 +12,7 @@ object node:
   class Builder(val nodeRef: core.builder.Node):
     var nested = nodeRef.nested
 
-    def withNesting[T](neu: core.builder.Binding.Nested)(f: => T): T =
+    def withNesting[T](neu: core.builder.Nested)(f: => T): T =
       val old = nested
       try {
         nested = neu
@@ -21,9 +21,9 @@ object node:
         nested = old
       }
 
-    def activate(activate: Activate, parent: core.builder.Binding.Nested = nested): core.builder.Binding.Nested =
-      val w = parent.nested(core.builder.Selector.When(activate.when._exp))
-      val r = w.nested(core.builder.Selector.Reset(activate.reset._exp))
+    def activate(activate: Activate, parent: core.builder.Nested = nested): core.builder.Nested =
+      val w = parent.merge().when(activate.when._exp)
+      val r = w.reset(activate.reset._exp)
       r
 
     def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
@@ -171,15 +171,15 @@ object node:
     protected def sorry(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
       bindProperty(core.prop.Syntax.Sorry, name)(prop)
 
-    protected def bind[T](lhs: Lhs[T], rhs: Stream[T]) =
+    protected def bind[T](lhs: Lhs[T], rhs: Stream[T])(using builder: Builder) =
       builder.nested.equation(lhs.v, core.term.Flow.Pure(rhs._exp))
 
     extension [T](lhs: Lhs[T])
-      protected def := (rhs: Stream[T]) =
+      protected def := (rhs: Stream[T])(using builder: Builder) =
         bind(lhs, rhs)
 
     extension [T: SortRepr, U: SortRepr](lhs: (Lhs[T], Lhs[U]))
-      protected def := (rhs: Stream[(T, U)]) =
+      protected def := (rhs: Stream[(T, U)])(using builder: Builder) =
         bind(lhs._1, rhs._1)
         bind(lhs._2, rhs._2)
 
@@ -187,3 +187,12 @@ object node:
       given builder: Builder = new Builder(invocation.builder.nodeRef)
       val n = builder.activate(activate)
       builder.nested = n
+
+    protected abstract class Merge extends reflect.Selectable:
+      private val merge = builder.nested.merge()
+
+      protected abstract class When(exp: Stream[stream.Bool], reset: Stream[stream.Bool] = Activate.falses) extends reflect.Selectable:
+        given builder: Builder = new Builder(invocation.builder.nodeRef)
+        val n = merge.when(exp._exp)
+        val r = n.reset(reset._exp)
+        builder.nested = r

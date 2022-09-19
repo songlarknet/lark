@@ -17,86 +17,107 @@ object builder:
   // var nodes: List[Node] = List()
   // var sorts: List[Sort] = List()
 
-  /** Binding contexts */
+  /** Mutable binding contexts */
   sealed trait Binding extends pretty.Pretty
   object Binding:
-    case class Equation(lhs: names.Component, rhs: Flow) extends Binding:
+    class Equation(val lhs: names.Component, val rhs: Flow) extends Binding:
       def ppr = lhs.ppr <+> pretty.text("=") <+> rhs.ppr
-    case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
+    class Subnode(val subnode: names.Component, val args: List[Exp]) extends Binding:
       def ppr = pretty.text("Subnode") <+> subnode.ppr <> pretty.tupleP(args)
-    class Nested(val init: names.Component, val selector: Selector, val node: Node) extends Binding:
-      val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-      def ppr = pretty.nest(selector.ppr <+> "@init" <> pretty.parens(init.ppr) <> pretty.colon <@>
-        pretty.vsep(children.map(_.ppr).toList))
+    class Merge(val node: Node) extends Binding:
+      val cases: mutable.ArrayBuffer[(Exp, Nested)] = mutable.ArrayBuffer()
+      def ppr = 
+        pretty.vsep(
+          cases.zipWithIndex.map { case ((clock, nest), ix) =>
+            pretty.text(if ix == 0 then "Merge When" else "Else When") <> pretty.parens(clock.ppr) <+> nest.ppr
+          }.toSeq)
 
-      // TODO do merging / cse on append?
-      def append(b: Binding): Unit =
-        children += b
-
-      def nested(selector: Selector): Nested =
+      def when(clock: Exp): Nested =
         val i = node.supply.freshInit()
-        val n = new Nested(i.name, selector, node)
-        append(n)
+        val n = new Nested(i.name, node)
+        cases += ((clock, n))
         n
 
-      /** Create a new binding for the given streaming expression.
-       * Trivial expressions (values and variables) are returned as-is with
-       * no binding added.
-       * */
-      def memo(rhs: Flow)(using location: Location): Exp = rhs match
-        case Flow.Pure(e: Exp.Var) => e
-        case Flow.Pure(e: Exp.Val) => e
-        case _ =>
-          // Try to re-use binding if we already have one.
-          //
-          // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
-          // and const prop
-          // TODO: look in other bindings.
-          //
-          // Maybe we want this to be as dumb as possible so that the
-          // source translation is "obviously correct".
-          // Then we can do better CSE in later stages.
-          children.flatMap {
-            case Equation(lhs, rhsx) if rhs == rhsx =>
-              val v = node.vars(lhs)
-              assert(v.sort == rhs.sort,
-                s"""When trying to reuse existing binding
-                  ${lhs} : ${v.sort} = ${rhsx}
-                for requested expression ${rhs} : ${sort} at location ${location},
-                the two sorts don't match.
-                """)
-              Seq(node.xvar(lhs))
-            case _ => Seq.empty
-          }.headOption.getOrElse(memoForce(rhs))
+    class Reset(val clock: Exp, val nested: Nested) extends Binding:
+      def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr) <+> nested.ppr
 
-      /** Create a new binding for the given expression, even for simple expressions.
-       * This creates bindings for simple expressions such as variables and values;
-       * doesn't reuse existing bindings.
-       */
-      def memoForce(rhs: Flow)(using location: Location): Exp =
-        val vv = Variable(rhs.sort, location, Variable.Generated)
-        val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromScalaSymbol(i))
-        val v = node.fresh(name, vv, forceIndex = true)
-        append(Equation(v.v.name, rhs))
-        v
+  /** Mutable list of bindings */
+  class Nested(val init: names.Component, val node: Node):
+    // TODO allow each nested to declare local variables
+    val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-      def equation(lhs: names.Component, rhs: Flow): Unit =
-        append(Equation(lhs, rhs))
+    def ppr = pretty.nest(pretty.text("@init") <> pretty.parens(init.ppr) <> pretty.colon <@>
+      pretty.vsep(children.map(_.ppr).toList))
 
-      def subnode(name: names.Component, subnode: Node, args: List[Exp]): Unit =
-        assert(!node.vars.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by variable ${node.vars(name)}")
-        assert(!node.subnodes.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by subnode ${node.subnodes(name)}")
-        node.subnodes += name -> subnode
-        append(Subnode(name, args))
+    // LODO do merging / cse on append?
+    def append(b: Binding): Unit =
+      children += b
 
+    def merge(): Binding.Merge =
+      val m = new Binding.Merge(node)
+      append(m)
+      m
 
-  sealed trait Selector extends pretty.Pretty
-  object Selector:
-    case class When(clock: Exp) extends Selector:
-      def ppr = pretty.text("When") <> pretty.parens(clock.ppr)
-    case class Reset(clock: Exp) extends Selector:
-      def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr)
+    def reset(clock: Exp): Nested =
+      if (clock == Exp.Val(Sort.Bool, Val.Bool(false)))
+        this
+      else
+        val i = node.supply.freshInit()
+        val n = new Nested(i.name, node)
+        val r = new Binding.Reset(clock, n)
+        append(r)
+        r.nested
+
+    /** Create a new binding for the given streaming expression.
+     * Trivial expressions (values and variables) are returned as-is with
+     * no binding added.
+     * */
+    def memo(rhs: Flow)(using location: Location): Exp = rhs match
+      case Flow.Pure(e: Exp.Var) => e
+      case Flow.Pure(e: Exp.Val) => e
+      case _ =>
+        // Try to re-use binding if we already have one.
+        //
+        // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
+        // and const prop
+        // TODO: look in other bindings.
+        //
+        // Maybe we want this to be as dumb as possible so that the
+        // source translation is "obviously correct".
+        // Then we can do better CSE in later stages.
+        children.flatMap {
+          case b: Binding.Equation if rhs == b.rhs =>
+            val v = node.vars(b.lhs)
+            assert(v.sort == rhs.sort,
+              s"""When trying to reuse existing binding
+                ${b.lhs} : ${v.sort} = ${b.rhs}
+              for requested expression ${rhs} : ${sort} at location ${location},
+              the two sorts don't match.
+              """)
+            Seq(node.xvar(b.lhs))
+          case _ => Seq.empty
+        }.headOption.getOrElse(memoForce(rhs))
+
+    /** Create a new binding for the given expression, even for simple expressions.
+     * This creates bindings for simple expressions such as variables and values;
+     * doesn't reuse existing bindings.
+     */
+    def memoForce(rhs: Flow)(using location: Location): Exp =
+      val vv = Variable(rhs.sort, location, Variable.Generated)
+      val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromScalaSymbol(i))
+      val v = node.fresh(name, vv, forceIndex = true)
+      append(new Binding.Equation(v.v.name, rhs))
+      v
+
+    def equation(lhs: names.Component, rhs: Flow): Unit =
+      append(new Binding.Equation(lhs, rhs))
+
+    def subnode(name: names.Component, subnode: Node, args: List[Exp]): Unit =
+      assert(!node.vars.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by variable ${node.vars(name)}")
+      assert(!node.subnodes.contains(name), s"tried to allocate a subnode named ${name} but that name is already used by subnode ${node.subnodes(name)}")
+      node.subnodes += name -> subnode
+      append(new Binding.Subnode(name, args))
 
   object Node:
     def top(): Node = new Node(new names.mutable.Supply(List()), List())
@@ -117,7 +138,7 @@ object builder:
     var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
     var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
 
-    var nested: Binding.Nested = new Binding.Nested(supply.freshInit().name, Selector.When(term.Exp.Val(Sort.Bool, term.Val.Bool(true))), this)
+    var nested: Nested = new Nested(supply.freshInit().name, this)
 
     def relies: Iterable[Judgment] =
       props.filter(_.form == Form.Rely)

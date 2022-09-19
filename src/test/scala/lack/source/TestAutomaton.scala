@@ -94,48 +94,21 @@ object TestAutomaton:
       otherwise { pre_state }
     )
 
-    val N_OFF = new Nested(Activate(when = state == S_OFF)) {
-      val accel_out = accel
-      val light_on  = False
-      val speed_out = u8(0)
-    }
+    val A = new Merge:
+      val OFF = new When(state == S_OFF):
+        accel_out := accel
+        light_on  := False
+        speed_out := u8(0)
 
-    val N_AWAIT = new Nested(Activate(when = state == S_AWAIT)) {
-      val accel_out = accel
-      val light_on  = True
-      val speed_out = u8(0)
-    }
+      val AWAIT = new When(state == S_AWAIT):
+        accel_out := accel
+        light_on  := True
+        speed_out := u8(0)
 
-    val N_ON = new Nested(Activate(reset = pre_state == S_AWAIT && cmd_set, when = state == S_ON)) {
-      val accel_out = local[UInt8]
-      val speed_out = local[UInt8]
-      val light_on  = local[Bool]
-
-      accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
-      light_on  := True
-      speed_out := speedo -> cond(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
-    }
-
-    accel_out := cond(
-      when(state == S_OFF)   { N_OFF.accel_out },
-      when(state == S_AWAIT) { N_AWAIT.accel_out },
-      when(state == S_ON)    { N_ON.accel_out },
-      otherwise { accel_out } // dirty hack undefined
-    )
-
-    light_on := cond(
-      when(state == S_OFF)   { N_OFF.light_on },
-      when(state == S_AWAIT) { N_AWAIT.light_on },
-      when(state == S_ON)    { N_ON.light_on },
-      otherwise { light_on } // dirty hack undefined
-    )
-
-    speed_out := cond(
-      when(state == S_OFF)   { N_OFF.speed_out },
-      when(state == S_AWAIT) { N_AWAIT.speed_out },
-      when(state == S_ON)    { N_ON.speed_out },
-      otherwise { speed_out } // dirty hack undefined
-    )
+      val ON = new When(state == S_ON, reset = pre_state == S_AWAIT && cmd_set):
+        accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
+        light_on  := True
+        speed_out := speedo -> cond(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
 
     check("state inv") {
       state == S_OFF || state == S_AWAIT || state == S_ON

@@ -38,7 +38,7 @@ object TestBounds:
     def SumN(n: Int, v: Stream[Int32]): Stream[Int32] = n match
       case 0 => 0
       case 1 => v
-      case _ => v + SumN(n - 1, fby(0, v))
+      case _ => v + SumN(n - 1, fby(i32(0), v))
 
 
   // class Surplus(n: Int, invocation: NodeInvocation) extends Node(invocation):

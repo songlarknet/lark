@@ -154,7 +154,7 @@ object check:
     }
 
   def disprove(props: List[system.SystemJudgment], step: Int): Terms.Term =
-    val propsT = props.map(p => compound.funapp("not", judgmentTerm(p, step)))
+    val propsT = props.map(p => compound.not(judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
   def checkMany(top: Node, count: Int, solver: () => Solver): Summary =

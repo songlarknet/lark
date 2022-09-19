@@ -88,7 +88,7 @@ object solver:
       val sat = command(Commands.CheckSatAssuming(Seq(Commands.PropLiteral(actlit, true))))
       if (sat.isInstanceOf[CommandsResponses.CheckSatStatus])
         val ret = cont(sat.asInstanceOf[CommandsResponses.CheckSatStatus])
-        assert(compound.funapp("not", xactlit))
+        assert(compound.not(xactlit))
         ret
       else
         throw new SolverException(sat)
