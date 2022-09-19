@@ -188,9 +188,9 @@ object automaton:
         def go(l: List[Binding]): core.term.Exp = l match
           case List(b) => b.rhs
           case b :: bs =>
-            // TODO: this won't be in a-normal form
+            // LODO: this won't be in a-normal form
             core.term.Exp.App(b.rhs.sort, core.term.Prim.Ite, states(b.index).active._exp, b.rhs, go(bs))
 
         val rhs = go(mpi.values.toList)
-        builder.nested.equation(lhs, rhs)
+        builder.nested.equation(lhs, core.term.Flow.Pure(rhs))
       }

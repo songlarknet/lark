@@ -7,7 +7,7 @@ import lack.meta.core.builder
 import lack.meta.core.builder.Node
 import lack.meta.core.prop.Judgment
 import lack.meta.core.sort.Sort
-import lack.meta.core.term.{Exp, Prim, Val}
+import lack.meta.core.term.{Exp, Flow, Prim, Val}
 
 import lack.meta.smt.solver.Solver
 import lack.meta.smt.term.compound
@@ -22,7 +22,7 @@ object translate:
 
   def sort(s: Sort): Terms.Sort = s match
     case _: Sort.Integral => Terms.Sort(compound.id("Int"))
-    case _: Sort.Mod => Terms.Sort(compound.id("Int"))
+    case _: Sort.Mod => Terms.Sort(compound.id("Int !TODO"))
     case Sort.Float32 => Terms.Sort(compound.id("Float !TODO"))
     case Sort.Real32 => Terms.Sort(compound.id("Real"))
     case Sort.Bool => Terms.Sort(compound.id("Bool"))
@@ -34,7 +34,7 @@ object translate:
 
   class Context(val nodes: Map[List[names.Component], system.Node], val supply: names.mutable.Supply)
 
-  class ExpContext(val node: Node, val init: names.Ref, val supply: names.mutable.Supply):
+  class ExpContext(val node: Node, val supply: names.mutable.Supply):
     def stripRef(r: names.Ref): names.Ref =
       ExpContext.stripRef(node, r)
 
@@ -81,15 +81,6 @@ object translate:
       val initR    = names.Ref(List(), nested.init)
       val children = nested.children.map(binding(context, node, initR, _))
 
-      val tk = init match
-        case None =>
-          // Blah - restructure, top level needs const clock so init=None
-          require(k == Exp.Val(Sort.Bool, Val.Bool(true)))
-          SystemV.pure(compound.bool(true))
-        case Some(i) =>
-          // Evaluate clock in parent init context
-          expr(ExpContext(node, i, context.supply), k)
-
       val tstep =
         for
           initX <- SystemV.stateX(initR, Sort.Bool)
@@ -99,7 +90,7 @@ object translate:
 
       for
         initE <- SystemV.state(initR, Sort.Bool)
-        kE    <- tk
+        kE    <- expr(ExpContext(node, context.supply), k)
         _     <- SystemV.init(initE)
         _     <- tstep.when(kE)
       yield ()
@@ -108,14 +99,6 @@ object translate:
       val initR    = names.Ref(List(), nested.init)
       val children = nested.children.map(binding(context, node, initR, _))
 
-      val tk = init match
-        case None =>
-          assert(false,
-            s"builder.Node invariant failure: top-level nested needs to be a when(true). Node ${names.Prefix(node.path).pprString}")
-        case Some(i) =>
-          // Evaluate clock in parent init context
-          expr(ExpContext(node, i, context.supply), k)
-
       val tstep =
         for
           initX <- SystemV.stateX(initR, Sort.Bool)
@@ -125,25 +108,25 @@ object translate:
 
       for
         initE <- SystemV.state(initR, Sort.Bool)
-        kE    <- tk
+        kE    <- expr(ExpContext(node, context.supply), k)
         _     <- SystemV.init(initE)
         _     <- tstep.reset(nested.init, kE)
       yield ()
 
   def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): SystemV[Unit] = binding match
     case builder.Binding.Equation(lhs, rhs) =>
-      val ec    = ExpContext(node, init, context.supply)
+      val ec    = ExpContext(node, context.supply)
       val xbind = node.xvar(lhs)
       val xref  = names.Ref(List(), lhs)
       val tstep =
         for
-          erhs <- expr(ec, rhs)
+          erhs <- flow(ec, init, rhs)
           x    <- SystemV.row(xref, xbind.sort)
         yield compound.funapp("=", erhs, x)
       SystemV.step(tstep)
 
     case builder.Binding.Subnode(v, args) =>
-      val ec = ExpContext(node, init, context.supply)
+      val ec = ExpContext(node, context.supply)
       val subnode = node.subnodes(v)
       val subsystem = context.nodes(subnode.path)
 
@@ -200,38 +183,43 @@ object translate:
       nested(context, node, Some(init), nest)
 
   /** Translate a streaming expression to a system. */
-  def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
-    case Exp.flow.Arrow(_, first, later) =>
+  def flow(context: ExpContext, init: names.Ref, exp: Flow): SystemV[Terms.Term] = exp match
+    case Flow.Pure(e) =>
+      expr(context, e)
+
+    case Flow.Arrow(first, later) =>
       for
-        st  <- SystemV.state(context.init, Sort.Bool)
+        st  <- SystemV.state(init, Sort.Bool)
         fst <- expr(context, first)
         ltr <- expr(context, later)
       yield compound.ite(st, fst, ltr)
 
-    case Exp.flow.Pre(sort, pre) =>
+    case Flow.Pre(pre) =>
       val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
       val tstep =
         for
           v  <- expr(context, pre)
-          st <- SystemV.stateX(ref, sort)
+          st <- SystemV.stateX(ref, exp.sort)
         yield compound.funapp("=", st, v)
 
-      SystemV.state(ref, sort) <&& SystemV.step(tstep)
+      SystemV.state(ref, exp.sort) <&& SystemV.step(tstep)
 
-    case Exp.flow.Fby(sort, v0, pre) =>
+    case Flow.Fby(v0, pre) =>
       val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
       val tinit =
         for
-          st <- SystemV.state(ref, sort)
+          st <- SystemV.state(ref, exp.sort)
         yield compound.funapp("=", st, value(v0))
       val tstep =
         for
           v  <- expr(context, pre)
-          st <- SystemV.stateX(ref, sort)
+          st <- SystemV.stateX(ref, exp.sort)
         yield compound.funapp("=", st, v)
 
-      SystemV.state(ref, sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
+      SystemV.state(ref, exp.sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
 
+  /** Translate a pure expression to a system. */
+  def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
     case Exp.Val(_, v) =>
       SystemV.pure(value(v))
 

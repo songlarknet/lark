@@ -26,18 +26,18 @@ object node:
       val r = w.nested(core.builder.Selector.Reset(activate.reset._exp))
       r
 
-    def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Exp)(using location: lack.meta.macros.Location): Stream[T] =
+    def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
       val e   = it._exp
       val mem = nested.memo(f(e))
       new Stream(mem)(using it.sortRepr)
 
-    def memo2[T](a: Stream[T], b: Stream[T])(f: (core.term.Exp, core.term.Exp) => core.term.Exp)(using location: lack.meta.macros.Location): Stream[T] =
+    def memo2[T](a: Stream[T], b: Stream[T])(f: (core.term.Exp, core.term.Exp) => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
       val mem = nested.memo(f(a._exp, b._exp))
       new Stream(mem)(using a.sortRepr)
 
     def memo2x1[T, U, V: SortRepr]
       (a: Stream[T], b: Stream[U])
-      (f: (core.term.Exp, core.term.Exp) => core.term.Exp)
+      (f: (core.term.Exp, core.term.Exp) => core.term.Flow)
       (using location: lack.meta.macros.Location): Stream[V] =
       val sort = summon[SortRepr[V]].sort
       val mem = nested.memo(f(a._exp, b._exp))
@@ -45,7 +45,7 @@ object node:
 
     def memo3x1[T, U, V, W: SortRepr]
       (a: Stream[T], b: Stream[U], c: Stream[V])
-      (f: (core.term.Exp, core.term.Exp, core.term.Exp) => core.term.Exp)
+      (f: (core.term.Exp, core.term.Exp, core.term.Exp) => core.term.Flow)
       (using location: lack.meta.macros.Location): Stream[W] =
       val sort = summon[SortRepr[W]].sort
       val mem = nested.memo(f(a._exp, b._exp, c._exp))
@@ -172,7 +172,7 @@ object node:
       bindProperty(core.prop.Syntax.Sorry, name)(prop)
 
     protected def bind[T](lhs: Lhs[T], rhs: Stream[T]) =
-      builder.nested.equation(lhs.v, rhs._exp)
+      builder.nested.equation(lhs.v, core.term.Flow.Pure(rhs._exp))
 
     extension [T](lhs: Lhs[T])
       protected def := (rhs: Stream[T]) =

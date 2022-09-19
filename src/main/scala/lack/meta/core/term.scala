@@ -152,6 +152,7 @@ object term:
       def eval(args: List[Val]): Val =
         Val.Struct(struct.fields.map(_._1).zip(args).toList, struct)
 
+  /** Pure expressions */
   sealed trait Exp extends pretty.Pretty:
     // Annotate each node with its type. Is this overkill? The expressions probably won't be "too big"...
     def sort: Sort
@@ -170,21 +171,44 @@ object term:
       // TODO: should constructors do typechecking?
       def ppr = pretty.sexpr((prim :: args.toList).map(_.ppr))
 
-    /** Streaming terms */
-    object flow:
-      /** Previous value */
-      case class Pre(sort: Sort, e: Exp) extends Exp:
-        def ppr = pretty.sexpr(List("flow'pre", e.ppr))
-      /** x -> y, or "first x then y". */
-      case class Arrow(sort: Sort, a: Exp, b: Exp) extends Exp:
-        def ppr = pretty.sexpr(List("flow'->", a.ppr, b.ppr))
+  /** Streaming terms */
+  sealed trait Flow extends pretty.Pretty:
+    def sort: Sort
+  object Flow:
+    /** Pure expression */
+    case class Pure(e: Exp) extends Flow:
+      def ppr  = e.ppr
+      def sort = e.sort
 
-      /** Followed by, or initialised delay.
-       * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
-       * "v -> pre e".
-       * This primitive has a slightly better encoding.
-       * Vélus also only supports fby and not pre, so we'll need to
-       * rewrite occurrences of pre to fby if we want to generate Vélus.
-       */
-      case class Fby(sort: Sort, v: term.Val, e: Exp) extends Exp:
-        def ppr = pretty.sexpr(List("flow'fby", v.ppr, e.ppr))
+    /** x -> y, or "first x then y". */
+    case class Arrow(a: Exp, b: Exp) extends Flow:
+      require(a.sort == b.sort,
+        s"${ppr}\nsorts differ ${a.sort.ppr} /= ${b.sort.ppr}")
+      def sort = a.sort
+      def ppr = pretty.sexpr(List("flow'->", a.ppr, b.ppr))
+
+    /** Followed by, or initialised delay.
+     * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
+     * "v -> pre e". */
+    case class Fby(v: term.Val, e: Exp) extends Flow:
+      require(v.check(e.sort),
+        s"${ppr}\nvalue doesn't support sort ${e.sort.ppr}")
+      def sort = e.sort
+      def ppr  = pretty.sexpr(List("flow'fby", v.ppr, e.ppr))
+
+    /** Previous value.
+     * Pre(e) is equivalent to Fby(undefined, e) for some fresh undefined
+     * value.
+     * Having this as a separate primitive might make pretty-printing a little
+     * bit nicer, but I'm not sure whether it's worth it.
+     */
+    case class Pre(e: Exp) extends Flow:
+      def sort = e.sort
+      def ppr  = pretty.sexpr(List("flow'pre", e.ppr))
+
+    def app(sort: Sort, prim: term.Prim, args: Exp*) =
+      Flow.Pure(Exp.App(sort, prim, args : _*))
+    def var_(sort: Sort, v: names.Ref) =
+      Flow.Pure(Exp.Var(sort, v))
+    def val_(sort: Sort, v: term.Val) =
+      Flow.Pure(Exp.Val(sort, v))

@@ -4,7 +4,7 @@ import lack.meta.macros.Location
 import lack.meta.base.num.Integer
 import lack.meta.base.{names, pretty}
 import lack.meta.core.sort.Sort
-import lack.meta.core.term.{Exp, Prim, Val}
+import lack.meta.core.term.{Exp, Flow, Prim, Val}
 import lack.meta.core.prop.{Form, Judgment}
 
 import scala.collection.mutable
@@ -17,10 +17,10 @@ object builder:
   // var nodes: List[Node] = List()
   // var sorts: List[Sort] = List()
 
-  /** Binding contexts, called "context" in core.md. */
+  /** Binding contexts */
   sealed trait Binding extends pretty.Pretty
   object Binding:
-    case class Equation(lhs: names.Component, rhs: Exp) extends Binding:
+    case class Equation(lhs: names.Component, rhs: Flow) extends Binding:
       def ppr = lhs.ppr <+> pretty.text("=") <+> rhs.ppr
     case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
       def ppr = pretty.text("Subnode") <+> subnode.ppr <> pretty.tupleP(args)
@@ -40,15 +40,13 @@ object builder:
         append(n)
         n
 
-
-      /** Create a new binding for the given expression.
-       *
-       * @param rhs
-       * @param sort
+      /** Create a new binding for the given streaming expression.
+       * Trivial expressions (values and variables) are returned as-is with
+       * no binding added.
        * */
-      def memo(rhs: Exp)(using location: Location): Exp = rhs match
-        case Exp.Var(_, _) => rhs
-        case Exp.Val(_, _) => rhs
+      def memo(rhs: Flow)(using location: Location): Exp = rhs match
+        case Flow.Pure(e: Exp.Var) => e
+        case Flow.Pure(e: Exp.Val) => e
         case _ =>
           // Try to re-use binding if we already have one.
           //
@@ -76,14 +74,14 @@ object builder:
        * This creates bindings for simple expressions such as variables and values;
        * doesn't reuse existing bindings.
        */
-      def memoForce(rhs: Exp)(using location: Location): Exp =
+      def memoForce(rhs: Flow)(using location: Location): Exp =
         val vv = Variable(rhs.sort, location, Variable.Generated)
         val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromScalaSymbol(i))
         val v = node.fresh(name, vv, forceIndex = true)
         append(Equation(v.v.name, rhs))
         v
 
-      def equation(lhs: names.Component, rhs: Exp): Unit =
+      def equation(lhs: names.Component, rhs: Flow): Unit =
         append(Equation(lhs, rhs))
 
       def subnode(name: names.Component, subnode: Node, args: List[Exp]): Unit =
