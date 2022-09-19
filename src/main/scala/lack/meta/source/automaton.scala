@@ -29,6 +29,13 @@ object automaton:
    * constructor.
    *
    * Too much magic?
+   *
+   * OPTIMISE: looking at the core program, the main difference between my
+   * hand-written automaton and the generated one is that this generated one
+   * has lots of resets. each state has two reset contexts, one for resetting
+   * the transitions, and one for resetting the state bindings. we should be
+   * able to figure out ahead-of-time which states are actually restarted, and
+   * only introduce reset contexts for those.
    */
   abstract class Automaton(invocation: NodeInvocation) extends Node(invocation):
     /** The user must specify their initial state */
@@ -102,6 +109,14 @@ object automaton:
       def resume(trigger: Stream[Bool], state: State): Unit =
         transitions += Transition(trigger, Resume(state.info))
 
+      private def goTransitions(trs: List[Transition]): (Stream[Bool], Stream[St]) = trs match
+        case Nil => (False, pre_state)
+        case t :: trs =>
+          val (rT,stT) = goTransitions(trs)
+          val transition_reset_trigger = ifthenelse(t.trigger, bool(t.target.isRestart), rT)
+          val transition_new_state = ifthenelse(t.trigger, t.target.s.st, stT)
+          (transition_reset_trigger, transition_new_state)
+
       /** Should only be called by Automaton.finish */
       private[source]
       def finish(): Unit =
@@ -113,6 +128,9 @@ object automaton:
             .reset(reset._exp)
           builder.withNesting(nest) {
             transitionsDelay.removeAll().foreach(f => f())
+            val (resetX,stateX) = goTransitions(transitions.toList)
+            reset_trigger := resetX
+            state := stateX
           }
         }
 
@@ -142,27 +160,6 @@ object automaton:
       finishStates()
 
       val initialStateSt = initialState.get.indexInt
-      def goTransitions(trs: List[Transition]): (Stream[Bool], Stream[St]) = trs match
-        case Nil => (False, pre_state)
-        case t :: trs =>
-          val (rT,stT) = goTransitions(trs)
-          val transition_reset_trigger = ifthenelse(t.trigger, bool(t.target.isRestart), rT)
-          val transition_new_state = ifthenelse(t.trigger, t.target.s.st, stT)
-          (transition_reset_trigger, transition_new_state)
-
-      def goStates(sts: List[State]): (Stream[Bool], Stream[St]) = sts match
-        case Nil => (False, pre_state)
-        case s :: sts =>
-          val pre_active = pre_state == s.info.st
-          val (rT,stT) = goTransitions(s.transitions.toList)
-          val (rX,stX) = goStates(sts)
-          val state_reset_trigger = ifthenelse(pre_active, rT, rX)
-          val state_new_state = ifthenelse(pre_active, stT, stX)
-          (state_reset_trigger, state_new_state)
-
-      val (resetX, stateX) = goStates(states.values.toList)
-      reset_trigger := resetX
-      state := stateX
       pre_state := fby(u8(initialStateSt), state)
 
       bindProperty(core.prop.Syntax.Generated.check, "finite states") {
