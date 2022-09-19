@@ -27,7 +27,7 @@ object builder:
 
     class Merge(val node: Node) extends Binding:
       val cases: mutable.ArrayBuffer[(Exp, Nested)] = mutable.ArrayBuffer()
-      def ppr = 
+      def ppr =
         pretty.vsep(
           cases.zipWithIndex.map { case ((clock, nest), ix) =>
             pretty.text(if ix == 0 then "Merge When" else "Else When") <> pretty.parens(clock.ppr) <+> nest.ppr

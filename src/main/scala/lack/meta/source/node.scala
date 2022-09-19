@@ -9,8 +9,8 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 object node:
-  class Builder(val nodeRef: core.builder.Node):
-    var nested = nodeRef.nested
+  class Builder(val nodeRef: core.builder.Node, nestedO: Option[core.builder.Nested] = None):
+    var nested = nestedO.getOrElse(nodeRef.nested)
 
     def withNesting[T](neu: core.builder.Nested)(f: => T): T =
       val old = nested
@@ -184,15 +184,19 @@ object node:
         bind(lhs._2, rhs._2)
 
     protected abstract class Nested(activate: Activate = Activate.always) extends reflect.Selectable:
-      given builder: Builder = new Builder(invocation.builder.nodeRef)
-      val n = builder.activate(activate)
-      builder.nested = n
+      given builder: Builder = new Builder(
+        invocation.builder.nodeRef,
+        Some(invocation.builder.activate(activate)))
 
-    protected abstract class Merge extends reflect.Selectable:
+    protected abstract class Merge(using builder: Builder) extends reflect.Selectable:
       private val merge = builder.nested.merge()
 
-      protected abstract class When(exp: Stream[stream.Bool], reset: Stream[stream.Bool] = Activate.falses) extends reflect.Selectable:
-        given builder: Builder = new Builder(invocation.builder.nodeRef)
-        val n = merge.when(exp._exp)
-        val r = n.reset(reset._exp)
-        builder.nested = r
+      abstract class When(when: Stream[stream.Bool], reset: Stream[stream.Bool] = Activate.falses) extends reflect.Selectable:
+        given builder: Builder = new Builder(
+          Merge.this.builder.nodeRef,
+          Some(merge.when(when._exp).reset(reset._exp)))
+
+    protected abstract class Reset(reset: Stream[stream.Bool])(using superbuilder: Builder) extends reflect.Selectable:
+      given builder: Builder = new Builder(
+        superbuilder.nodeRef,
+        Some(superbuilder.nested.reset(reset._exp)))
