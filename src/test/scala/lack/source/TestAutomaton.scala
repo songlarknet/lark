@@ -2,7 +2,7 @@ package lack.source
 
 import lack.meta.source.compound.{given, _}
 import lack.meta.source.compound.implicits._
-import lack.meta.source.node.{Activate, Builder, Node, NodeInvocation}
+import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
 import lack.meta.driver.check

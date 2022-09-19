@@ -6,7 +6,6 @@ import lack.meta.source.compound.{given, _}
 import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
 import lack.meta.source.stream
 import lack.meta.source.node.{Node, NodeInvocation}
-import lack.meta.source.node.Activate
 
 import scala.collection.mutable
 
@@ -49,8 +48,7 @@ object automaton:
     private val reset_trigger = local[Bool]
     private var initialState: Option[StateInfo] = None
 
-    case class StateInfo(st: Stream[St], indexInt: Int, active: Stream[Bool], reset: Stream[Bool]):
-      def activate = Activate(reset = reset, when = active)
+    case class StateInfo(st: Stream[St], indexInt: Int, active: Stream[Bool], reset: Stream[Bool])
 
     private def freshStateInfo(): StateInfo =
       val i = freshSC()
@@ -63,16 +61,8 @@ object automaton:
     case class Transition(trigger: Stream[Bool], target: Target)
     val states = mutable.Map[Int, State]()
 
-    case class Binding(lhs: names.Component, lhsX: core.term.Exp, index: Int, rhs: core.term.Exp)
-    val bindings = mutable.ArrayBuffer[Binding]()
-
-    private def bindingMap: Map[names.Component, Map[Int, Binding]] =
-      val empty = Map[names.Component, Map[Int, Binding]]()
-      bindings.foldLeft(empty) { (mp, b) =>
-        val mpi = mp.getOrElse(b.lhs, Map())
-        require(!mpi.contains(b.index), s"duplicate definitions for lhs ${b.lhs} in state ${b.index}")
-        mp + (b.lhs -> (mpi + (b.index -> b)))
-      }
+    val mergeTransition = new Merge() {}
+    val mergeStates = new Merge() {}
 
     trait Target:
       val s: StateInfo
@@ -82,7 +72,7 @@ object automaton:
     case class Restart(s: StateInfo) extends Target:
       val isRestart = true
 
-    abstract class State(val info: StateInfo = freshStateInfo()) extends Nested(info.activate):
+    abstract class State(val info: StateInfo = freshStateInfo()) extends mergeStates.When(when = info.active, reset = info.reset):
       states += (info.indexInt -> this)
 
       val transitions = mutable.ArrayBuffer[Transition]()
@@ -115,19 +105,16 @@ object automaton:
       /** Should only be called by Automaton.finish */
       private[source]
       def finish(): Unit =
-        builder.withNesting(builder.nodeRef.nested) {
-          val act = Activate(when = (pre_state == info.st), reset = fby(False, reset_trigger))
-          builder.withNesting(builder.activate(act)) {
+        builder.withNesting(Automaton.this.builder.nested) {
+          val when  = (pre_state == info.st)
+          val reset = fby(False, reset_trigger)
+          val nest  = mergeTransition.merge
+            .when(when._exp)
+            .reset(reset._exp)
+          builder.withNesting(nest) {
             transitionsDelay.removeAll().foreach(f => f())
           }
         }
-
-      def bind[T](lhs: Automaton.this.Lhs[T], rhs: Stream[T]): Unit =
-        bindings += Binding(lhs.v, lhs._exp, info.indexInt, rhs._exp)
-
-      extension [T](lhs: Automaton.this.Lhs[T])
-        protected def := (rhs: Stream[T]) =
-          bind(lhs, rhs)
 
     /** TODO: this should be called automatically. Should source.node.Node have
      * a finish function that finishes all subnodes?
@@ -181,16 +168,4 @@ object automaton:
       bindProperty(core.prop.Syntax.Generated.check, "finite states") {
         val assert_finite_states = u8(0) <= pre_state && pre_state < u8(stateCounter)
         assert_finite_states
-      }
-
-      bindingMap.foreach { (lhs, mpi) =>
-        require(mpi.size == states.size, s"missing some bindings for states in ${lhs}, ${mpi}")
-        def go(l: List[Binding]): core.term.Exp = l match
-          case List(b) => b.rhs
-          case b :: bs =>
-            // LODO: this won't be in a-normal form
-            core.term.Exp.App(b.rhs.sort, core.term.Prim.Ite, states(b.index).active._exp, b.rhs, go(bs))
-
-        val rhs = go(mpi.values.toList)
-        builder.nested.equation(lhs, core.term.Flow.Pure(rhs))
       }

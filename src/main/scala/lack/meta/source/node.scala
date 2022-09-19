@@ -21,11 +21,6 @@ object node:
         nested = old
       }
 
-    def activate(activate: Activate, parent: core.builder.Nested = nested): core.builder.Nested =
-      val w = parent.merge().when(activate.when._exp)
-      val r = w.reset(activate.reset._exp)
-      r
-
     def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
       val e   = it._exp
       val mem = nested.memo(f(e))
@@ -118,17 +113,6 @@ object node:
       arguments += argvalue._exp
       new Stream[T](v)(using argvalue.sortRepr)
 
-
-
-
-  case class Activate(reset: Stream[stream.Bool] = Activate.falses, when: Stream[stream.Bool] = Activate.trues)
-  object Activate:
-    val trues: Stream[stream.Bool]  =
-      new Stream(core.term.Exp.Val(core.sort.Sort.Bool, core.term.Val.Bool(true)))
-    val falses: Stream[stream.Bool] =
-      new Stream(core.term.Exp.Val(core.sort.Sort.Bool, core.term.Val.Bool(false)))
-    val always = Activate(reset = falses, when = trues)
-
   abstract class Node(invocation: NodeInvocation):
 
     given builder: Builder = invocation.builder
@@ -183,15 +167,10 @@ object node:
         bind(lhs._1, rhs._1)
         bind(lhs._2, rhs._2)
 
-    protected abstract class Nested(activate: Activate = Activate.always) extends reflect.Selectable:
-      given builder: Builder = new Builder(
-        invocation.builder.nodeRef,
-        Some(invocation.builder.activate(activate)))
-
     protected abstract class Merge(using builder: Builder) extends reflect.Selectable:
-      private val merge = builder.nested.merge()
+      val merge = builder.nested.merge()
 
-      abstract class When(when: Stream[stream.Bool], reset: Stream[stream.Bool] = Activate.falses) extends reflect.Selectable:
+      abstract class When(when: Stream[stream.Bool], reset: Stream[stream.Bool] = compound.False) extends reflect.Selectable:
         given builder: Builder = new Builder(
           Merge.this.builder.nodeRef,
           Some(merge.when(when._exp).reset(reset._exp)))
