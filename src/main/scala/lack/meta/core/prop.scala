@@ -3,43 +3,66 @@ package lack.meta.core
 import lack.meta.base.pretty
 import lack.meta.core.sort.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
+import lack.meta.macros.Location
 
 object prop:
-  enum Form:
+  /** The kind of assertion a judgment is making */
+  sealed trait Form
+  object Form:
+    /** Guarantee or ensure: the node is guaranteeing some property, which we
+     * can check as a proof obligation. */
+    case object Guarantee extends Form
+    /** Rely or assume: the node relies on the environment to provide some
+     * property, which we could check at the call-site. */
+    case object Rely extends Form
+    /** Sorry or trusted: the node has some reason to believe that this
+     * assertion is true in all possible contexts, and so it does not need
+     * to be checked anywhere. */
+    case object Sorry extends Form
+
+  /** The syntactic form used to declare a judgment. Mainly for debugging. */
+  sealed trait Syntax extends pretty.Pretty:
+    def ppr = pretty.value(this)
+    def form: Form
+  object Syntax:
     /** Contract precondition.
      *  Term should only refer to inputs and constants.
      */
-    case Require
+    case object Require extends Syntax:
+      def form = Form.Rely
     /** Contract postcondition.
      *  Term should only refer to inputs, outputs and constants.
      */
-    case Guarantee
-    /** Local assertion.
+    case object Guarantee extends Syntax:
+      def form = Form.Guarantee
+    /** Local checked assertion.
      *  Term can refer to any variables including locals.
      */
-    case Property
+    case object Check extends Syntax:
+      def form = Form.Guarantee
     /** Trust me.
      *  Term can refer to any variables including locals.
      */
-    case Sorry
+    case object Sorry extends Syntax:
+      def form = Form.Sorry
 
-    /** Internal contract precondition which has been instantiated to a proof
-     * obligation in the caller.
-     *  Term should only refer to inputs and constants.
-     */
-    case SubnodeRequire
     /** Automatically-generated assertion.
      *  Term can refer to any variables including locals.
      */
-    case Generated
+    case class Generated(form: Form) extends Syntax
 
-  case class Judgment(name: String, term: Exp, form: Form) extends pretty.Pretty:
-    def ppr = pretty.value(form) <> pretty.parens(pretty.text(name)) <> pretty.colon <+> pretty.indent(term.ppr)
+    object Generated:
+      val check = Generated(Form.Guarantee)
+      val rely  = Generated(Form.Rely)
+      val sorry = Generated(Form.Sorry)
 
-    def isObligation: Boolean = form match
-      case Form.Require => false
-      case Form.Guarantee => true
-      case Form.Property => true
-      case Form.Sorry => false
-      case Form.SubnodeRequire => true
-      case Form.Generated => true
+  case class Judgment(name: String, term: Exp, syntax: Syntax, location: Location) extends pretty.Pretty:
+    def ppr =
+      syntax.ppr <>
+      pretty.parens(
+        pretty.text(name) <>
+        location.ppr(pretty.space)) <>
+      pretty.colon <+>
+      pretty.indent(term.ppr)
+
+    def form: Form = syntax.form

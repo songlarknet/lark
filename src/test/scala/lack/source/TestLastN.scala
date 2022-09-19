@@ -17,10 +17,10 @@ object TestLastN:
     val e      = local[Bool]
     val lastN  = LastN(n,     e)
     val lastSN = LastN(n + 1, e)
-    property("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {
+    check("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {
       lastN.count <= lastSN.count && lastSN.count <= lastN.count + 1
     }
-    property("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
+    check("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
       lastSN.out ==> lastN.out
     }
 
@@ -39,11 +39,11 @@ object TestLastN:
 
     val chk = out   := count >= n
 
-    property("0 <= count <= n") {
+    check("0 <= count <= n") {
       u8(0) <= count && count <= n
     }
 
-    // property("count <= ${n - 1} (not true!)") {
+    // check("count <= ${n - 1} (not true!)") {
     //   count <= (n - 1)
     // }
 

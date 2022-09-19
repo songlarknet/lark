@@ -155,17 +155,21 @@ object node:
     protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
       declare(loc.prettyPath, core.builder.Variable.Output)
 
-    protected def property(name: String)(prop: Stream[stream.Bool]) =
-      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, core.prop.Form.Property))
+    protected def bindProperty(syntax: core.prop.Syntax, name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
+      val locx = loc <> builder.nodeRef.locate(prop._exp)
+      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, syntax, locx))
 
-    protected def requires(name: String)(prop: Stream[stream.Bool]) =
-      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, core.prop.Form.Require))
+    protected def check(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
+      bindProperty(core.prop.Syntax.Check, name)(prop)
 
-    protected def guarantees(name: String)(prop: Stream[stream.Bool]) =
-      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, core.prop.Form.Guarantee))
+    protected def requires(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
+      bindProperty(core.prop.Syntax.Require, name)(prop)
 
-    protected def sorry(name: String)(prop: Stream[stream.Bool]) =
-      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, core.prop.Form.Sorry))
+    protected def guarantees(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
+      bindProperty(core.prop.Syntax.Guarantee, name)(prop)
+
+    protected def sorry(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
+      bindProperty(core.prop.Syntax.Sorry, name)(prop)
 
     protected def bind[T](lhs: Lhs[T], rhs: Stream[T]) =
       builder.nested.equation(lhs.v, rhs._exp)

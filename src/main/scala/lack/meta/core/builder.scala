@@ -115,15 +115,18 @@ object builder:
   class Node(val supply: names.mutable.Supply, val path: List[names.Component]) extends pretty.Pretty:
     val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
     var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
-    // TODO subnodes need location information
+    // LODO subnodes need location information
     var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
     var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
 
     var nested: Binding.Nested = new Binding.Nested(supply.freshInit().name, Selector.When(term.Exp.Val(Sort.Bool, term.Val.Bool(true))), this)
 
-    def allProps: Iterable[Judgment] = props ++ subnodes.values.flatMap(_.allProps)
-    /** All obligations we need to prove. TODO: restructure, deal with contracts */
-    def allPropObligations: Iterable[Judgment] = allProps.filter(p => p.form == Form.Property)
+    def relies: Iterable[Judgment] =
+      props.filter(_.form == Form.Rely)
+    def guarantees: Iterable[Judgment] =
+      props.filter(_.form == Form.Guarantee)
+    def sorries: Iterable[Judgment] =
+      props.filter(_.form == Form.Sorry)
 
     /** All dependent nodes in the system, including this node */
     def allNodes: Iterable[Node] =
@@ -145,6 +148,15 @@ object builder:
     def xvar(name: names.Component): Exp.Var =
       val v = vars(name)
       Exp.Var(v.sort, names.Ref(path, name))
+
+    /** Find source location of given expression.
+     * LODO expressions should just contain source locations.
+     */
+    def locate(exp: Exp): Location = exp match
+      case v : Exp.Var =>
+        vars.get(v.v.name).fold(Location.empty)(_.location)
+      case _ =>
+        Location.empty
 
 
     def prop(j: Judgment): Unit =

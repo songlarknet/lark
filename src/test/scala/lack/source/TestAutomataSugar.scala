@@ -54,19 +54,19 @@ object TestAutomatonSugar:
       light_on  := True
       speed_out := speedo -> ifthenelse(cmd_set, speedo, pre(speed_out))
 
-    property("!btn_on ==> off") {
+    check("!btn_on ==> off") {
       !btn_on ==> OFF.active
     }
 
-    property("!btn_on ==> accel_out == accel") {
+    check("!btn_on ==> accel_out == accel") {
       !btn_on ==> (accel_out == accel)
     }
 
-    property("accel >= 100 => accel_out == accel") {
+    check("accel >= 100 => accel_out == accel") {
       (accel >= 100) ==> (accel_out == accel)
     }
 
-    property("no set, no change") {
+    check("no set, no change") {
       !cmd_set ==> (speed_out == u8(0) || speed_out == pre(speed_out))
     }
 

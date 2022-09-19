@@ -178,7 +178,7 @@ object automaton:
       state := stateX
       pre_state := fby(u8(initialStateSt), state)
 
-      property("GEN: finite states") {
+      bindProperty(core.prop.Syntax.Generated.check, "finite states") {
         val assert_finite_states = u8(0) <= pre_state && pre_state < u8(stateCounter)
         assert_finite_states
       }

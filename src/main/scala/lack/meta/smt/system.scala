@@ -65,26 +65,36 @@ object system:
    *  term may refer to the state variables with prefix Prefix.state, the row
    *  variables with prefix Prefix.row, and the successor state variables with
    *  prefix Prefix.stateX. It should have sort Bool.
-   * @param assumptions
-   *  Properties that the system can assume to be true.
-   * @param obligations
-   *  Proof obligations, or properties that we want the system to have.
+   * @param relies
+   *  "Rely" properties that the environment must satisfy; these are checked
+   *  in calling code. These are contract "requires".
+   *  The properties here do *not* necessarily satisfy
+   *  > `relies.forall(_.form == Form.Rely)`.
+   *  as relies in subnodes become sorries for the caller.
+   * @param guarantees
+   *  "Guarantee" properties that we must prove that the system satisfies.
+   *  These are proof obligations or contract "ensures".
+   * @param sorries
+   *  "Trusted" properties that everybody can assume to be true. These are
+   *  assumed to be true in the body and the calling code.
    */
   case class System(
-    state: Namespace = names.Namespace(),
-    row: Namespace = names.Namespace(),
-    init: Terms.Term = compound.bool(true),
-    step: Terms.Term = compound.bool(true),
-    assumptions: List[SystemJudgment] = List(),
-    obligations: List[SystemJudgment] = List())
+    state: Namespace  = names.Namespace(),
+    row:   Namespace  = names.Namespace(),
+    init:  Terms.Term = compound.bool(true),
+    step:  Terms.Term = compound.bool(true),
+    relies:     List[SystemJudgment] = List(),
+    guarantees: List[SystemJudgment] = List(),
+    sorries:    List[SystemJudgment] = List())
   extends pretty.Pretty:
     def ppr =
       pretty.subgroup("State:", List(state.ppr)) <>
-      pretty.subgroup("Row:", List(row.ppr)) <>
-      pretty.subgroup("Init:", List(pretty.string(term.pprTermBigAnd(init)))) <>
-      pretty.subgroup("Step:", List(pretty.string(term.pprTermBigAnd(step)))) <>
-      pretty.subgroup("Assumptions:", assumptions.map(_.ppr)) <>
-      pretty.subgroup("Obligations:", obligations.map(_.ppr))
+      pretty.subgroup("Row:",   List(row.ppr)) <>
+      pretty.subgroup("Init:",  List(pretty.string(term.pprTermBigAnd(init)))) <>
+      pretty.subgroup("Step:",  List(pretty.string(term.pprTermBigAnd(step)))) <>
+      pretty.subgroup("Relies:",     relies.map(_.ppr)) <>
+      pretty.subgroup("Guarantees:", guarantees.map(_.ppr)) <>
+      pretty.subgroup("Sorries:",    sorries.map(_.ppr))
 
     /** Parallel composition of systems. */
     def <>(that: System) = System(
@@ -92,8 +102,9 @@ object system:
       row   = this.row <> that.row,
       init  = compound.and(this.init, that.init),
       step  = compound.and(this.step, that.step),
-      assumptions = this.assumptions ++ that.assumptions,
-      obligations = this.obligations ++ that.obligations)
+      relies     = this.relies ++ that.relies,
+      guarantees = this.guarantees ++ that.guarantees,
+      sorries    = this.sorries ++ that.sorries)
 
     /** Slow the clock of a system, so it only steps when the boolean
      * expression `klock` is true.
@@ -111,8 +122,9 @@ object system:
         row   = this.row,
         init  = this.init,
         step  = compound.ite(klock, this.step, stay),
-        assumptions = this.assumptions,
-        obligations = this.obligations)
+        relies     = this.relies,
+        guarantees = this.guarantees,
+        sorries    = this.sorries)
 
     /** Reset a system whenever boolean expression `klock` is true.
      * Fresh is a fresh name such that row.fresh is not used.
@@ -150,8 +162,9 @@ object system:
         step  = compound.and(
           compound.ite(klock, yeReset, noReset),
           stepSubst),
-        assumptions = this.assumptions,
-        obligations = this.obligations)
+        relies     = this.relies,
+        guarantees = this.guarantees,
+        sorries    = this.sorries)
 
 
   object System:

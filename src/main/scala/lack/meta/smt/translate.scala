@@ -68,9 +68,10 @@ object translate:
         case Exp.Var(s, v) =>
           SystemJudgment(List(), ExpContext.stripRef(node, v), judgment)
 
-    val (obligations, assumptions) =
-      node.props.toList.map(prop).partition(j => j.judgment.isObligation)
-    val sysprops = System(obligations = obligations, assumptions = assumptions)
+    val sysprops = System(
+      relies     = node.relies.map(prop).toList,
+      guarantees = node.guarantees.map(prop).toList,
+      sorries    = node.sorries.map(prop).toList)
 
     system.Node(node.path, params, sys <> sysprops)
 
@@ -159,30 +160,24 @@ object translate:
 
       def pfx(p: names.Prefix) = names.Prefix(p.prefix :+ v)
       def pfxR(r: names.Ref) = names.Ref(List(v) ++ r.prefix, r.name)
+      def pfxJ(j: SystemJudgment) =
+        SystemJudgment(j.hypotheses.map(pfxR), pfxR(j.consequent), j.judgment)
 
-      // Get all of the subnode's judgments. Contract requires become
-      // obligations at the use-site. Other judgments become assumptions
-      // here as they've been proven in the subnode itself.
-      // Should all local properties bubble up? What about sorries?
-      val subjudg =
-        for j <- subsystem.system.assumptions ++ subsystem.system.obligations
-        yield SystemJudgment(j.hypotheses.map(pfxR), pfxR(j.consequent), j.judgment)
-      val (reqs, asms) =
-        subjudg.partition(_.judgment.form == lack.meta.core.prop.Form.Require)
-      // Contract requires become local SubnodeRequire obligations, so that the
-      // caller's caller won't find the sub-requires as an obligation.
-      val reqsX = reqs.map { j =>
-        j.copy(judgment = j.judgment.copy(form = lack.meta.core.prop.Form.SubnodeRequire))
-      }
-      // The subnode guarantees only hold if the requirements are always true,
-      // so we rewrite each assumption to `SoFar(/\ reqs) => asm`.
-      // HACK: ignore the requirements' hypotheses. This is sound because we're
+      val subrelies     = subsystem.system.relies.map(pfxJ)
+      val subguarantees = subsystem.system.guarantees.map(pfxJ)
+      val subsorries    = subsystem.system.sorries.map(pfxJ)
+      // The subnode's assertions only hold if the rely preconditions are
+      // always true, so we rewrite each assumption to `SoFar(/\ reqs) => asm`.
+      // HACK: ignore the rely hypotheses. This is sound because we're
       // just making the assumption hypotheses stricter, but prove it or clean
-      // it up. Maybe this transform should move to translate.node.
-      val reqsHypotheses = reqsX.map(_.consequent)
-      val asmsX = asms.map { j =>
-        j.copy(hypotheses = j.hypotheses ++ reqsHypotheses)
-      }
+      // it up.
+      val addHypotheses = subrelies.map(_.consequent)
+      // environment has to guarantee the subsystem's relies
+      val guarantees = subrelies
+      // environment can assume the subsytem's guarantees and sorries hold
+      val sorries    =
+        for j <- (subguarantees ++ subsorries)
+        yield j.copy(hypotheses = j.hypotheses ++ addHypotheses)
 
       val subnodeT = System(
         state = names.Namespace.nest(v, subsystem.system.state),
@@ -195,8 +190,9 @@ object translate:
           val argsV = subsystem.stepP(pfx(system.Prefix.state), pfx(system.Prefix.row), pfx(system.Prefix.stateX))
               .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
           Terms.FunctionApplication(subsystem.stepI, argsV),
-        assumptions = asmsX,
-        obligations = reqsX)
+        relies     = List(),
+        guarantees = guarantees,
+        sorries    = sorries)
 
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 

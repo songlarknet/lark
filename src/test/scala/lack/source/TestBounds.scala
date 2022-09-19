@@ -23,7 +23,7 @@ object TestBounds:
     val mean_in_bounds  = mean < OVERRIDE
     val prop            = last_in_bounds ==> mean_in_bounds
 
-    property("if last_in_bounds then mean_in_bounds") {
+    check("if last_in_bounds then mean_in_bounds") {
       prop
     }
 
@@ -66,19 +66,19 @@ object TestBounds:
 
   //   val human = i32(1)
   //   val machine = i32(1)
-  //   property("if no human override then machine control") {
+  //   check("if no human override then machine control") {
   //     LastN(HISTORY, human < OVERRIDE) ==> (SteerSelector(human, machine) == machine)
   //   }
-  //   property("if no human override then machine control") {
+  //   check("if no human override then machine control") {
   //     LastN(HISTORY, human < OVERRIDE) ==> MeanN(HISTORY, human) < OVERRIDE
   //   }
 
-  //   property("if no human override then machine control") {
+  //   check("if no human override then machine control") {
   //     human < OVERRIDE && fby(False, human < OVERRIDE) ==>
   //       ((human + fby(0, human)) / 2 < OVERRIDE)
   //   }
 
-  //   property("bounds-2: if no human override then machine control") {
+  //   check("bounds-2: if no human override then machine control") {
   //     val human_in_bounds = human < OVERRIDE
   //     val last_fby        = fby(False, human_in_bounds)
   //     val last_in_bounds  = human_in_bounds && last_fby
@@ -91,7 +91,7 @@ object TestBounds:
   //     last_in_bounds ==> mean_in_bounds
   //   }
 
-  //   property("bounds-3: if no human override then machine control") {
+  //   check("bounds-3: if no human override then machine control") {
   //     val human_in_bounds = human < OVERRIDE
   //     val last_fby1       = fby(False, human_in_bounds)
   //     val last_fby2       = fby(False, last_fby1)

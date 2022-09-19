@@ -174,16 +174,19 @@ object check:
   def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): NodeSummary =
     val sys  = declareSystem(top, solver)
     val topS = sys.top
-    if (skipTrivial && topS.system.obligations.isEmpty)
+    if (skipTrivial && topS.system.guarantees.isEmpty)
       NodeSummary.Skip(top)
     else
       // LODO fix up pretty-printing
       println(s"Node ${names.Prefix(top.path).pprString}:")
-      topS.system.assumptions.foreach { o =>
-        println(s"  Assume ${o.judgment.pprString}")
+      topS.system.relies.foreach { o =>
+        println(s"  Rely      ${o.judgment.pprString}")
       }
-      topS.system.obligations.foreach { o =>
-        println(s"  Show ${o.judgment.pprString}")
+      topS.system.guarantees.foreach { o =>
+        println(s"  Guarantee ${o.judgment.pprString}")
+      }
+      topS.system.sorries.foreach { o =>
+        println(s"  Sorry     ${o.judgment.pprString}")
       }
 
       // TODO: runner / strategy:
@@ -229,7 +232,8 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, step, solver)
+      asserts(top.system.relies, step, solver)
+      asserts(top.system.sorries, step, solver)
 
       solver.checkSat().status match
         case CommandsResponses.UnknownStatus => return CheckFeasible.UnknownAt(step)
@@ -256,9 +260,10 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, step, solver)
+      asserts(top.system.relies, step, solver)
+      asserts(top.system.sorries, step, solver)
 
-      solver.checkSatAssumingX(disprove(top.system.obligations, step)) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.guarantees, step)) { _.status match
         case CommandsResponses.UnknownStatus => return Bmc.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -287,9 +292,10 @@ object check:
 
       callSystemFun(top.stepI, state ++ row ++ stateS, solver)
 
-      asserts(top.system.assumptions, step, solver)
+      asserts(top.system.relies, step, solver)
+      asserts(top.system.sorries, step, solver)
 
-      solver.checkSatAssumingX(disprove(top.system.obligations, step)) { _.status match
+      solver.checkSatAssumingX(disprove(top.system.guarantees, step)) { _.status match
         case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
         case CommandsResponses.SatStatus     =>
           val model = solver.command(Commands.GetModel())
@@ -297,7 +303,7 @@ object check:
         case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
       }
 
-      asserts(top.system.obligations, step, solver)
+      asserts(top.system.guarantees, step, solver)
     }
 
     Kind.NoGood(count, traces)

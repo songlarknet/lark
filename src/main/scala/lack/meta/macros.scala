@@ -5,11 +5,21 @@ import scala.quoted.*
 
 object macros:
   case class Location(enclosing: Option[String], position: Option[Position]) extends pretty.Pretty:
-    def ppr =
+    def ppr = ppr(pretty.emptyDoc)
+    def ppr(prefix: pretty.Doc) =
       val txt = position.fold("")(p => s"at ${p.name}:${p.line}:${p.column}") +
                 enclosing.fold("")(c => s" in ${c}")
-      pretty.text(txt.stripLeading())
+      if txt.nonEmpty
+      then prefix <> pretty.text(txt.stripLeading())
+      else pretty.emptyDoc
     def prettyPath: String = enclosing.getOrElse("")
+
+    def <>(that: Location): Location = Location(
+      enclosing = this.enclosing.orElse(that.enclosing),
+      position = this.position.orElse(that.position))
+
+  object Location:
+    def empty = Location(None, None)
 
   case class Position(name: String, line: Int, column: Int)
 

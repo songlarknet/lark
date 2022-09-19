@@ -26,7 +26,7 @@ object TestFIR:
       bounded_input
     }
 
-    property("show: bounded output") {
+    check("show: bounded output") {
       bounded_output
     }
 

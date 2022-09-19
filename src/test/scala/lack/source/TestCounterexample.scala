@@ -22,6 +22,6 @@ object TestCounterexample:
       undef <= 1
     }
 
-    property("falsifiable: counter < 3") {
+    check("falsifiable: counter < 3") {
       counter < 3
     }

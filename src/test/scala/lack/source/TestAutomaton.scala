@@ -137,23 +137,23 @@ object TestAutomaton:
       otherwise { speed_out } // dirty hack undefined
     )
 
-    property("state inv") {
+    check("state inv") {
       state == S_OFF || state == S_AWAIT || state == S_ON
     }
 
-    property("!btn_on ==> off") {
+    check("!btn_on ==> off") {
       !btn_on ==> (state == S_OFF)
     }
 
-    property("!btn_on ==> accel_out == accel") {
+    check("!btn_on ==> accel_out == accel") {
       !btn_on ==> (accel_out == accel)
     }
 
-    property("accel >= 100 => accel_out == accel") {
+    check("accel >= 100 => accel_out == accel") {
       (accel >= 100) ==> (accel_out == accel)
     }
 
-    property("no set, no change") {
+    check("no set, no change") {
       !cmd_set ==> (speed_out == u8(0) || speed_out == pre(speed_out))
     }
 
