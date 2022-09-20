@@ -5,7 +5,7 @@ import lack.meta.core.term.{Exp, Flow, Prim, Val}
 import lack.meta.source.node.Builder
 import lack.meta.source.stream.{SortRepr, Stream}
 import lack.meta.base
-import lack.meta.base.num.Integer
+import lack.meta.base.num.{Integer, Real}
 import lack.meta.core.sort.Sort
 
 object compound:
@@ -65,16 +65,12 @@ object compound:
   def i16(i: Integer): Stream[stream.Int16]  = int[stream.Int16](i)
   def i32(i: Integer): Stream[stream.Int32]  = int[stream.Int32](i)
   def i64(i: Integer): Stream[stream.Int64]  = int[stream.Int64](i)
-  def m8(i: Integer):  Stream[stream.Mod8]   = int[stream.Mod8](i)
-  def m16(i: Integer): Stream[stream.Mod16]  = int[stream.Mod16](i)
-  def m32(i: Integer): Stream[stream.Mod32]  = int[stream.Mod32](i)
-  def m64(i: Integer): Stream[stream.Mod64]  = int[stream.Mod64](i)
 
-  def f32(r: Float): Stream[stream.Float32] =
-    new Stream(Exp.Val(Sort.Float32, Val.Float32(r.toFloat)))
+  def r32(r: Real): Stream[stream.Real32] =
+    new Stream(Exp.Val(Sort.Real32, Val.Real(r)))
 
-  def r32(r: Float): Stream[stream.Real32] =
-    new Stream(Exp.Val(Sort.Real32, Val.Real32(r.toFloat)))
+  def r32(r: Double): Stream[stream.Real32] =
+    new Stream(Exp.Val(Sort.Real32, Val.Real(Real.decimal(r))))
 
   val True: Stream[stream.Bool] = bool(true)
 
@@ -82,9 +78,6 @@ object compound:
 
   def bool(b: Boolean): Stream[stream.Bool] =
     new Stream(Exp.Val(Sort.Bool, Val.Bool(b)))
-
-  def tuple[A, B](a: Stream[A], b: Stream[B]): Stream[(A, B)] =
-    stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
 
   object implicits:
     implicit def implicit_integer[T: SortRepr: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
@@ -153,12 +146,7 @@ object compound:
   given Num_UInt32: Num[stream.UInt32] = new internal.NumImplIntegral
   given Num_Int64:  Num[stream.Int64]  = new internal.NumImplIntegral
   given Num_UInt64: Num[stream.UInt64] = new internal.NumImplIntegral
-  given Num_Mod8:   Num[stream.Mod8]   = new internal.NumImplMod(Sort.Mod8)
-  given Num_Mod16:  Num[stream.Mod16]  = new internal.NumImplMod(Sort.Mod16)
-  given Num_Mod32:  Num[stream.Mod32]  = new internal.NumImplMod(Sort.Mod32)
-  given Num_Mod64:  Num[stream.Mod64]  = new internal.NumImplMod(Sort.Mod64)
 
-  given Num_Float32: Num[stream.Float32] = new internal.NumImplFloat32
   given Num_Real32:  Num[stream.Real32]  = new internal.NumImplReal32
 
   object internal:
@@ -200,20 +188,9 @@ object compound:
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
             new Stream(Exp.Val(sort, Val.Int(i)))
 
-    class NumImplMod[T: SortRepr](mod: Sort.Mod) extends NumImpl[T]:
-      def const(i: Integer): Stream[T] =
-        summon[SortRepr[T]].sort match
-          case sort: Sort.Mod =>
-            require(sort.minInclusive <= i && i <= sort.maxInclusive)
-            new Stream(Exp.Val(sort, Val.Mod(i, mod)))
-
-    class NumImplFloat32 extends NumImpl[stream.Float32]:
-      def const(i: Integer): Stream[stream.Float32] =
-        new Stream(Exp.Val(Sort.Float32, Val.Float32(i.toFloat)))
-
     class NumImplReal32 extends NumImpl[stream.Real32]:
       def const(i: Integer): Stream[stream.Real32] =
-        new Stream(Exp.Val(Sort.Real32, Val.Real32(i.toFloat)))
+        new Stream(Exp.Val(Sort.Real32, Val.Real(Real(i))))
 
   def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
     conds.toList match

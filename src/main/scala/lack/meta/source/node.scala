@@ -162,11 +162,6 @@ object node:
       protected def := (rhs: Stream[T])(using builder: Builder) =
         bind(lhs, rhs)
 
-    extension [T: SortRepr, U: SortRepr](lhs: (Lhs[T], Lhs[U]))
-      protected def := (rhs: Stream[(T, U)])(using builder: Builder) =
-        bind(lhs._1, rhs._1)
-        bind(lhs._2, rhs._2)
-
     protected abstract class Merge(using builder: Builder) extends reflect.Selectable:
       val merge = builder.nested.merge()
 

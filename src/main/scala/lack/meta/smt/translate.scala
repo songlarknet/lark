@@ -22,15 +22,13 @@ object translate:
 
   def sort(s: Sort): Terms.Sort = s match
     case _: Sort.Integral => Terms.Sort(compound.id("Int"))
-    case _: Sort.Mod => Terms.Sort(compound.id("Int !TODO"))
-    case Sort.Float32 => Terms.Sort(compound.id("Float !TODO"))
     case Sort.Real32 => Terms.Sort(compound.id("Real"))
     case Sort.Bool => Terms.Sort(compound.id("Bool"))
 
   def value(v: Val): Terms.Term = v match
     case Val.Bool(b) => compound.qid(b.toString)
     case Val.Int(i) => compound.int(i)
-    case Val.Real32(f) => compound.real(f)
+    case Val.Real(f) => compound.real(f)
 
   class Context(val nodes: Map[List[names.Component], system.Node], val supply: names.mutable.Supply)
 
@@ -239,8 +237,8 @@ object translate:
         SystemV.row(ref, sort)
 
     case Exp.App(sort, prim, args : _*) =>
-      require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
-        "TODO: division for bitvectors has weird semantics in SMT-lib, need to wrap division to get consistent div-by-zero behaviour")
+      // require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
+      //   "TODO: division for bitvectors has weird semantics in SMT-lib, need to wrap division to get consistent div-by-zero behaviour")
 
       for
         targs <- SystemV.conjoin(args.map(expr(context, _)))

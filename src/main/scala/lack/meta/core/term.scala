@@ -24,28 +24,13 @@ object term:
         case _ =>
           false
 
-    case class Mod(i: Integer, width: Sort.Mod) extends Val:
-      def ppr = pretty.string(s"#mod${width.width}'$i")
-      def check(sort: Sort) = sort match
-        case m: Sort.Mod =>
-          m.range.contains(i) && m.width == width.width
-        case _ =>
-          false
-
-    case class Float32(r: Float) extends Val:
-      def ppr = pretty.string(s"#f32'$r")
-      def check(sort: Sort) = sort == Sort.Float32
-
-    /** Logical real with float32 runtime representation */
-    case class Real32(r: Float) extends Val:
-      def ppr = pretty.string(s"#r32'$r")
+    /** Mathematical real number.
+     *
+     * These values are logically reals, but the compiled runtime
+     * representation is a float, which is a bit of a lie. */
+    case class Real(r: num.Real) extends Val:
+      def ppr = pretty.string(s"#r'$r")
       def check(sort: Sort) = sort == Sort.Real32
-
-    case class Struct(fields: List[(String, Val)], struct: Sort.Struct) extends Val:
-      require(fields.map(_._1) == struct.fields.map(_._1))
-      require(struct.fields.zip(fields).forall(f => f._2._2.check(f._1._2)))
-      def ppr = pretty.parens(struct.ppr <+> pretty.hsep(fields.map(f => pretty.text(s":${f._1}") <+> f._2.ppr)))
-      def check(sort: Sort) = sort == struct
 
   /** Pure total primitives. */
   trait Prim extends pretty.Pretty:
@@ -53,7 +38,6 @@ object term:
     // def sort(args: List[Sort]): Sort
     def eval(args: List[Val]): Val
   object Prim:
-
     abstract class Simple(prim: String, expect: List[Sort], ret: Sort) extends Prim:
       def ppr = pretty.text(prim)
 
@@ -83,14 +67,9 @@ object term:
     // TODO: floats too
     def eval_ii_b(args: List[Val])(f: (Integer, Integer) => Boolean): Val = args match
       case List(Val.Int(i), Val.Int(j)) => Val.Bool(f(i, j))
-      case List(Val.Mod(i, _), Val.Mod(j, _)) => Val.Bool(f(i, j))
 
     def eval_ii_i(args: List[Val])(f: (Integer, Integer) => Integer): Val = args match
       case List(Val.Int(i), Val.Int(j)) => Val.Int(f(i, j))
-      case List(Val.Mod(i, iw), Val.Mod(j, jw)) =>
-        require(iw.width == jw.width)
-        val r = f(i, j)
-        Val.Mod(r & iw.range.max, iw)
 
     case object Add extends Prim:
       def ppr = pretty.text("+")
@@ -137,20 +116,6 @@ object term:
     case object Gt extends Prim:
       def ppr = pretty.text(">")
       def eval(args: List[Val]): Val = eval_ii_b(args)((_ > _))
-
-    case class StructGet(field: String, struct: Sort.Struct) extends Prim:
-      require(struct.fields.map(_._1).contains(field))
-
-      def ppr = struct.ppr <> pretty.squote <> pretty.text(field)
-      def eval(args: List[Val]): Val = args match
-        case List(vstr: Val.Struct) =>
-          require(vstr.struct == struct)
-          vstr.fields.filter(v => v._1 == field).head._2
-
-    case class StructMk(struct: Sort.Struct) extends Prim:
-      def ppr = struct.ppr
-      def eval(args: List[Val]): Val =
-        Val.Struct(struct.fields.map(_._1).zip(args).toList, struct)
 
   /** Pure expressions */
   sealed trait Exp extends pretty.Pretty:

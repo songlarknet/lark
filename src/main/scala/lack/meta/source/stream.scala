@@ -51,45 +51,5 @@ object stream:
   opaque type UInt64  = internal.Prim[Sort.UInt64.type]
   given SortRepr_UInt64: SortRepr[UInt64] = new SortRepr(Sort.UInt64)
 
-  opaque type Mod8    = internal.Prim[Sort.Mod8.type]
-  given SortRepr_Mod8: SortRepr[Mod8] = new SortRepr(Sort.Mod8)
-
-  opaque type Mod16   = internal.Prim[Sort.Mod16.type]
-  given SortRepr_Mod16: SortRepr[Mod16] = new SortRepr(Sort.Mod16)
-
-  opaque type Mod32   = internal.Prim[Sort.Mod32.type]
-  given SortRepr_Mod32: SortRepr[Mod32] = new SortRepr(Sort.Mod32)
-
-  opaque type Mod64   = internal.Prim[Sort.Mod64.type]
-  given SortRepr_Mod64: SortRepr[Mod64] = new SortRepr(Sort.Mod64)
-
-  opaque type Float32 = internal.Prim[Sort.Float32.type]
-  given SortRepr_Float32: SortRepr[Float32] = new SortRepr(Sort.Float32)
-
   opaque type Real32 = internal.Prim[Sort.Real32.type]
   given SortRepr_Real32: SortRepr[Real32] = new SortRepr(Sort.Real32)
-
-  opaque type Complex = internal.Prim[Sort.Complex.type]
-  given SortRepr_Complex: SortRepr[Complex] = new SortRepr(Sort.Complex)
-
-  extension (x: Stream[Complex])
-    def re: Stream[Float32] = new Stream(Exp.App(Sort.Float32, term.Prim.StructGet("re", Sort.Complex), x._exp))
-    def im: Stream[Float32] = new Stream(Exp.App(Sort.Float32, term.Prim.StructGet("im", Sort.Complex), x._exp))
-
-  object Complex:
-    def apply(re: Stream[Float32], im: Stream[Float32]): Stream[Complex] =
-      new Stream(Exp.App(Sort.Complex, term.Prim.StructMk(Sort.Complex), re._exp, im._exp))
-
-  // TODO more tuples
-  given SortRepr_Tuple2[A: SortRepr, B: SortRepr]: SortRepr[(A, B)] =
-    new SortRepr(Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort))
-
-  extension [A: SortRepr, B: SortRepr](x: Stream[(A, B)])
-    def _1: Stream[A] = new Stream(Exp.App(summon[SortRepr[A]].sort, term.Prim.StructGet("_1", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
-    def _2: Stream[B] = new Stream(Exp.App(summon[SortRepr[B]].sort, term.Prim.StructGet("_2", Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)), x._exp))
-
-  object Tuple2:
-    def apply[A: SortRepr, B: SortRepr](_1: Stream[A], _2: Stream[B]): Stream[(A, B)] =
-      val sort = Sort.Tuple2(summon[SortRepr[A]].sort, summon[SortRepr[B]].sort)
-      new Stream(Exp.App(sort, term.Prim.StructMk(sort), _1._exp, _2._exp))
-
