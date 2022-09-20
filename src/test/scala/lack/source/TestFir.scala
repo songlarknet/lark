@@ -8,10 +8,10 @@ import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.driver.check
 
 /** Example of an FIR filter */
-object TestFIR:
-
-  def main(args: Array[String]): Unit =
+class TestFIR extends munit.FunSuite:
+  test("fir filter") {
     check.success() { new LemmaFIR(3, _) }
+  }
 
   class LemmaFIR(n: Int, invocation: NodeInvocation) extends Node(invocation):
     val signal = local[Real32]

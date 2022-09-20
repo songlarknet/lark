@@ -7,10 +7,10 @@ import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.driver.check
 
-object TestContractNoGood:
-
-  def main(args: Array[String]): Unit =
+class TestContractNoGood extends munit.FunSuite:
+  test("contract no good") {
     check.failure() { new Lemma(_) }
+  }
 
   class Lemma(invocation: NodeInvocation) extends Node(invocation):
     val undef   = local[Int32]

@@ -10,10 +10,10 @@ import lack.meta.driver.check
 /** First attempt at automaton example.
  * Manual translation from Lustre syntax to nested nodes.
  */
-object TestAutomaton:
-
-  def main(args: Array[String]): Unit =
+class TestAutomaton extends munit.FunSuite:
+  test("automaton") {
     check.success() { new Top(_) }
+  }
 
   class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...

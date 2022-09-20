@@ -9,10 +9,11 @@ import lack.meta.driver.check
 
 /** Full-sugar cruise control automaton
  */
-object TestAutomatonSugar:
+class TestAutomatonSugar extends munit.FunSuite:
 
-  def main(args: Array[String]): Unit =
+  test("automaton sugar") {
     check.success() { new Top(_) }
+  }
 
   class Top(invocation: NodeInvocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...

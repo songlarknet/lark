@@ -7,10 +7,10 @@ import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.driver.check
 
-object TestBounds:
-
-  def main(args: Array[String]): Unit =
+class TestBounds extends munit.FunSuite:
+  test("bounds") {
     check.success() { new LemmaBounds(3, _) }
+  }
 
   class LemmaBounds(n: Int, invocation: NodeInvocation) extends Node(invocation):
     val human  = local[Int32]

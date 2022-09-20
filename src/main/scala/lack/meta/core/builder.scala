@@ -16,11 +16,7 @@ import scala.collection.mutable
  * everywhere. LODO
  */
 object builder:
-  // TODO: want a second sort of context that's program-level
-  // TODO: with map from Var to Node where it's defined?
-  // TODO: top-level wants a list of all the types used, eg structs
-  // var nodes: List[Node] = List()
-  // var sorts: List[Sort] = List()
+  // LODO: want a program-level context that has map from var to node, list of all sorts, eg structs
 
   /** Mutable binding contexts */
   sealed trait Binding extends pretty.Pretty

@@ -146,8 +146,8 @@ object term:
       else
         funappNoSimp("-", List(Terms.SNumeral(- i)))
 
-    def real(f: Float) =
-      Terms.SDecimal(BigDecimal.decimal(f))
+    def real(f: num.Real) =
+      Terms.SDecimal(f)
 
     def bool(b: Boolean) = qid(b.toString)
 

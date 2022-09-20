@@ -7,10 +7,10 @@ import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.driver.check
 
-object TestCounterexample:
-
-  def main(args: Array[String]): Unit =
+class TestCounterexample extends munit.FunSuite:
+  test("counterexample") {
     check.failure() { new LemmaCounterexample(_) }
+  }
 
   class LemmaCounterexample(invocation: NodeInvocation) extends Node(invocation):
     val counter = local[Int32]

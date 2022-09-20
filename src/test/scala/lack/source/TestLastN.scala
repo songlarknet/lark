@@ -8,10 +8,10 @@ import lack.meta.source.stream
 import lack.meta.source.node.{Builder, Node, NodeInvocation}
 import lack.meta.driver.check
 
-object TestLastN:
-
-  def main(args: Array[String]): Unit =
+class TestLastN extends munit.FunSuite:
+  test("lastN") {
     check.success() { new LemmaLastN(3, _) }
+  }
 
   class LemmaLastN(n: Integer, invocation: NodeInvocation) extends Node(invocation):
     val e      = local[Bool]
