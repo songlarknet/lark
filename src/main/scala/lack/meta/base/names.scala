@@ -33,18 +33,17 @@ object names:
     def fromStringUnsafe(s: String): ComponentSymbol = s
     def pretty(c: ComponentSymbol): String = c
 
-    val INIT      = fromInternal("init")
-    val PRE       = fromInternal("pre")
-    val FBY       = fromInternal("fby")
-    val RESET     = fromInternal("reset")
-    val LOCAL     = fromStringUnsafe("")
+    val STATE   = fromInternal("ctx")
+    val INIT    = fromInternal("init")
+    val RESET   = fromInternal("reset")
+    val LOCAL   = fromStringUnsafe("")
 
   given Ordering_ComponentSymbol: scala.math.Ordering[ComponentSymbol] with
     def compare(x: ComponentSymbol, y: ComponentSymbol): Int =
       x.compareTo(y)
 
   /** A name component, which can be used as a variable binding. */
-  case class Component(symbol: ComponentSymbol, ix: Option[Int]) extends pretty.Pretty:
+  case class Component(symbol: ComponentSymbol, ix: Option[Int] = None) extends pretty.Pretty:
     def ppr: pretty.Doc =
       pretty.string(symbol + (if (ix.isDefined) s"?${ix.get}" else ""))
 
@@ -67,6 +66,8 @@ object names:
       pretty.ssep(docs, pretty.dot)
 
   object Ref:
+    def fromComponent(name: Component) = Ref(List(), name)
+
     def fromPathUnsafe(path: List[Component]): Ref =
       require(path.nonEmpty, "fromPathUnsafe: requires non-empty path for variable reference")
       Ref(path.dropRight(1), path.last)
@@ -79,6 +80,9 @@ object names:
   case class Prefix(prefix: List[Component]) extends pretty.Pretty:
     def apply(name: names.Ref): names.Ref =
       names.Ref(prefix ++ name.prefix, name.name)
+
+    def apply(name: names.Component): names.Ref =
+      names.Ref(prefix, name)
 
     def ppr: pretty.Doc =
       val docs = prefix.map(_.ppr)
@@ -149,5 +153,5 @@ object names:
         ixes(name) += 1
         names.Ref(path, names.Component(name, ixy))
 
-      def freshInit(): names.Ref =
-        freshRef(names.ComponentSymbol.INIT, forceIndex = true)
+      def freshState(): names.Ref =
+        freshRef(names.ComponentSymbol.STATE, forceIndex = true)

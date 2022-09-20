@@ -9,7 +9,12 @@ import lack.meta.core.prop.{Form, Judgment}
 
 import scala.collection.mutable
 
-/** Mutable builder for node-based transition systems. */
+/** Mutable builder for node-based transition systems.
+ *
+ * Once the core language settles down I'd like to add a separate immutable
+ * representation of nodes. For now it's easier to just use this one
+ * everywhere. LODO
+ */
 object builder:
   // TODO: want a second sort of context that's program-level
   // TODO: with map from Var to Node where it's defined?
@@ -34,7 +39,7 @@ object builder:
           }.toSeq)
 
       def when(clock: Exp): Nested =
-        val i = node.supply.freshInit()
+        val i = node.supply.freshState()
         val n = new Nested(i.name, node)
         cases += ((clock, n))
         n
@@ -43,11 +48,11 @@ object builder:
       def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr) <+> nested.ppr
 
   /** Mutable list of bindings */
-  class Nested(val init: names.Component, val node: Node):
+  class Nested(val context: names.Component, val node: Node):
     // TODO allow each nested to declare local variables
     val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-    def ppr = pretty.nest(pretty.text("@init") <> pretty.parens(init.ppr) <> pretty.colon <@>
+    def ppr = pretty.nest(pretty.text("@context") <> pretty.parens(context.ppr) <> pretty.colon <@>
       pretty.vsep(children.map(_.ppr).toList))
 
     // LODO do merging / cse on append?
@@ -63,7 +68,7 @@ object builder:
       if (clock == Exp.Val(Sort.Bool, Val.Bool(false)))
         this
       else
-        val i = node.supply.freshInit()
+        val i = node.supply.freshState()
         val n = new Nested(i.name, node)
         val r = new Binding.Reset(clock, n)
         append(r)
@@ -138,7 +143,7 @@ object builder:
     var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
     var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
 
-    var nested: Nested = new Nested(supply.freshInit().name, this)
+    var nested: Nested = new Nested(supply.freshState().name, this)
 
     def relies: Iterable[Judgment] =
       props.filter(_.form == Form.Rely)
@@ -185,13 +190,14 @@ object builder:
       val pathP = names.Prefix(path).ppr
       val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
       val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
+      val bindingsH = pretty.text("Bindings @context(") <> nested.context.ppr <> pretty.text("):")
       val bindingsP = nested.children.map(x => x.ppr)
       val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
       val propsP = props.map(x => x.ppr)
 
       pretty.text("Node") <+> pretty.nest(pathP <> pretty.tuple(paramsP.toSeq) <@>
         pretty.subgroup("Vars:", varsP.toSeq) <>
-        pretty.subgroup("Bindings:", bindingsP.toSeq) <>
+        pretty.subgroup(bindingsH, bindingsP.toSeq) <>
         pretty.subgroup("Subnodes:", subnodesP.toSeq) <>
         pretty.subgroup("Props:", propsP.toSeq))
 

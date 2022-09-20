@@ -303,7 +303,7 @@ object system:
 
     /** Convert namespace to list of SMT-lib parameters */
     def paramsOfNamespace(prefix: names.Prefix, ns: Namespace): List[Terms.SortedVar] =
-      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(names.Ref(List(), v))).id.symbol, translate.sort(s)))
+      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(v)).id.symbol, translate.sort(s)))
       val nsX = ns.namespaces.toList.flatMap((v,n) => paramsOfNamespace(names.Prefix(prefix.prefix :+ v), n))
       vs ++ nsX
 

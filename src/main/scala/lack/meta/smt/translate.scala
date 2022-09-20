@@ -60,7 +60,7 @@ object translate:
       names.Ref(node.path, names.Component(i, None))
 
     val sys        = nested(context, node, node.nested).system
-    val params     = node.params.map { p => names.Ref(List(), p) }.toList
+    val params     = node.params.map { p => names.Ref.fromComponent(p) }.toList
 
     def prop(judgment: Judgment): SystemJudgment =
       judgment.term match
@@ -76,8 +76,9 @@ object translate:
     system.Node(node.path, params, sys <> sysprops)
 
   def nested(context: Context, node: Node, nested: builder.Nested): SystemV[Unit] =
-    val initR    = names.Ref(List(), nested.init)
-    val children = nested.children.map(binding(context, node, initR, _))
+    val contextPrefix = names.Prefix(List(nested.context))
+    val initR         = contextPrefix(names.Component(names.ComponentSymbol.INIT))
+    val children      = nested.children.map(binding(context, node, contextPrefix, _))
 
     for
       // init flag true initially
@@ -90,15 +91,14 @@ object translate:
       _     <- SystemV.conjoin(children.toSeq)
     yield ()
 
-  def binding(context: Context, node: Node, init: names.Ref, binding: builder.Binding): SystemV[Unit] = binding match
+  def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: builder.Binding): SystemV[Unit] = binding match
     case b: builder.Binding.Equation =>
       val ec    = ExpContext(node, context.supply)
-      val xbind = node.xvar(b.lhs)
-      val xref  = names.Ref(List(), b.lhs)
+      val xref  = names.Ref.fromComponent(b.lhs)
       val tstep =
         for
-          erhs <- flow(ec, init, b.rhs)
-          x    <- SystemV.row(xref, xbind.sort)
+          erhs <- flow(ec, contextPrefix, b)
+          x    <- SystemV.row(xref, b.rhs.sort)
         yield compound.equal(erhs, x)
       SystemV.step(tstep)
 
@@ -175,19 +175,22 @@ object translate:
       go(compound.bool(true), b.cases.toList)
 
     case b: builder.Binding.Reset =>
-      val ref = context.supply.freshRef(names.ComponentSymbol.RESET, forceIndex = true)
       val sub = nested(context, node, b.nested)
       for
         kE    <- expr(ExpContext(node, context.supply), b.clock)
-        _     <- sub.reset(ref.name, kE)
+        // Put a copy of sub's state inside row.reset. There won't be
+        // any conflicts because the nested contexts inside sub must have
+        // unique ids.
+        _     <- sub.reset(names.Component(names.ComponentSymbol.RESET), kE)
       yield ()
 
   /** Translate a streaming expression to a system. */
-  def flow(context: ExpContext, init: names.Ref, exp: Flow): SystemV[Terms.Term] = exp match
+  def flow(context: ExpContext, contextPrefix: names.Prefix, b: builder.Binding.Equation): SystemV[Terms.Term] = b.rhs match
     case Flow.Pure(e) =>
       expr(context, e)
 
     case Flow.Arrow(first, later) =>
+      val init = contextPrefix(names.Component(names.ComponentSymbol.INIT))
       for
         st  <- SystemV.state(init, Sort.Bool)
         fst <- expr(context, first)
@@ -195,28 +198,28 @@ object translate:
       yield compound.ite(st, fst, ltr)
 
     case Flow.Pre(pre) =>
-      val ref   = context.supply.freshRef(names.ComponentSymbol.PRE, forceIndex = true)
+      val ref   = contextPrefix(b.lhs)
       val tstep =
         for
           v  <- expr(context, pre)
-          st <- SystemV.stateX(ref, exp.sort)
+          st <- SystemV.stateX(ref, b.rhs.sort)
         yield compound.equal(st, v)
 
-      SystemV.state(ref, exp.sort) <&& SystemV.step(tstep)
+      SystemV.state(ref, b.rhs.sort) <&& SystemV.step(tstep)
 
     case Flow.Fby(v0, pre) =>
-      val ref   = context.supply.freshRef(names.ComponentSymbol.FBY, forceIndex = true)
+      val ref   = contextPrefix(b.lhs)
       val tinit =
         for
-          st <- SystemV.state(ref, exp.sort)
+          st <- SystemV.state(ref, b.rhs.sort)
         yield compound.equal(st, value(v0))
       val tstep =
         for
           v  <- expr(context, pre)
-          st <- SystemV.stateX(ref, exp.sort)
+          st <- SystemV.stateX(ref, b.rhs.sort)
         yield compound.equal(st, v)
 
-      SystemV.state(ref, exp.sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
+      SystemV.state(ref, b.rhs.sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)
 
   /** Translate a pure expression to a system. */
   def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
@@ -225,13 +228,15 @@ object translate:
 
     case Exp.Var(sort, v) =>
       val ref = context.stripRef(v)
-      // HACK: should take a context describing which variables are in state and which are in row
-      val rowVariable = ref.name.symbol != names.ComponentSymbol.INIT
 
-      if (rowVariable)
-        SystemV.row(ref, sort)
-      else
+      // HACK: if the variable refers to the special ^state namespace, then
+      // look up that variable in the state instead of the row.
+      val stateVariable = (ref.prefix.exists(_.symbol == names.ComponentSymbol.STATE))
+
+      if (stateVariable)
         SystemV.state(ref, sort)
+      else
+        SystemV.row(ref, sort)
 
     case Exp.App(sort, prim, args : _*) =>
       require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
