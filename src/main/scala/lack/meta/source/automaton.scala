@@ -36,6 +36,12 @@ object automaton:
    * the transitions, and one for resetting the state bindings. we should be
    * able to figure out ahead-of-time which states are actually restarted, and
    * only introduce reset contexts for those.
+   * The automata translations described in "a conservative extension"
+   * (Colaço 2005) and "hierarchical state machines as modular horn clauses"
+   * (Garoche 2016) don't make it statically clear which states can reset and
+   * which cannot, either. I wonder whether this was one of the issues that
+   * made Kind2's automata a bit slow, if reset contexts introduce extra copies
+   * of the state there too.
    */
   abstract class Automaton(invocation: NodeInvocation) extends Node(invocation):
     /** The user must specify their initial state */

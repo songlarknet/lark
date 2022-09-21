@@ -2,6 +2,7 @@ package lack.meta.source
 
 import lack.meta.macros.Location
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
+import lack.meta.core.term.prim.Table
 import lack.meta.source.node.Builder
 import lack.meta.source.stream.{SortRepr, Stream}
 import lack.meta.base
@@ -25,16 +26,16 @@ object compound:
     builder.memo2(a, b) { case (e, f) => Flow.Arrow(e, f) }
 
   def and(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Prim.And, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.And, e, f) }
 
   def or(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Prim.Or, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.Or, e, f) }
 
   def implies(x: Stream[stream.Bool], y: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Prim.Implies, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.Implies, e, f) }
 
   def not(x: Stream[stream.Bool])(using builder: Builder, location: Location): Stream[stream.Bool] =
-    builder.memo1(x) { case e => Flow.app(Sort.Bool, Prim.Not, e) }
+    builder.memo1(x) { case e => Flow.app(Sort.Bool, Table.Not, e) }
 
   extension [T: SortRepr](x: Stream[T])(using builder: Builder, location: Location)
     def ->(y: Stream[T]): Stream[T] = compound.arrow(x, y)
@@ -53,7 +54,7 @@ object compound:
       compound.not(x)
 
   def ifthenelse[T: SortRepr](p: Stream[stream.Bool], t: Stream[T], f: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    builder.memo3x1(p, t, f) { case (e, f, g) => Flow.app(t.sort, Prim.Ite, e, f, g) }
+    builder.memo3x1(p, t, f) { case (e, f, g) => Flow.app(t.sort, Table.Ite, e, f, g) }
 
   def int[T: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
 
@@ -129,12 +130,12 @@ object compound:
       // Safe rounding
       // def as[U: Num: Stream]: U =
       //   builder.nodeRef.prop(...x fits in U...)
-      //   Prim.UnsafeCast(u)
+      //   Table.UnsafeCast(u)
       // def clamped[U: Num: Stream]: U =
       //   require(U.range < T.range)?
-      //   Prim.UnsafeCast(clamp(U.range.min, U.range.max, u))
+      //   Table.UnsafeCast(clamp(U.range.min, U.range.max, u))
       // def cast[U: Num: Stream]: U =
-      //   Prim.UnsafeCast(u)
+      //   Table.UnsafeCast(u)
       // Float to integer coercions
       // Integer to float coercions
 
@@ -152,34 +153,34 @@ object compound:
   object internal:
     abstract class NumImpl[T: SortRepr] extends Num[T] with Ord[T]:
       def add(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Prim.Add, _, _) }
+        builder.memo2(x, y) { Flow.app(x.sort, Table.Add, _, _) }
 
       def sub(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Prim.Sub, _, _) }
+        builder.memo2(x, y) { Flow.app(x.sort, Table.Sub, _, _) }
 
       def mul(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Prim.Mul, _, _) }
+        builder.memo2(x, y) { Flow.app(x.sort, Table.Mul, _, _) }
 
       def div(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Prim.Div, _, _) }
+        builder.memo2(x, y) { Flow.app(x.sort, Table.Div, _, _) }
 
       def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo1(x) { Flow.app(x.sort, Prim.Negate, _) }
+        builder.memo1(x) { Flow.app(x.sort, Table.Negate, _) }
 
       def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Prim.Eq, _, _) }
+        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Eq, _, _) }
 
       def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Prim.Lt, _, _) }
+        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Lt, _, _) }
 
       def le(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Prim.Le, _, _) }
+        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Le, _, _) }
 
       def gt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Prim.Gt, _, _) }
+        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Gt, _, _) }
 
       def ge(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Prim.Ge, _, _) }
+        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Ge, _, _) }
 
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
       def const(i: Integer): Stream[T] =
