@@ -71,7 +71,7 @@ object Table:
 
     def sort(args: List[Sort]) = args match
       case List(s) if s.isInstanceOf[Sort.Numeric] =>
-        Sort.logical(s)
+        s
       case _ => throw new CheckException(this, args, "")
     def eval(args: List[Val]): Val = args match
       case List(Val.Int(i)) => Val.Int(- i)

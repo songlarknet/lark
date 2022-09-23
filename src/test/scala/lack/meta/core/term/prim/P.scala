@@ -73,5 +73,4 @@ class P extends lack.meta.test.suite.HedgehogSuite:
   }
 
   // TODO: props
-  // evaluation is sound: matches types
   // evaluation matches smt

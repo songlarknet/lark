@@ -15,5 +15,4 @@ package object sort:
     object runtime:
       val ints = Gen.elementIndexed_(Sort.Table.runtime.ints)
 
-    val numeric = Gen.elementIndexed_(Sort.Table.logical.numeric ++ Sort.Table.runtime.ints)
     val all = Gen.elementIndexed_(Sort.Table.all)

@@ -16,6 +16,7 @@ object Exp:
     def ppr = v.ppr
 
   /** Value */
+  // TODO kill sort
   case class Val(sort: Sort, v: lack.meta.core.term.Val) extends Exp:
     def ppr = v.ppr
 
@@ -26,9 +27,18 @@ object Exp:
 
   /** A cast between two variables with different representation types but the
    * same logical type, eg UInt8 -> UInt32. */
-  case class Cast(sort: Sort, e: Exp) extends Exp:
-    // TODO move to typechecker
-    require(Sort.logical(sort) == Sort.logical(e.sort),
-      s"Cannot cast from sort ${e.sort.pprString} to sort ${sort.pprString}")
+  case class Cast(op: Cast.Op, e: Exp) extends Exp:
+    def sort = op match
+      case Cast.Box(r) => r
+      case Cast.Unbox(r) => r
 
-    def ppr = pretty.sexpr(List(pretty.text("#cast"), sort.ppr, e.ppr))
+    // TODO move to typechecker
+    // require(Sort.logical(sort) == Sort.logical(e.sort),
+    //   s"Cannot cast from sort ${e.sort.pprString} to sort ${sort.pprString}")
+
+    def ppr = pretty.sexpr(List(pretty.text("#" + op.toString.toLowerCase), sort.ppr, e.ppr))
+
+  object Cast:
+    sealed trait Op
+    case class Box(sort: Sort.Refinement) extends Op
+    case class Unbox(sort: Sort) extends Op

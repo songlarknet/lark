@@ -134,6 +134,9 @@ object names:
     def nest[V <: pretty.Pretty](name: names.Component, value: Namespace[V]): Namespace[V] =
       Namespace(namespaces = SortedMap(name -> value))
 
+    def fromMap[V <: pretty.Pretty](mp: immutable.RefMap[V]): Namespace[V] =
+      mp.map((k,v) => fromRef(k, v)).fold(Namespace())(_ <> _)
+
   object immutable:
     type RefMap[V] = scala.collection.immutable.SortedMap[names.Ref, V]
     type RefSet    = scala.collection.immutable.SortedSet[names.Ref]

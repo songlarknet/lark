@@ -14,7 +14,7 @@ object G:
         .map(Val.Int(_))
     case s: Sort.BoundedInteger =>
       Gen.integer(Range.constant(s.minInclusive, s.maxInclusive))
-        .map(Val.Int(_))
+        .map(i => Val.Refined(s, Val.Int(i)))
 
     case Sort.Real =>
       Gen.rational32.map(Val.Real(_))

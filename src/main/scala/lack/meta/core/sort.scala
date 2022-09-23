@@ -12,7 +12,8 @@ trait Sort extends pretty.Pretty
 
 object Sort:
   /** Refinement types that restrict some logical set, eg bounded integers. */
-  trait Refinement:
+  trait Refinement extends Sort:
+    def valuePrefix: pretty.Doc
     def logical: Sort
     def refinesExp(v: Exp): Exp
     def refinesVal(v: Val): Boolean
@@ -24,7 +25,6 @@ object Sort:
 
   case object Bool extends Sort:
     def ppr = pretty.text("Bool")
-    def refines = None
 
   abstract class Numeric extends Sort
 
@@ -35,12 +35,12 @@ object Sort:
    */
   case object ArbitraryInteger extends Numeric:
     def ppr = pretty.text("Integer")
-    def refines = None
 
   /** Fixed-width integers with integer arithmetic.
     * Arithmetic overflow is not defined. */
-  abstract class BoundedInteger(val width: Int, val signed: Boolean) extends Numeric with Refinement:
+  abstract class BoundedInteger(val width: Int, val signed: Boolean) extends Refinement:
     def ppr = pretty.text(if (signed) "Int" else "UInt") <> pretty.value(width)
+    def valuePrefix = pretty.text(if (signed) "#i" else "#u") <> pretty.value(width) <> pretty.text("'")
     def minInclusive: Integer = if (signed) (Integer(-1) << (width - 1)) else 0
     def maxInclusive: Integer = (if (signed) (Integer(1) << (width - 1)) else (Integer(1) << width)) - 1
 

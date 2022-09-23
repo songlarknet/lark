@@ -115,7 +115,7 @@ object G:
     case class Prim_nn_b(prim: Prim.Prim_nn_b) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.numeric
+          i <- core.sort.G.logical.numeric
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -140,7 +140,7 @@ object G:
     case class Prim_nn_n(prim: Prim.Prim_nn_n) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.numeric
+          i <- core.sort.G.logical.numeric
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -165,7 +165,7 @@ object G:
     case class Prim_n_n(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.numeric
+          i <- core.sort.G.logical.numeric
         yield (List(i))
 
       def args(result: Sort) =

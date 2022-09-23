@@ -72,8 +72,8 @@ object Prim:
     def evalX(args: List[Val]): Val
 
   /** A primitive that takes two numbers and returns a boolean.
-   * The two numbers must be exactly the same type: comparing UInt64 to Int64
-   * is a type error.
+   * Works on integers and reals, but representation types like UInt32 must be
+   * cast to integer beforehand.
    */
   abstract class Prim_nn_b extends Prim:
     def int(i: Integer, j: Integer): Boolean
@@ -97,21 +97,19 @@ object Prim:
         throw new EvalException(this, args, "")
 
   /** A primitive that takes two numbers and returns a number.
-   * The two numbers must be exactly the same type: adding UInt64 to Int64 is a
-   * type error. The result type is the logical numeric type, because in
-   * general the result might not fit in the input type. For example:
-   * > plus : (UInt8, UInt8) => ArbitraryInteger.
+   * Works on integers and reals, but representation types like UInt32 must be
+   * cast to integer beforehand.
    */
   abstract class Prim_nn_n extends Prim:
     def int(i: Integer, j: Integer): Integer
     def real(i: Real, j: Real): Real
 
-    def pprType = "[T: Numeric]. (T,T) => T.logical"
+    def pprType = "[T: Numeric]. (T,T) => T"
 
     def sort(args: List[Sort]) = args match
       case List(i, j)
         if i.isInstanceOf[Sort.Numeric] && i == j =>
-        Sort.logical(i)
+        i
       case _ =>
         throw CheckException.exactSame(this, args)
 
