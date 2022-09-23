@@ -53,8 +53,12 @@ object Table:
     def pprType = "[T]. (Boolean, T, T) => T"
 
     def sort(args: List[Sort]) = args match
-      case List(Sort.Bool, t, f) if t == f => t
-      case _ => throw new CheckException(this, args, "")
+      case List(Sort.Bool, t, f) if t == f =>
+        t
+      case List(Sort.Bool, t, f) =>
+        throw CheckException.exactSame(this, args)
+      case _ =>
+        throw new CheckException(this, args, "")
 
     def eval(args: List[Val]): Val = args match
       case List(Val.Bool(p), t, f) => if (p) t else f
@@ -63,10 +67,11 @@ object Table:
 
   case object Negate extends Prim:
     def ppr = pretty.text("negate")
-    def pprType = "[T: Numeric]. T => T"
+    def pprType = "[T: Numeric]. T => T.logical"
 
     def sort(args: List[Sort]) = args match
-      case List(s) if s.isInstanceOf[Sort.Numeric] => s
+      case List(s) if s.isInstanceOf[Sort.Numeric] =>
+        Sort.logical(s)
       case _ => throw new CheckException(this, args, "")
     def eval(args: List[Val]): Val = args match
       case List(Val.Int(i)) => Val.Int(- i)
@@ -132,7 +137,7 @@ object Table:
         if i == j =>
         Sort.Bool
       case _ =>
-        throw new CheckException(this, args, "")
+        throw CheckException.exactSame(this, args)
 
     def eval(args: List[Val]): Val = args match
       case List(i, j) => Val.Bool(i == j)

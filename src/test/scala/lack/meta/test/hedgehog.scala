@@ -19,6 +19,9 @@ object hedgehog:
   object Gen:
     export h.Gen._
 
+    def elementIndexed_[T](xs: Seq[T]): Gen[T] =
+      elementIndexed(xs.toIndexedSeq)
+
     def elementIndexed[T](xs: IndexedSeq[T]): Gen[T] =
       require(xs.nonEmpty)
       int(Range.constant(0, xs.length - 1)).map(i => xs(i))

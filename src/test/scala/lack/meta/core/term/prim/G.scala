@@ -144,7 +144,7 @@ object G:
         yield (List(i, i))
 
       def args(result: Sort) =
-        if result.isInstanceOf[Sort.Numeric]
+        if result.isInstanceOf[Sort.Numeric] && Sort.logical(result) == result
         then Some(Gen.constant(List(result, result)))
         else None
 
@@ -169,7 +169,7 @@ object G:
         yield (List(i))
 
       def args(result: Sort) =
-        if result.isInstanceOf[Sort.Numeric]
+        if result.isInstanceOf[Sort.Numeric] && Sort.logical(result) == result
         then Some(Gen.constant(List(result)))
         else None
 
@@ -185,7 +185,7 @@ object G:
     case class Prim_aa_b(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.any
+          i <- core.sort.G.all
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -207,7 +207,7 @@ object G:
     case class Prim_baa_a(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.any
+          i <- core.sort.G.all
         yield (List(Sort.Bool, i, i))
 
       def args(result: Sort) =

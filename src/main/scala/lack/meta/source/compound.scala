@@ -15,7 +15,7 @@ object compound:
 
   // TODO need typed representation of Val
   def fby[T: SortRepr](v: Val, it: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    require(v.check(it.sort))
+    require(Val.check(v, it.sort))
     builder.memo1(it) { e => Flow.Fby(v, e) }
 
   // TODO may barf at runtime
@@ -67,11 +67,11 @@ object compound:
   def i32(i: Integer): Stream[stream.Int32]  = int[stream.Int32](i)
   def i64(i: Integer): Stream[stream.Int64]  = int[stream.Int64](i)
 
-  def r32(r: Real): Stream[stream.Real32] =
-    new Stream(Exp.Val(Sort.Real32, Val.Real(r)))
+  def real(r: Real): Stream[stream.Real] =
+    new Stream(Exp.Val(Sort.Real, Val.Real(r)))
 
-  def r32(r: Double): Stream[stream.Real32] =
-    new Stream(Exp.Val(Sort.Real32, Val.Real(Real.decimal(r))))
+  def real(r: Double): Stream[stream.Real] =
+    new Stream(Exp.Val(Sort.Real, Val.Real(Real.decimal(r))))
 
   val True: Stream[stream.Bool] = bool(true)
 
@@ -84,18 +84,8 @@ object compound:
     implicit def implicit_integer[T: SortRepr: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
     implicit def implicit_int[T: SortRepr: Num](i: Int): Stream[T] = summon[Num[T]].const(i)
 
-    // this doesn't want to apply
-    // implicit def tuple2[A, B](a: Stream[A], b: Stream[B]): Stream[(A, B)] =
-    //   stream.Tuple2(a, b)(using a.sortRepr, b.sortRepr)
-
-
   trait Eq[T]:
     def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool]
-
-    // These operators need to live on Stream[T] itself so they can override the definitions on Object.
-    // extension (x: Stream[T])(using builder: Builder)
-    //   def ==(y: Stream[T]) = eq(x, y)
-    //   def !=(y: Stream[T]) = !eq(x, y)
 
   trait Ord[T] extends Eq[T]:
     def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[stream.Bool]
@@ -139,6 +129,8 @@ object compound:
       // Float to integer coercions
       // Integer to float coercions
 
+  // We don't have an instance for core.Sort.ArbitraryInteger so the user can't
+  // write programs with uncompilable types. Is that too restrictive?
   given Num_Int8:   Num[stream.Int8]   = new internal.NumImplIntegral
   given Num_UInt8:  Num[stream.UInt8]  = new internal.NumImplIntegral
   given Num_Int16:  Num[stream.Int16]  = new internal.NumImplIntegral
@@ -148,7 +140,7 @@ object compound:
   given Num_Int64:  Num[stream.Int64]  = new internal.NumImplIntegral
   given Num_UInt64: Num[stream.UInt64] = new internal.NumImplIntegral
 
-  given Num_Real32:  Num[stream.Real32]  = new internal.NumImplReal32
+  given Num_Real:  Num[stream.Real]  = new internal.NumImplReal
 
   object internal:
     abstract class NumImpl[T: SortRepr] extends Num[T] with Ord[T]:
@@ -185,13 +177,13 @@ object compound:
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
       def const(i: Integer): Stream[T] =
         summon[SortRepr[T]].sort match
-          case sort: Sort.Integral =>
+          case sort: Sort.BoundedInteger =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
             new Stream(Exp.Val(sort, Val.Int(i)))
 
-    class NumImplReal32 extends NumImpl[stream.Real32]:
-      def const(i: Integer): Stream[stream.Real32] =
-        new Stream(Exp.Val(Sort.Real32, Val.Real(Real(i))))
+    class NumImplReal extends NumImpl[stream.Real]:
+      def const(i: Integer): Stream[stream.Real] =
+        new Stream(Exp.Val(Sort.Real, Val.Real(Real(i))))
 
   def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
     conds.toList match

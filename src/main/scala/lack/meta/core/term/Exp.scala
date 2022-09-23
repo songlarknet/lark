@@ -27,6 +27,8 @@ object Exp:
   /** A cast between two variables with different representation types but the
    * same logical type, eg UInt8 -> UInt32. */
   case class Cast(sort: Sort, e: Exp) extends Exp:
-    // TODO: check that e's logical sort matches sort
-    // assert sort.logic == e.sort.logic
+    // TODO move to typechecker
+    require(Sort.logical(sort) == Sort.logical(e.sort),
+      s"Cannot cast from sort ${e.sort.pprString} to sort ${sort.pprString}")
+
     def ppr = pretty.sexpr(List(pretty.text("#cast"), sort.ppr, e.ppr))

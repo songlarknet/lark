@@ -7,18 +7,13 @@ import lack.meta.core.sort.Sort
 
 /** Logical representation of values */
 sealed trait Val extends pretty.Pretty:
-  /** Check if a value matches a sort.
-   *
-   * Values are structurally typed, so that the value Val.Int(0) fits type
-   * UInt8, Int32, and so on. This means that there isn't exactly one
-   * most-general-type for each value. */
-  def check(sort: Sort): Boolean
+  def sort: Sort
 
 object Val:
   /** Boolean values. */
   case class Bool(b: Boolean) extends Val:
     def ppr = pretty.text(if (b) "#b'true" else "#b'false")
-    def check(sort: Sort) = sort == Sort.Bool
+    def sort = Sort.Bool
 
   /** Unbounded integer values.
    *
@@ -27,11 +22,7 @@ object Val:
    * overflow the runtime representation type. */
   case class Int(i: Integer) extends Val:
     def ppr = pretty.text(s"#int'$i")
-    def check(sort: Sort) = sort match
-      case sort: Sort.Integral =>
-        sort.minInclusive <= i && i <= sort.maxInclusive
-      case _ =>
-        false
+    def sort = Sort.ArbitraryInteger
 
   /** Mathematical real number.
    *
@@ -39,4 +30,14 @@ object Val:
    * representation is a float, which is a bit of a lie. */
   case class Real(r: num.Real) extends Val:
     def ppr = pretty.string(s"#r'$r")
-    def check(sort: Sort) = sort == Sort.Real32
+    def sort = Sort.Real
+
+  /** Check if a value matches a sort.
+   *
+   * Bounded integers are fake refinement types, so that the value Val.Int(0)
+   * fits type UInt8, Int32, and so on. */
+  def check(v: Val, sort: Sort): Boolean = sort match
+    case r: Sort.Refinement =>
+      check(v, r.logical) && r.refinesVal(v)
+    case _ =>
+      v.sort == sort

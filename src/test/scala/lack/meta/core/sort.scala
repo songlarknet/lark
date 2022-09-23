@@ -6,8 +6,14 @@ package object sort:
 
   /** Generator for sorts. */
   object G:
-    val numeric: Gen[Sort] =
-      Gen.elementIndexed(Sort.Table.numeric.toIndexedSeq)
+    /** Primitive sorts */
+    object logical:
+      val numeric = Gen.elementIndexed_(Sort.Table.logical.numeric)
+      val all = Gen.elementIndexed_(Sort.Table.logical.all)
 
-    val any: Gen[Sort] =
-      Gen.elementIndexed(Sort.Table.base.toIndexedSeq)
+    /** Sorts with a runtime representation */
+    object runtime:
+      val ints = Gen.elementIndexed_(Sort.Table.runtime.ints)
+
+    val numeric = Gen.elementIndexed_(Sort.Table.logical.numeric ++ Sort.Table.runtime.ints)
+    val all = Gen.elementIndexed_(Sort.Table.all)

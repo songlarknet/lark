@@ -20,10 +20,13 @@ import scala.collection.mutable
 
 object translate:
 
-  def sort(s: Sort): Terms.Sort = s match
-    case _: Sort.Integral => Terms.Sort(compound.id("Int"))
-    case Sort.Real32 => Terms.Sort(compound.id("Real"))
+  def sort(s: Sort): Terms.Sort = Sort.logical(s) match
+    case Sort.ArbitraryInteger => Terms.Sort(compound.id("Int"))
+    case Sort.Real => Terms.Sort(compound.id("Real"))
     case Sort.Bool => Terms.Sort(compound.id("Bool"))
+    case sl =>
+      assert(false,
+        s"Cannot translate sort ${s.pprString} with logical sort ${s.pprString}")
 
   def value(v: Val): Terms.Term = v match
     case Val.Bool(b) => compound.qid(b.toString)
@@ -243,3 +246,4 @@ object translate:
       for
         targs <- SystemV.conjoin(args.map(expr(context, _)))
       yield compound.funapp(prim.pprString, targs : _*)
+  // TODO casts

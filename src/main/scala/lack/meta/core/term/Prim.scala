@@ -30,6 +30,18 @@ object Prim:
        |Argument sorts: ${pretty.layout(pretty.list(args))}
        |${pretty.layout(message)}""".stripMargin)
 
+  object CheckException:
+    /** Require sorts to be exactly the same */
+    def exactSame(prim: Prim, args: List[Sort]) =
+      val msg =
+        val dx = args.distinct
+        val dlx = dx.map(Sort.logical).distinct
+        if dx.length != dlx.length
+        then "Sorts must be exactly the same. Maybe you're missing a cast."
+        else ""
+      new CheckException(prim, args, msg)
+
+
   /** An error that can occur when evaluating a primitive. */
   class EvalException(prim: Prim, args: List[Val], message: pretty.Doc) extends Exception(
     s"""Error evaluating primitive ${prim.pprString} : ${pretty.layout(prim.pprType)}.
@@ -52,14 +64,17 @@ object Prim:
         "Argument sorts do not match expected sorts")
 
     def eval(args: List[Val]): Val =
-      if args.length == expect.length && args.zip(expect).forall((a,s) => a.check(s))
+      if args.length == expect.length && args.zip(expect).forall((a,s) => Val.check(a, s))
       then evalX(args)
       else throw new EvalException(this, args,
         "Argument values do not match expected sorts")
 
     def evalX(args: List[Val]): Val
 
-  /** A primitive with type Numeric a => (a, a) -> Bool */
+  /** A primitive that takes two numbers and returns a boolean.
+   * The two numbers must be exactly the same type: comparing UInt64 to Int64
+   * is a type error.
+   */
   abstract class Prim_nn_b extends Prim:
     def int(i: Integer, j: Integer): Boolean
     def real(i: Real, j: Real): Boolean
@@ -71,7 +86,7 @@ object Prim:
         if i.isInstanceOf[Sort.Numeric] && i == j =>
         Sort.Bool
       case _ =>
-        throw new CheckException(this, args, "")
+        throw CheckException.exactSame(this, args)
 
     def eval(args: List[Val]) = args match
       case List(Val.Int(i), Val.Int(j)) =>
@@ -81,19 +96,24 @@ object Prim:
       case _ =>
         throw new EvalException(this, args, "")
 
-  /** A primitive with type Numeric a => (a, a) -> a */
+  /** A primitive that takes two numbers and returns a number.
+   * The two numbers must be exactly the same type: adding UInt64 to Int64 is a
+   * type error. The result type is the logical numeric type, because in
+   * general the result might not fit in the input type. For example:
+   * > plus : (UInt8, UInt8) => ArbitraryInteger.
+   */
   abstract class Prim_nn_n extends Prim:
     def int(i: Integer, j: Integer): Integer
     def real(i: Real, j: Real): Real
 
-    def pprType = "[T: Numeric]. (T,T) => T"
+    def pprType = "[T: Numeric]. (T,T) => T.logical"
 
     def sort(args: List[Sort]) = args match
       case List(i, j)
         if i.isInstanceOf[Sort.Numeric] && i == j =>
-        i
+        Sort.logical(i)
       case _ =>
-        throw new CheckException(this, args, "")
+        throw CheckException.exactSame(this, args)
 
     def eval(args: List[Val]) = args match
       case List(Val.Int(i), Val.Int(j)) =>

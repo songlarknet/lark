@@ -16,6 +16,7 @@ object Flow:
 
   /** x -> y, or "first x then y". */
   case class Arrow(a: Exp, b: Exp) extends Flow:
+    // TODO move to typechecker
     require(a.sort == b.sort,
       s"${ppr}\nsorts differ ${a.sort.ppr} /= ${b.sort.ppr}")
     def sort = a.sort
@@ -25,7 +26,8 @@ object Flow:
    * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
    * "v -> pre e". */
   case class Fby(v: Val, e: Exp) extends Flow:
-    require(v.check(e.sort),
+    // TODO move to typechecker
+    require(Val.check(v, e.sort),
       s"${ppr}\nvalue doesn't support sort ${e.sort.ppr}")
     def sort = e.sort
     def ppr  = pretty.sexpr(List("fby", v.ppr, e.ppr))

@@ -10,10 +10,10 @@ import lack.meta.test.suite.HedgehogSuite
 
 class P extends HedgehogSuite:
 
-  for s <- Sort.Table.base do
-    property(s"val gen matches sort ${s.pprString}") {
+  for s <- Sort.Table.all do
+    property(s"sort '${s.pprString}' generated value matches sort") {
       for
         value <- G.sort(s).log("value")
       yield
-        Result.assert(value.check(s))
+        Result.assert(Val.check(value, s))
     }

@@ -23,6 +23,8 @@ object stream:
   opaque type Bool    = Sort.Bool.type
   given SortRepr_Bool: SortRepr[Bool] = new SortRepr(Sort.Bool)
 
+  // We don't have an instance for core.Sort.ArbitraryInteger so the user can't
+  // write programs with uncompilable types. Is that too restrictive?
   opaque type Int8    = Sort.Int8.type
   given SortRepr_Int8: SortRepr[Int8] = new SortRepr(Sort.Int8)
 
@@ -47,5 +49,5 @@ object stream:
   opaque type UInt64  = Sort.UInt64.type
   given SortRepr_UInt64: SortRepr[UInt64] = new SortRepr(Sort.UInt64)
 
-  opaque type Real32 = Sort.Real32.type
-  given SortRepr_Real32: SortRepr[Real32] = new SortRepr(Sort.Real32)
+  opaque type Real = Sort.Real.type
+  given SortRepr_Real: SortRepr[Real] = new SortRepr(Sort.Real)
