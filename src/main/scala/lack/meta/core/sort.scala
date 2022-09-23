@@ -34,21 +34,6 @@ object Sort:
   case object Int64  extends Integral(64, true)
   case object UInt64 extends Integral(64, false)
 
-  /** Integer interval with statically known lower and upper bounds.
-    * The "carrier" or representation type dictates how values are stored.
-    * Computations are performed on the carrier type.
-    * Overflow */
-  case class Subrange(minInclusive: Integer, maxInclusive: Integer, carrier: Integral) extends Numeric:
-    require(carrier.minInclusive <= minInclusive)
-    require(maxInclusive <= carrier.maxInclusive)
-    def ppr = carrier.ppr <> pretty.text(s"[${minInclusive}, ${maxInclusive}]")
-
-  /** Syntactic helper for subranges. Uses the smallest carrier set that
-    * will fit the entire range, favouring unsigned integers over signed. */
-  def subrange(range: Range) =
-    val fits = Table.ints.filter(i => i.minInclusive <= range.min && range.max <= i.maxInclusive)
-    Subrange(range.min, range.max, fits.headOption.getOrElse(Int64))
-
   /** A mathematical real number that is represented by 32-bit floats at runtime.
    * This type is cheating a bit. */
   case object Real32 extends Numeric:

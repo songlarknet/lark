@@ -30,8 +30,6 @@ object Val:
     def check(sort: Sort) = sort match
       case sort: Sort.Integral =>
         sort.minInclusive <= i && i <= sort.maxInclusive
-      case Sort.Subrange(min, max, _) =>
-        min <= i && i <= max
       case _ =>
         false
 
