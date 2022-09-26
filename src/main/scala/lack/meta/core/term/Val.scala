@@ -34,16 +34,15 @@ object Val:
 
   /** Boxed values that satisfy some predicate. */
   case class Refined(s: Sort.Refinement, v: Val) extends Val:
-    // require(r.refinesVal(v)) ?
-    def ppr = s.valuePrefix <> v.ppr
+    def ppr = pretty.hash <> s.valuePrefix <> pretty.squote <> v.ppr
     def sort = s
 
   /** Check if a value matches a sort and satisfies the refinement predicate
    * if there is one. */
-  def check(v: Val, sort: Sort): Boolean =
+  def check(v: Val, sort: Sort, checkRefinement: Boolean = true): Boolean =
     v.sort == sort &&
       (v match
-        case Refined(r, v) => r.refinesVal(v)
+        case Refined(r, v) if checkRefinement => r.refinesVal(v)
         case _ => true)
 
   /** Construct an arbitrary junk value for given sort. */

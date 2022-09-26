@@ -40,7 +40,7 @@ object Sort:
     * Arithmetic overflow is not defined. */
   abstract class BoundedInteger(val width: Int, val signed: Boolean) extends Refinement:
     def ppr = pretty.text(if (signed) "Int" else "UInt") <> pretty.value(width)
-    def valuePrefix = pretty.text(if (signed) "#i" else "#u") <> pretty.value(width) <> pretty.text("'")
+    def valuePrefix = pretty.text(if (signed) "i" else "u") <> pretty.value(width)
     def minInclusive: Integer = if (signed) (Integer(-1) << (width - 1)) else 0
     def maxInclusive: Integer = (if (signed) (Integer(1) << (width - 1)) else (Integer(1) << width)) - 1
 

@@ -45,10 +45,8 @@ object Eval:
 
   /** Describe evaluation of flow streaming expressions as state transition */
   case class Transition(flow: Flow, options: Options):
-    type State = Val
-
     /** Initial state */
-    def init: State = flow match
+    def init: Transition.State = Transition.State(flow match
       case Flow.Pure(e) =>
         Val.unit
       case Flow.Arrow(first, later) =>
@@ -58,27 +56,31 @@ object Eval:
         v
 
       case Flow.Pre(e) =>
-        Val.arbitrary(flow.sort)
+        Val.arbitrary(flow.sort))
 
-    /** Step from current state to new, in given heap */
-    def step(state: State, heap: Heap, flow: Flow): (Val, State) = flow match
+    /** Step from current state to new in given heap */
+    def step(state: Transition.State, heap: Heap, flow: Flow):
+      (Val, Transition.State) = flow match
       case Flow.Pure(e) =>
-        (exp(heap, e, options), Val.unit)
+        (exp(heap, e, options), state)
 
       case Flow.Arrow(first, later) =>
         val e =
-          if state == Val.Bool(false)
+          if state.v == Val.Bool(false)
           then exp(heap, first, options)
           else exp(heap, later, options)
-        (e, Val.Bool(true))
+        (e, Transition.State(Val.Bool(true)))
 
       case Flow.Fby(v, e) =>
-        val vX = exp(heap, e, options)
-        (state, vX)
+        val vX = Transition.State(exp(heap, e, options))
+        (state.v, vX)
 
       case Flow.Pre(e) =>
-        val vX = exp(heap, e, options)
-        (state, vX)
+        val vX = Transition.State(exp(heap, e, options))
+        (state.v, vX)
+
+  object Transition:
+    case class State(v: Val)
 
   object except:
     class EvalException(msg: String) extends Exception(msg)

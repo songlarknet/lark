@@ -55,14 +55,14 @@ object Check:
       val s = exp(env, first, options)
       val t = exp(env, first, options)
       if s != t then
-        throw new except.BadDifferentTypes(s, t)
+        throw new except.TypeMismatch(first, later, s, t)
       t
 
     case Flow.Fby(v, e) =>
       val s = val_(v, options)
       val t = exp(env, e, options)
       if s != t then
-        throw new except.BadDifferentTypes(s, t)
+        throw new except.TypeMismatch(v, e, s, t)
       t
 
     case Flow.Pre(e) =>
@@ -80,8 +80,10 @@ object Check:
         |Argument types: ${pretty.layout(pretty.tupleP(args))}
         |Expression: ${e.pprString}""".stripMargin)
 
-    class BadDifferentTypes(expect: Sort, got: Sort) extends CheckException(
-      s"""Bad, got ${got.pprString} but expected ${expect.pprString}.""".stripMargin)
+    class TypeMismatch(e: pretty.Pretty, f: pretty.Pretty, s: Sort, t: Sort) extends CheckException(
+      s"""Type mismatch: ${s.pprString} != ${t.pprString}.
+         |Comparing: ${e.pprString}
+         |Against: ${f.pprString}""".stripMargin)
 
     class BadCastBox(s: Sort.Refinement, e: Exp, t: Sort) extends CheckException(
       s"""Can't box type ${t.pprString} to ${s.pprString}.

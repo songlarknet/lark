@@ -22,7 +22,6 @@ object Exp:
 
   /** Pure primitive application */
   case class App(sort: Sort, prim: Prim, args: Exp*) extends Exp:
-    // TODO: should constructors do typechecking?
     def ppr = pretty.sexpr((prim :: args.toList).map(_.ppr))
 
   /** A cast between two variables with different representation types but the
@@ -32,13 +31,11 @@ object Exp:
       case Cast.Box(r) => r
       case Cast.Unbox(r) => r
 
-    // TODO move to typechecker
-    // require(Sort.logical(sort) == Sort.logical(e.sort),
-    //   s"Cannot cast from sort ${e.sort.pprString} to sort ${sort.pprString}")
-
-    def ppr = pretty.sexpr(List(pretty.text("#" + op.toString.toLowerCase), sort.ppr, e.ppr))
+    def ppr = pretty.sexpr(List(op.ppr, e.ppr))
 
   object Cast:
-    sealed trait Op
-    case class Box(sort: Sort.Refinement) extends Op
-    case class Unbox(sort: Sort) extends Op
+    sealed trait Op extends pretty.Pretty
+    case class Box(sort: Sort.Refinement) extends Op:
+      def ppr = pretty.text("#box'") <> sort.valuePrefix
+    case class Unbox(sort: Sort) extends Op:
+      def ppr = pretty.text("#unbox")

@@ -32,9 +32,9 @@ object hedgehog:
         .map(num.Integer(_))
 
     /** Generate a rational that can be exactly represented as a pair of int32s */
-    def rational32: Gen[num.Real] =
+    def rational32(nRange: Range[Int], dRange: Range[Int]): Gen[num.Real] =
       for
-        n <- Gen.int(Range.linearFrom(0, Int.MinValue, Int.MaxValue))
-        d <- Gen.int(Range.linearFrom(0, Int.MinValue, Int.MaxValue))
+        n <- Gen.int(nRange)
+        d <- Gen.int(dRange)
       yield
         if d == 0 then 0 else num.Real(n) / num.Real(d)
