@@ -117,6 +117,13 @@ object Compound:
       def *(y: Stream[T]) = mul(x, y)
       def /(y: Stream[T]) = div(x, y)
       def unary_- = negate(x)
+
+      // TODO: deal with int<->real conversions
+      /** Safe cast between integer types. */
+      def as[U: Num: SortRepr]: Stream[U] =
+        val u = summon[SortRepr[U]].sort.asInstanceOf[Sort.Refinement]
+        new Stream(Exp.Cast(Exp.Cast.Box(u), Exp.Cast(Exp.Cast.Unbox(Sort.ArbitraryInteger), x._exp)))
+
       // Integer to integer coercions
       // Safe rounding
       // def as[U: Num: Stream]: U =
@@ -145,44 +152,72 @@ object Compound:
 
   object internal:
     abstract class NumImpl[T: SortRepr] extends Num[T] with Ord[T]:
+      protected def box(exp: Exp): Exp
+      protected def unbox(exp: Exp): Exp
+      protected def Unboxed: Sort
+
+      protected def appBxB(prim: Prim, args: Exp*): Flow =
+        Flow.Pure(box(Exp.App(Unboxed, prim, args.map(unbox) : _*)))
+      protected def appBxU(ret: Sort, prim: Prim, args: Exp*): Flow =
+        Flow.app(ret, prim, args.map(unbox) : _*)
+
       def add(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Table.Add, _, _) }
+        builder.memo2(x, y) { appBxB(Table.Add, _, _) }
 
       def sub(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Table.Sub, _, _) }
+        builder.memo2(x, y) { appBxB(Table.Sub, _, _) }
 
       def mul(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Table.Mul, _, _) }
+        builder.memo2(x, y) { appBxB(Table.Mul, _, _) }
 
       def div(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo2(x, y) { Flow.app(x.sort, Table.Div, _, _) }
+        builder.memo2(x, y) { appBxB(Table.Div, _, _) }
 
       def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-        builder.memo1(x) { Flow.app(x.sort, Table.Negate, _) }
+        builder.memo1(x) { appBxB(Table.Negate, _) }
 
       def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Eq, _, _) }
+        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Eq, _, _) }
 
       def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Lt, _, _) }
+        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Lt, _, _) }
 
       def le(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Le, _, _) }
+        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Le, _, _) }
 
       def gt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Gt, _, _) }
+        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Gt, _, _) }
 
       def ge(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { Flow.app(Sort.Bool, Table.Ge, _, _) }
+        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Ge, _, _) }
 
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
+      protected def box(exp: Exp) =
+        Exp.Cast(Exp.Cast.Box(Boxed), exp)
+      protected def unbox(exp: Exp) =
+        Exp.Cast(Exp.Cast.Unbox(Unboxed), exp)
+      protected def Unboxed: Sort =
+        Sort.ArbitraryInteger
+      protected def Boxed: Sort.Refinement =
+        summon[SortRepr[T]].sort
+          .asInstanceOf[Sort.Refinement]
+
       def const(i: Integer): Stream[T] =
         summon[SortRepr[T]].sort match
           case sort: Sort.BoundedInteger =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
-            new Stream(Exp.Val(sort, Val.Int(i)))
+            new Stream(Exp.Val(sort, Val.Refined(sort, Val.Int(i))))
+          // case sort@Sort.ArbitraryInteger =>
+          //   new Stream(Exp.Val(sort, Val.Int(i)))
 
     class NumImplReal extends NumImpl[Stream.Real]:
+      protected def box(exp: Exp) =
+        exp
+      protected def unbox(exp: Exp) =
+        exp
+      protected def Unboxed: Sort =
+        Sort.Real
+
       def const(i: Integer): Stream[Stream.Real] =
         new Stream(Exp.Val(Sort.Real, Val.Real(Real(i))))
 

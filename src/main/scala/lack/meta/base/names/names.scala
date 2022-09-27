@@ -36,6 +36,9 @@ package object names:
     val STATE   = fromInternal("ctx")
     val INIT    = fromInternal("init")
     val RESET   = fromInternal("reset")
+    val PROP    = fromInternal("prop")
+    val BOX     = fromInternal("box")
+    val UNBOX   = fromInternal("unbox")
     val LOCAL   = fromStringUnsafe("")
 
   given Ordering_ComponentSymbol: scala.math.Ordering[ComponentSymbol] with

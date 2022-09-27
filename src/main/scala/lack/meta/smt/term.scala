@@ -159,3 +159,50 @@ object term:
       case Terms.QualifiedIdentifier(ti, _)
         if ti.symbol.name == "false" => Some(false)
       case _ => None
+
+    // TODO: property tests: round tripping
+    def ref(t: String): Option[names.Ref] =
+      def mk(component: String) =
+        names.Component(names.ComponentSymbol.fromStringUnsafe(component))
+      def mkI(component: String, index: String) =
+        for
+          ix <- index.toIntOption
+        yield names.Component(names.ComponentSymbol.fromStringUnsafe(component), Some(ix))
+
+      def takeIndex(chars: List[Char], component: String, index: String): Option[List[names.Component]] = chars match
+          case Nil =>
+            mkI(component, index).map(List(_))
+          case c :: chars =>
+            if c == '.'
+            then
+              for
+                here <- mkI(component, index)
+                rest <- takeComponent(chars, "")
+              yield here :: rest
+            else takeIndex(chars, component, index + c)
+
+      def takeComponent(chars: List[Char], component: String): Option[List[names.Component]] = chars match
+          case Nil =>
+            if component.nonEmpty
+            then Some(List(names.Component(names.ComponentSymbol.fromStringUnsafe(component))))
+            else Some(List())
+          case c :: chars =>
+            if c == '?'
+            then takeIndex(chars, component, "")
+            else if c == '.'
+            then takeComponent(chars, "").map(mk(component) :: _)
+            else takeComponent(chars, component + c)
+
+      for
+        cs <- takeComponent(t.toList, "")
+        if cs.nonEmpty
+      yield
+        names.Ref.fromPathUnsafe(cs)
+
+    def ref(t: Terms.SSymbol): Option[names.Ref] =
+      ref(t.name)
+    def ref(t: Terms.Identifier): Option[names.Ref] =
+      ref(t.symbol)
+    def ref(t: Terms.Term): Option[names.Ref] = t match
+      case Terms.QualifiedIdentifier(id, _) => ref(id)
+      case _ => None

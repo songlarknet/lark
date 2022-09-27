@@ -6,7 +6,7 @@ import lack.meta.base.pretty
 import lack.meta.core.node.Builder
 import lack.meta.core.node.Builder.Node
 import lack.meta.core.Prop.Judgment
-import lack.meta.core.Sort
+import lack.meta.core.{Prop, Sort}
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
 
 import lack.meta.smt.Solver
@@ -20,6 +20,10 @@ import scala.collection.mutable
 
 object Translate:
 
+  case class Options(
+    checkRefinement: Boolean = true
+  )
+
   def sort(s: Sort): Terms.Sort = Sort.logical(s) match
     case Sort.ArbitraryInteger => Terms.Sort(compound.id("Int"))
     case Sort.Real => Terms.Sort(compound.id("Real"))
@@ -32,12 +36,21 @@ object Translate:
     case Val.Bool(b) => compound.qid(b.toString)
     case Val.Int(i) => compound.int(i)
     case Val.Real(f) => compound.real(f)
+    case Val.Refined(_, v) => value(v)
 
-  class Context(val nodes: Map[List[names.Component], system.Node], val supply: names.mutable.Supply)
+  class Context(
+    val nodes: Map[List[names.Component], system.Node],
+    val supply: names.mutable.Supply,
+    val options: Options)
 
-  class ExpContext(val node: Node, val supply: names.mutable.Supply):
+  class ExpContext(
+    val context: Context,
+    val node: Node):
+
     def stripRef(r: names.Ref): names.Ref =
       ExpContext.stripRef(node, r)
+
+    def supply = context.supply
 
   object ExpContext:
     def stripRef(node: Node, r: names.Ref): names.Ref =
@@ -47,10 +60,10 @@ object Translate:
       val strip = r.prefix.drop(pfx.length)
       names.Ref(strip, r.name)
 
-  def nodes(inodes: Iterable[Node]): system.Top =
+  def nodes(inodes: Iterable[Node], options: Options): system.Top =
     var map = Map[List[names.Component], system.Node]()
     val snodes = inodes.map { case inode =>
-      val snode = node(new Context(map, new names.mutable.Supply(List())), inode)
+      val snode = node(new Context(map, new names.mutable.Supply(List()), options), inode)
       map += (inode.path -> snode)
       snode
     }.toList
@@ -94,7 +107,7 @@ object Translate:
 
   def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Builder.Binding): SystemV[Unit] = binding match
     case b: Builder.Binding.Equation =>
-      val ec    = ExpContext(node, context.supply)
+      val ec    = ExpContext(context, node)
       val xref  = names.Ref.fromComponent(b.lhs)
       val tstep =
         for
@@ -105,7 +118,7 @@ object Translate:
 
     case b: Builder.Binding.Subnode =>
       val v = b.subnode
-      val ec = ExpContext(node, context.supply)
+      val ec = ExpContext(context, node)
       val subnode = node.subnodes(v)
       val subsystem = context.nodes(subnode.path)
 
@@ -163,7 +176,7 @@ object Translate:
         case Nil => SystemV.pure(())
         case (when, bnested) :: rest =>
           for
-            kE    <- expr(ExpContext(node, context.supply), when)
+            kE    <- expr(ExpContext(context, node), when)
             whenE  = compound.and(cond, kE)
             notE   = compound.and(cond, compound.not(kE))
 
@@ -178,7 +191,7 @@ object Translate:
     case b: Builder.Binding.Reset =>
       val sub = nested(context, node, b.nested)
       for
-        kE    <- expr(ExpContext(node, context.supply), b.clock)
+        kE    <- expr(ExpContext(context, node), b.clock)
         // Put a copy of sub's state inside row.reset. There won't be
         // any conflicts because the nested contexts inside sub must have
         // unique ids.
@@ -246,4 +259,58 @@ object Translate:
       for
         targs <- SystemV.conjoin(args.map(expr(context, _)))
       yield compound.funapp(prim.pprString, targs : _*)
-  // TODO casts
+
+    case Exp.Cast(_, e)
+      if !context.context.options.checkRefinement
+      => expr(context, e)
+
+    // box(x : t) : { t | p }
+    // requires   p(x);
+    // guarantees \result.value == x;
+    case Exp.Cast(Exp.Cast.Box(s), e) =>
+      val relyR  = context.supply.freshRef(names.ComponentSymbol.PROP, forceIndex = true)
+      val unboxR = context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
+      val boxR   = context.supply.freshRef(names.ComponentSymbol.BOX, forceIndex = true)
+
+      val unboxV = Exp.Var(s.logical, names.Prefix(context.node.path)(unboxR))
+      val boxV   = Exp.Var(s, names.Prefix(context.node.path)(boxR))
+
+      val relyE = s.refinesExp(unboxV)
+
+      val relyJ = SystemJudgment(
+        List(), relyR,
+        Judgment("box.rely", s.refinesExp(e), Prop.Syntax.Generated.check, lack.meta.macros.Location.empty))
+
+      for
+        eT     <- expr(context, e)
+        relyT  <- expr(context, relyE)
+        relyTX <- SystemV.row(relyR, Sort.Bool)
+        unboxT <- SystemV.row(unboxR, s.logical)
+        boxT   <- SystemV.row(boxR, s)
+
+        _  <- SystemV.step(compound.equal(unboxT, eT))
+        _  <- SystemV.step(compound.equal(relyTX, relyT))
+        _  <- SystemV.step(compound.implies(relyTX, compound.equal(unboxT, boxT)))
+
+        _  <- SystemV(System(guarantees = List(relyJ)), ())
+      yield
+        boxT
+
+    // unbox(x : { t | p }) : t
+    // guarantees \result == x.value;
+    // guarantees p(\result);
+    case Exp.Cast(Exp.Cast.Unbox(logical), e) => e.sort match
+      case refinement: Sort.Refinement =>
+        for
+          eT  <- expr(context, e)
+          ref <- SystemV(System.empty, eT).letRow(refinement) { () =>
+            context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
+          }
+
+          refV  = Exp.Var(refinement, names.Prefix(context.node.path)(ref))
+          satT <- expr(context, refinement.refinesExp(refV))
+          _    <- SystemV.step(satT)
+        yield eT
+
+      case _ =>
+        assert(false, s"translate ${exp.pprString}: can't unbox sort ${logical.pprString} as it's not a refinement")

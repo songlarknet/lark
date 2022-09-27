@@ -119,8 +119,8 @@ object Check:
         pretty.text("Property false, found a counterexample.") <@>
         pretty.indent(details.ppr, 2)
 
-  def declareSystem(n: Node, solver: Solver): system.Top =
-    val sys = Translate.nodes(n.allNodes)
+  def declareSystem(n: Node, solver: Solver, options: Translate.Options = Translate.Options()): system.Top =
+    val sys = Translate.nodes(n.allNodes, options)
     sys.fundefs.foreach(solver.command)
     sys
 
@@ -157,11 +157,11 @@ object Check:
     val propsT = props.map(p => compound.not(judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
-  def checkMany(top: Node, count: Int, solver: () => Solver): Summary =
+  def checkMany(top: Node, count: Int, solver: () => Solver, options: Translate.Options = Translate.Options()): Summary =
     println("Checking top-level node:")
     println(top.pprString)
     println("System translation:")
-    println(Translate.nodes(top.allNodes).pprString)
+    println(Translate.nodes(top.allNodes, options).pprString)
 
     val res = top.allNodes.map { n =>
       val s = solver()

@@ -270,6 +270,22 @@ object system:
     def <&&[U](that: SystemV[U]): SystemV[T] =
       ap2(that)((t,u) => t)
 
+  extension (outer: SystemV[Terms.Term])
+    /** Extract names.Ref variable from system value, introducing a new binding if necessary */
+    def letRow(sort: Sort)(supply: () => names.Ref): SystemV[names.Ref] = term.take.ref(outer.value) match
+      case Some(n)
+        if n.prefix.startsWith(Prefix.row.prefix)
+      =>
+        val nn = n.copy(prefix = n.prefix.drop(Prefix.row.prefix.length))
+        outer.map(_ => nn)
+      case _ =>
+        val ref = supply()
+        for
+          itT <- outer
+          refT <- SystemV.row(ref, sort)
+          _ <- SystemV.step(term.compound.equal(refT, itT))
+        yield ref
+
   /** A judgment with hypotheses.
    * The hypotheses and consequent refer to row variables excluding the row
    * prefix. All hypotheses must be true for current and previous steps:

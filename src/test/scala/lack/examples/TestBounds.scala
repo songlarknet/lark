@@ -4,7 +4,7 @@ import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
 import lack.meta.source.Node
 import lack.meta.source.Stream
-import lack.meta.source.Stream.{SortRepr, Bool, Int32}
+import lack.meta.source.Stream.{SortRepr, Bool, Int8, Int32}
 import lack.meta.driver.Check
 
 class TestBounds extends munit.FunSuite:
@@ -13,12 +13,14 @@ class TestBounds extends munit.FunSuite:
   }
 
   class LemmaBounds(n: Int, invocation: Node.Invocation) extends Node(invocation):
-    val human           = local[Int32]
+    // Use 32-bit arithmetic on 8-bit values
+    val human           = local[Int8]
     val OVERRIDE        = i32(100)
 
-    val human_in_bounds = human < OVERRIDE
+    val human32         = human.as[Int32]
+    val human_in_bounds = human32 < OVERRIDE
     val last_in_bounds  = LastN(n, human_in_bounds)
-    val mean            = MeanN(n, human)
+    val mean            = MeanN(n, human32)
     val mean_in_bounds  = mean < OVERRIDE
     val prop            = last_in_bounds ==> mean_in_bounds
 
