@@ -1,4 +1,4 @@
-package lack.examples
+package lack.examples.unit
 
 import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._

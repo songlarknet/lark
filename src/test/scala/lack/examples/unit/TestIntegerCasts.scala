@@ -1,4 +1,4 @@
-package lack.examples
+package lack.examples.unit
 
 import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
@@ -50,5 +50,21 @@ class TestIntegerCasts extends munit.FunSuite:
       new Node(_):
         val xu32 = local[S.UInt32]
         xu32 := fby(u32(0), xu32) + u32(1)
+    }
+  }
+
+  test("bad literal") {
+    Check.error() {
+      new Node(_):
+        val xu8 = local[S.UInt8]
+        xu8 := u8(-5)
+    }
+  }
+
+  test("bad const propagation") {
+    Check.error() {
+      new Node(_):
+        val xu8 = local[S.UInt8]
+        xu8 := u8(100) + u8(200)
     }
   }
