@@ -3,13 +3,13 @@ package lack.meta.smt
 import lack.meta.base.num.Integer
 import lack.meta.base.names
 import lack.meta.base.pretty
-import lack.meta.core.builder
-import lack.meta.core.builder.Node
-import lack.meta.core.prop.Judgment
-import lack.meta.core.sort.Sort
+import lack.meta.core.node.Builder
+import lack.meta.core.node.Builder.Node
+import lack.meta.core.Prop.Judgment
+import lack.meta.core.Sort
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
 
-import lack.meta.smt.solver.Solver
+import lack.meta.smt.Solver
 import lack.meta.smt.term.compound
 import lack.meta.smt.system
 import lack.meta.smt.system.{System, SystemV, SystemJudgment, Namespace}
@@ -18,7 +18,7 @@ import smtlib.trees.Terms.SExpr
 
 import scala.collection.mutable
 
-object translate:
+object Translate:
 
   def sort(s: Sort): Terms.Sort = Sort.logical(s) match
     case Sort.ArbitraryInteger => Terms.Sort(compound.id("Int"))
@@ -76,7 +76,7 @@ object translate:
 
     system.Node(node.path, params, sys <> sysprops)
 
-  def nested(context: Context, node: Node, nested: builder.Nested): SystemV[Unit] =
+  def nested(context: Context, node: Node, nested: Builder.Nested): SystemV[Unit] =
     val contextPrefix = names.Prefix(List(nested.context))
     val initR         = contextPrefix(names.Component(names.ComponentSymbol.INIT))
     val children      = nested.children.map(binding(context, node, contextPrefix, _))
@@ -92,8 +92,8 @@ object translate:
       _     <- SystemV.conjoin(children.toSeq)
     yield ()
 
-  def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: builder.Binding): SystemV[Unit] = binding match
-    case b: builder.Binding.Equation =>
+  def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Builder.Binding): SystemV[Unit] = binding match
+    case b: Builder.Binding.Equation =>
       val ec    = ExpContext(node, context.supply)
       val xref  = names.Ref.fromComponent(b.lhs)
       val tstep =
@@ -103,7 +103,7 @@ object translate:
         yield compound.equal(erhs, x)
       SystemV.step(tstep)
 
-    case b: builder.Binding.Subnode =>
+    case b: Builder.Binding.Subnode =>
       val v = b.subnode
       val ec = ExpContext(node, context.supply)
       val subnode = node.subnodes(v)
@@ -158,8 +158,8 @@ object translate:
 
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
-    case b: builder.Binding.Merge =>
-      def go(cond: Terms.Term, cases: List[(Exp, builder.Nested)]): SystemV[Unit] = cases match
+    case b: Builder.Binding.Merge =>
+      def go(cond: Terms.Term, cases: List[(Exp, Builder.Nested)]): SystemV[Unit] = cases match
         case Nil => SystemV.pure(())
         case (when, bnested) :: rest =>
           for
@@ -175,7 +175,7 @@ object translate:
 
       go(compound.bool(true), b.cases.toList)
 
-    case b: builder.Binding.Reset =>
+    case b: Builder.Binding.Reset =>
       val sub = nested(context, node, b.nested)
       for
         kE    <- expr(ExpContext(node, context.supply), b.clock)
@@ -186,7 +186,7 @@ object translate:
       yield ()
 
   /** Translate a streaming expression to a system. */
-  def flow(context: ExpContext, contextPrefix: names.Prefix, b: builder.Binding.Equation): SystemV[Terms.Term] = b.rhs match
+  def flow(context: ExpContext, contextPrefix: names.Prefix, b: Builder.Binding.Equation): SystemV[Terms.Term] = b.rhs match
     case Flow.Pure(e) =>
       expr(context, e)
 

@@ -1,7 +1,12 @@
-package lack.meta.core
+package lack.test.core
 
 import lack.meta.base.names
-import lack.meta.test.hedgehog._
+import lack.meta.base.names.Ordering_Ref
+import lack.meta.core.term
+import lack.meta.core.Sort
+
+import lack.test.hedgehog._
+import lack.test.Corpus
 
 package object sort:
 
@@ -28,7 +33,7 @@ package object sort:
         .map(scala.collection.immutable.SortedMap.from(_))
 
     val componentSymbol: Gen[names.ComponentSymbol] =
-      for b <- lack.meta.test.Corpus.birds
+      for b <- Corpus.birds
       yield names.ComponentSymbol.fromScalaSymbol(b)
 
     val component: Gen[names.Component] =

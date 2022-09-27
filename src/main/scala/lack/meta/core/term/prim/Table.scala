@@ -3,7 +3,7 @@ package lack.meta.core.term.prim
 import lack.meta.base.num
 import lack.meta.base.num.{Integer, Real}
 import lack.meta.base.{names, pretty}
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 import lack.meta.core.term.{Prim, Val}
 import lack.meta.core.term.Prim.{Simple, Prim_nn_n, Prim_nn_b, CheckException, EvalException}
 

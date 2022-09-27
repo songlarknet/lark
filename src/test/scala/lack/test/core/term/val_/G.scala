@@ -1,15 +1,16 @@
-package lack.meta.core.term.val_
+package lack.test.core.term.val_
 
 import lack.meta.base.num
+import lack.meta.base.names.Ordering_Ref
 import lack.meta.core.term.Eval
 import lack.meta.core.term.Check
 import lack.meta.core.term.Val
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
-import lack.meta.test.hedgehog._
+import lack.test.hedgehog._
 
 object G:
-  def sort(sort: Sort): Gen[Val] = sort match
+  def value(sort: Sort): Gen[Val] = sort match
     case Sort.Bool =>
       Gen.boolean.map(Val.Bool(_))
     case Sort.ArbitraryInteger =>
@@ -43,11 +44,11 @@ object G:
     Gen.elementIndexed(range.toIndexedSeq).map(n => num.Integer(n))
 
 
-  def sorts(sorts: List[Sort]): Gen[List[Val]] =
-    hedgehog.predef.sequence(sorts.map(sort))
+  def list(sorts: List[Sort]): Gen[List[Val]] =
+    hedgehog.predef.sequence(sorts.map(value))
 
   def heap(env: Check.Env): Gen[Eval.Heap] =
     for
-      vs <- sorts(env.values.toList)
+      vs <- list(env.values.toList)
     yield
       scala.collection.immutable.SortedMap.from(env.keys.zip(vs))

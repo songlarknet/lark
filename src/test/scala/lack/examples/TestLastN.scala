@@ -1,19 +1,19 @@
-package lack.source
+package lack.examples
 
 import lack.meta.base.num.Integer
-import lack.meta.source.compound.{given, _}
-import lack.meta.source.compound.implicits._
-import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
-import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.driver.check
+import lack.meta.source.Compound.{given, _}
+import lack.meta.source.Compound.implicits._
+import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
+import lack.meta.source.Stream
+import lack.meta.source.Node
+import lack.meta.driver.Check
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
-    check.success() { new LemmaLastN(3, _) }
+    Check.success() { new LemmaLastN(3, _) }
   }
 
-  class LemmaLastN(n: Integer, invocation: NodeInvocation) extends Node(invocation):
+  class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):
     val e      = local[Bool]
     val lastN  = LastN(n,     e)
     val lastSN = LastN(n + 1, e)
@@ -24,7 +24,7 @@ class TestLastN extends munit.FunSuite:
       lastSN.out ==> lastN.out
     }
 
-  class LastN(n: Integer, e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation):
+  class LastN(n: Integer, e: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
     require(n <= 255)
 
     val count     = local[UInt8]
@@ -48,7 +48,7 @@ class TestLastN extends munit.FunSuite:
     // }
 
   object LastN:
-    def apply(n: Integer, e: Stream[stream.Bool])(using builder: Builder, location: lack.meta.macros.Location) =
+    def apply(n: Integer, e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
         invocation.metaarg("n", n)
         new LastN(n, invocation.arg("e", e), invocation)

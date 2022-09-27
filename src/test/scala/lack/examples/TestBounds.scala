@@ -1,21 +1,20 @@
-package lack.source
+package lack.examples
 
-import lack.meta.source.compound.{given, _}
-import lack.meta.source.compound.implicits._
-import lack.meta.source.stream.{Stream, SortRepr, Bool, Int32}
-import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.driver.check
+import lack.meta.source.Compound.{given, _}
+import lack.meta.source.Compound.implicits._
+import lack.meta.source.Node
+import lack.meta.source.Stream
+import lack.meta.source.Stream.{SortRepr, Bool, Int32}
+import lack.meta.driver.Check
 
 class TestBounds extends munit.FunSuite:
   test("bounds") {
-    check.success() { new LemmaBounds(3, _) }
+    Check.success() { new LemmaBounds(3, _) }
   }
 
-  class LemmaBounds(n: Int, invocation: NodeInvocation) extends Node(invocation):
-    val human  = local[Int32]
-    val OVERRIDE    = i32(100)
-
+  class LemmaBounds(n: Int, invocation: Node.Invocation) extends Node(invocation):
+    val human           = local[Int32]
+    val OVERRIDE        = i32(100)
 
     val human_in_bounds = human < OVERRIDE
     val last_in_bounds  = LastN(n, human_in_bounds)
@@ -41,7 +40,7 @@ class TestBounds extends munit.FunSuite:
       case _ => v + SumN(n - 1, fby(i32(0), v))
 
 
-  // class Surplus(n: Int, invocation: NodeInvocation) extends Node(invocation):
+  // class Surplus(n: Int, invocation: Node.Invocation) extends Node(invocation):
   //   def MeanN(n: Int, v: Stream[Int32]): Stream[Int32] =
   //     SumN(n, v) / n
 

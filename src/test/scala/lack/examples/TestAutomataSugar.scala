@@ -1,21 +1,22 @@
-package lack.source
+package lack.examples
 
-import lack.meta.source.compound.{given, _}
-import lack.meta.source.compound.implicits._
-import lack.meta.source.automaton.Automaton
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
-import lack.meta.driver.check
+import lack.meta.source.Compound.{given, _}
+import lack.meta.source.Compound.implicits._
+import lack.meta.source.Automaton
+import lack.meta.source.Node
+import lack.meta.source.Stream
+import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
+import lack.meta.driver.Check
 
 /** Full-sugar cruise control automaton
  */
 class TestAutomatonSugar extends munit.FunSuite:
 
   test("automaton sugar") {
-    check.success() { new Top(_) }
+    Check.success() { new Top(_) }
   }
 
-  class Top(invocation: NodeInvocation) extends Node(invocation):
+  class Top(invocation: Node.Invocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...
     val btn_on  = local[Bool]
     val cmd_set = local[Bool]
@@ -24,7 +25,7 @@ class TestAutomatonSugar extends munit.FunSuite:
     val cruise  = Cruise(btn_on, cmd_set, speedo, accel)
     cruise.finish()
 
-  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: NodeInvocation) extends Automaton(invocation):
+  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: Node.Invocation) extends Automaton(invocation):
     val accel_out = output[UInt8]
     val light_on  = output[Bool]
     val speed_out = output[UInt8]
@@ -72,7 +73,7 @@ class TestAutomatonSugar extends munit.FunSuite:
     }
 
   object Cruise:
-    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Builder, location: lack.meta.macros.Location) =
+    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
         new Cruise(
           invocation.arg("btn_on", btn_on),

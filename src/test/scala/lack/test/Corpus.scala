@@ -1,6 +1,6 @@
-package lack.meta.test
+package lack.test
 
-import lack.meta.test.hedgehog._
+import lack.test.hedgehog._
 
 object Corpus:
   val colours: Gen[String] = Gen.elementIndexed(IndexedSeq(

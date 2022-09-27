@@ -2,17 +2,17 @@ package lack.meta.smt
 
 import lack.meta.base.names
 import lack.meta.base.pretty
-import lack.meta.core.builder
-import lack.meta.core.builder.Node
-import lack.meta.core.sort.Sort
+import lack.meta.core.node.Builder
+import lack.meta.core.node.Builder.Node
+import lack.meta.core.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
-import lack.meta.smt.solver.Solver
+import lack.meta.smt.Solver
 import lack.meta.smt.term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
-object check:
+object Check:
   sealed trait CheckFeasible extends pretty.Pretty
   object CheckFeasible:
     case class FeasibleUpTo(steps: Int) extends CheckFeasible:
@@ -67,7 +67,7 @@ object check:
             Seq()
           }
         case _ =>
-          throw new solver.SolverException(s, "can't parse model counterexample")
+          throw new Solver.SolverException(s, "can't parse model counterexample")
 
       val ds = allDefs(sexpr)
 
@@ -120,7 +120,7 @@ object check:
         pretty.indent(details.ppr, 2)
 
   def declareSystem(n: Node, solver: Solver): system.Top =
-    val sys = translate.nodes(n.allNodes)
+    val sys = Translate.nodes(n.allNodes)
     sys.fundefs.foreach(solver.command)
     sys
 
@@ -161,7 +161,7 @@ object check:
     println("Checking top-level node:")
     println(top.pprString)
     println("System translation:")
-    println(translate.nodes(top.allNodes).pprString)
+    println(Translate.nodes(top.allNodes).pprString)
 
     val res = top.allNodes.map { n =>
       val s = solver()

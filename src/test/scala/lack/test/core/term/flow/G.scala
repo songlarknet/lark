@@ -1,4 +1,4 @@
-package lack.meta.core.term.flow
+package lack.test.core.term.flow
 
 import lack.meta.base.num
 import lack.meta.core.term
@@ -6,13 +6,14 @@ import lack.meta.core.term.Check
 import lack.meta.core.term.Exp
 import lack.meta.core.term.Flow
 import lack.meta.core.term.Val
-import lack.meta.core.sort
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
-import lack.meta.test.hedgehog._
+import lack.test.hedgehog._
 
 /** Generators for pure expressions */
-case class G(expG: term.exp.G):
+case class G(exp: lack.test.core.term.exp.G):
+  val val_ = exp.val_
+  val sort = exp.sort
   /** Generate a streaming expression of given type, with given environment.
    *
    * Takes two environments: "current" and "previous". The current environment
@@ -23,16 +24,16 @@ case class G(expG: term.exp.G):
   def flow(current: Check.Env, previous: Check.Env, sort: Sort): Gen[Flow] =
     Gen.choice1(
       for
-        e <- expG.exp(current, sort)
+        e <- exp.exp(current, sort)
       yield Flow.Pure(e),
       for
-        e <- expG.exp(current, sort)
-        f <- expG.exp(current, sort)
+        e <- exp.exp(current, sort)
+        f <- exp.exp(current, sort)
       yield Flow.Arrow(e, f),
       for
-        v <- term.val_.G.sort(sort)
-        e <- expG.exp(previous, sort)
+        v <- val_.value(sort)
+        e <- exp.exp(previous, sort)
       yield Flow.Fby(v, e),
       for
-        e <- expG.exp(previous, sort)
+        e <- exp.exp(previous, sort)
       yield Flow.Pre(e))

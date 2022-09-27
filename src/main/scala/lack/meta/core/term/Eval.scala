@@ -1,7 +1,7 @@
 package lack.meta.core.term
 
 import lack.meta.base.names
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
 /** Dynamic semantics of expressions and flow expressions. */
 object Eval:

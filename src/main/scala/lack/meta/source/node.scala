@@ -3,16 +3,80 @@ package lack.meta.source
 import lack.meta.base.num.Integer
 import lack.meta.base.names
 import lack.meta.core
-import lack.meta.source.stream.{Stream, SortRepr}
+import lack.meta.source.Stream
+import lack.meta.source.Stream.SortRepr
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-object node:
-  class Builder(val nodeRef: core.builder.Node, nestedO: Option[core.builder.Nested] = None):
+
+abstract class Node(invocation: Node.Invocation):
+
+  given builder: Node.Builder = invocation.builder
+
+  inline given location: lack.meta.macros.Location = lack.meta.macros.location
+
+  protected class Lhs[T: SortRepr](_exp: core.term.Exp) extends Stream[T](_exp):
+    def v: names.Component = _exp match
+      case core.term.Exp.Var(_, v) =>
+        require(v.prefix == builder.nodeRef.path)
+        v.name
+      case _ =>
+        assert(false, s"Internal error: bad Lhs[T]: ${_exp} should be a bare variable")
+
+
+  protected def declare[T: SortRepr](name: String, mode: core.node.Builder.Variable.Mode)(using loc: lack.meta.macros.Location): Lhs[T] =
+    val sort = summon[SortRepr[T]].sort
+    val v = core.node.Builder.Variable(sort, loc, mode)
+    new Lhs(builder.nodeRef.fresh(names.ComponentSymbol.fromScalaSymbol(name), v))
+
+  protected def local[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
+    declare(loc.prettyPath, core.node.Builder.Variable.Local)
+
+  protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
+    declare(loc.prettyPath, core.node.Builder.Variable.Output)
+
+  protected def bindProperty(syntax: core.Prop.Syntax, name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
+    val locx = loc <> builder.nodeRef.locate(prop._exp)
+    builder.nodeRef.prop(core.Prop.Judgment(name, prop._exp, syntax, locx))
+
+  protected def check(name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
+    bindProperty(core.Prop.Syntax.Check, name)(prop)
+
+  protected def requires(name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
+    bindProperty(core.Prop.Syntax.Require, name)(prop)
+
+  protected def guarantees(name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
+    bindProperty(core.Prop.Syntax.Guarantee, name)(prop)
+
+  protected def sorry(name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
+    bindProperty(core.Prop.Syntax.Sorry, name)(prop)
+
+  protected def bind[T](lhs: Lhs[T], rhs: Stream[T])(using builder: Node.Builder) =
+    builder.nested.equation(lhs.v, core.term.Flow.Pure(rhs._exp))
+
+  extension [T](lhs: Lhs[T])
+    protected def := (rhs: Stream[T])(using builder: Node.Builder) =
+      bind(lhs, rhs)
+
+  protected abstract class Merge(using builder: Node.Builder) extends reflect.Selectable:
+    val merge = builder.nested.merge()
+
+    abstract class When(when: Stream[Stream.Bool], reset: Stream[Stream.Bool] = Compound.False) extends reflect.Selectable:
+      given builder: Node.Builder = new Node.Builder(
+        Merge.this.builder.nodeRef,
+        Some(merge.when(when._exp).reset(reset._exp)))
+
+  protected abstract class Reset(reset: Stream[Stream.Bool])(using superbuilder: Node.Builder) extends reflect.Selectable:
+    given builder: Node.Builder = new Node.Builder(
+      superbuilder.nodeRef,
+      Some(superbuilder.nested.reset(reset._exp)))
+
+object Node:
+  class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Builder.Nested] = None):
     var nested = nestedO.getOrElse(nodeRef.nested)
 
-    def withNesting[T](neu: core.builder.Nested)(f: => T): T =
+    def withNesting[T](neu: core.node.Builder.Nested)(f: => T): T =
       val old = nested
       try {
         nested = neu
@@ -51,22 +115,22 @@ object node:
      * keep a clear interface between the calling node and the called node.
      * ...
      */
-    def invokeWithName[T <: Node](name: String)(f: NodeInvocation => T): T =
+    def invokeWithName[T <: Node](name: String)(f: Invocation => T): T =
       val instance = nodeRef.freshSubnodeRef(names.ComponentSymbol.fromScalaSymbol(name))
       val subpath = instance.fullyQualifiedPath
-      val subnodeRef = new core.builder.Node(new names.mutable.Supply(subpath), subpath)
+      val subnodeRef = new core.node.Builder.Node(new names.mutable.Supply(subpath), subpath)
       val subbuilder = new Builder(subnodeRef)
-      val inv = new NodeInvocation(superbuilder = this, instance = instance, builder = subbuilder)
+      val inv = new Invocation(superbuilder = this, instance = instance, builder = subbuilder)
       val node = f(inv)
       nested.subnode(instance.name, subnodeRef, inv.arguments.toList)
       node
 
-    def invoke[T <: Node : ClassTag](f: NodeInvocation => T)(using location: lack.meta.macros.Location): T =
+    def invoke[T <: Node : ClassTag](f: Invocation => T)(using location: lack.meta.macros.Location): T =
       val name = location.enclosing.getOrElse(
           summon[ClassTag[T]].runtimeClass.getSimpleName())
       invokeWithName(name)(f)
 
-  class NodeInvocation(val superbuilder: Builder, val instance: names.Ref, val builder: Builder):
+  class Invocation(val superbuilder: Builder, val instance: names.Ref, val builder: Builder):
     val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()
 
     // TODO keep track of meta-level arguments
@@ -92,9 +156,9 @@ object node:
      *
      * We get around this by requiring the invocation to explicitly mark the
      * parameters that will be substituted for argument values. We bundle this up
-     * inside a "NodeInvocation" object which is passed to the Node base class
+     * inside a "Invocation" object which is passed to the Node base class
      * like so:
-     * > class SoFar(e: Stream[Bool], invocation: NodeInvocation) extends Node(invocation)
+     * > class SoFar(e: Stream[Bool], invocation: Invocation) extends Node(invocation)
      *
      * Then, you can call it by calling builder.invoke:
      * > def sofar(e: Stream[Bool])(using builder: Builder): SoFar =
@@ -109,68 +173,6 @@ object node:
     def arg[T](name: String, argvalue: Stream[T])(using location: lack.meta.macros.Location): Stream[T] =
       val v = builder.nodeRef.fresh(
         names.ComponentSymbol.fromScalaSymbol(name),
-        core.builder.Variable(argvalue.sort, location, core.builder.Variable.Argument))
+        core.node.Builder.Variable(argvalue.sort, location, core.node.Builder.Variable.Argument))
       arguments += argvalue._exp
       new Stream[T](v)(using argvalue.sortRepr)
-
-  abstract class Node(invocation: NodeInvocation):
-
-    given builder: Builder = invocation.builder
-
-    inline given location: lack.meta.macros.Location = lack.meta.macros.location
-
-    protected class Lhs[T: SortRepr](_exp: core.term.Exp) extends Stream[T](_exp):
-      def v: names.Component = _exp match
-        case core.term.Exp.Var(_, v) =>
-          require(v.prefix == builder.nodeRef.path)
-          v.name
-        case _ =>
-          assert(false, s"Internal error: bad Lhs[T]: ${_exp} should be a bare variable")
-
-
-    protected def declare[T: SortRepr](name: String, mode: core.builder.Variable.Mode)(using loc: lack.meta.macros.Location): Lhs[T] =
-      val sort = summon[SortRepr[T]].sort
-      val v = core.builder.Variable(sort, loc, mode)
-      new Lhs(builder.nodeRef.fresh(names.ComponentSymbol.fromScalaSymbol(name), v))
-
-    protected def local[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-      declare(loc.prettyPath, core.builder.Variable.Local)
-
-    protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-      declare(loc.prettyPath, core.builder.Variable.Output)
-
-    protected def bindProperty(syntax: core.prop.Syntax, name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
-      val locx = loc <> builder.nodeRef.locate(prop._exp)
-      builder.nodeRef.prop(core.prop.Judgment(name, prop._exp, syntax, locx))
-
-    protected def check(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
-      bindProperty(core.prop.Syntax.Check, name)(prop)
-
-    protected def requires(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
-      bindProperty(core.prop.Syntax.Require, name)(prop)
-
-    protected def guarantees(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
-      bindProperty(core.prop.Syntax.Guarantee, name)(prop)
-
-    protected def sorry(name: String)(prop: Stream[stream.Bool])(using loc: lack.meta.macros.Location) =
-      bindProperty(core.prop.Syntax.Sorry, name)(prop)
-
-    protected def bind[T](lhs: Lhs[T], rhs: Stream[T])(using builder: Builder) =
-      builder.nested.equation(lhs.v, core.term.Flow.Pure(rhs._exp))
-
-    extension [T](lhs: Lhs[T])
-      protected def := (rhs: Stream[T])(using builder: Builder) =
-        bind(lhs, rhs)
-
-    protected abstract class Merge(using builder: Builder) extends reflect.Selectable:
-      val merge = builder.nested.merge()
-
-      abstract class When(when: Stream[stream.Bool], reset: Stream[stream.Bool] = compound.False) extends reflect.Selectable:
-        given builder: Builder = new Builder(
-          Merge.this.builder.nodeRef,
-          Some(merge.when(when._exp).reset(reset._exp)))
-
-    protected abstract class Reset(reset: Stream[stream.Bool])(using superbuilder: Builder) extends reflect.Selectable:
-      given builder: Builder = new Builder(
-        superbuilder.nodeRef,
-        Some(superbuilder.nested.reset(reset._exp)))

@@ -1,7 +1,7 @@
 package lack.meta.base
 
 /** Standard stuff for the metalanguage. */
-object num:
+package object num:
   /** Use arbitrary-sized integers by default.
    * We need >64 bits to represent the full range of signed and unsigned int64s.
    */

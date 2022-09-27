@@ -3,7 +3,7 @@ package lack.meta.base
 import scala.collection.immutable.{SortedMap, SortedSet}
 import math.Ordering.Implicits.seqOrdering
 
-object names:
+package object names:
   /** Sanitized symbols.
    * These are ensured to be valid SMT-lib identifiers with some extra restrictions.
    *

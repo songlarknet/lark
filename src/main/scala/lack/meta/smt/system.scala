@@ -3,13 +3,13 @@ package lack.meta.smt
 import lack.meta.base.num.Integer
 import lack.meta.base.names
 import lack.meta.base.pretty
-import lack.meta.core.builder
-import lack.meta.core.builder.Node
-import lack.meta.core.prop.Judgment
-import lack.meta.core.sort.Sort
+import lack.meta.core.node.Builder
+import lack.meta.core.node.Builder.Node
+import lack.meta.core.Prop
+import lack.meta.core.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
-import lack.meta.smt.solver.Solver
+import lack.meta.smt.Solver
 import lack.meta.smt.term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
@@ -277,7 +277,7 @@ object system:
    *
    * This meaning is different from the bare implication `hyps => consequent`.
    */
-  case class SystemJudgment(hypotheses: List[names.Ref], consequent: names.Ref, judgment: Judgment) extends pretty.Pretty:
+  case class SystemJudgment(hypotheses: List[names.Ref], consequent: names.Ref, judgment: Prop.Judgment) extends pretty.Pretty:
     def ppr =
       val hyp = hypotheses match
         case Nil => pretty.emptyDoc
@@ -303,7 +303,7 @@ object system:
 
     /** Convert namespace to list of SMT-lib parameters */
     def paramsOfNamespace(prefix: names.Prefix, ns: Namespace): List[Terms.SortedVar] =
-      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(v)).id.symbol, translate.sort(s)))
+      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(v)).id.symbol, Translate.sort(s)))
       val nsX = ns.namespaces.toList.flatMap((v,n) => paramsOfNamespace(names.Prefix(prefix.prefix :+ v), n))
       vs ++ nsX
 
@@ -329,13 +329,13 @@ object system:
     val initD = Commands.FunDef(
       initI.id.symbol,
       initP(Prefix.state),
-      translate.sort(Sort.Bool),
+      Translate.sort(Sort.Bool),
       system.init)
     /** Function definition for step function. */
     val stepD = Commands.FunDef(
       stepI.id.symbol,
       stepP(Prefix.state, Prefix.row, Prefix.stateX),
-      translate.sort(Sort.Bool),
+      Translate.sort(Sort.Bool),
       system.step)
 
     /** Function definition for step function. */

@@ -3,21 +3,21 @@ package lack.meta.source
 import lack.meta.macros.Location
 import lack.meta.core.term
 import lack.meta.core.term.Exp
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
-object stream:
-  class Stream[T: SortRepr](val _exp: Exp):
-    def sortRepr: SortRepr[T] = summon[SortRepr[T]]
-    def sort: Sort = sortRepr.sort
-    def ==(o: Stream[T])(using eq: compound.Eq[T], builder: node.Builder, location: Location): Stream[Bool] = eq.eq(this, o)
-    def !=(o: Stream[T])(using eq: compound.Eq[T], builder: node.Builder, location: Location): Stream[Bool] = compound.not(eq.eq(this, o))
+class Stream[T: Stream.SortRepr](val _exp: Exp):
+  def sortRepr: Stream.SortRepr[T] = summon[Stream.SortRepr[T]]
+  def sort: Sort = sortRepr.sort
+  def ==(o: Stream[T])(using eq: Compound.Eq[T], builder: Node.Builder, location: Location): Stream[Stream.Bool] = eq.eq(this, o)
+  def !=(o: Stream[T])(using eq: Compound.Eq[T], builder: Node.Builder, location: Location): Stream[Stream.Bool] = Compound.not(eq.eq(this, o))
 
-    // Check that all constructed streams have a sort that agrees with the type-level sort.
-    // PERF: is this overkill?
-    assert(_exp.sort == sort,
-      s"""Stream[T] sort check: expected ${sort}, but expression has sort ${_exp.sort}.
-      Expression: ${_exp.pprString}""")
+  // Check that all constructed streams have a sort that agrees with the type-level sort.
+  // PERF: is this overkill?
+  assert(_exp.sort == sort,
+    s"""Stream[T] sort check: expected ${sort}, but expression has sort ${_exp.sort}.
+    Expression: ${_exp.pprString}""")
 
+object Stream:
   class SortRepr[T](val sort: Sort)
 
   opaque type Bool    = Sort.Bool.type

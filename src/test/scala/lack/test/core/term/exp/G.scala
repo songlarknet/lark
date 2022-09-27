@@ -1,17 +1,19 @@
-package lack.meta.core.term.exp
+package lack.test.core.term.exp
 
 import lack.meta.base.num
 import lack.meta.core.term
 import lack.meta.core.term.Check
 import lack.meta.core.term.Exp
 import lack.meta.core.term.Val
-import lack.meta.core.sort
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
-import lack.meta.test.hedgehog._
+import lack.test.hedgehog._
 
 /** Generators for pure expressions */
-case class G(primG: term.prim.G):
+case class G(primG: lack.test.core.term.prim.G):
+  val sort = lack.test.core.sort.G
+  val val_ = lack.test.core.term.val_.G
+
   /** Generate an expression of given type, with given environment.
    *
    * Tries to generate a primitive application that returns given sort
@@ -39,34 +41,34 @@ case class G(primG: term.prim.G):
     case Sort.Bool =>
       Gen.choice1(
         varCast(env, sort),
-        val_(sort),
+        value(sort),
         prim(env, sort)
       )
     case Sort.ArbitraryInteger =>
       Gen.choice1(
         varCast(env, sort),
-        val_(sort),
+        value(sort),
         prim(env, sort),
         unbox(env, sort)
       )
     case s: Sort.BoundedInteger =>
       Gen.choice1(
         varCast(env, sort),
-        val_(sort),
+        value(sort),
         prim(env, sort),
         box(env, s)
       )
     case Sort.Real =>
       Gen.choice1(
         varCast(env, sort),
-        val_(sort),
+        value(sort),
         prim(env, sort)
       )
 
   /** Generate constant value of given sort */
-  def val_(sort: Sort): Gen[Exp] =
+  def value(sort: Sort): Gen[Exp] =
     for
-      v <- term.val_.G.sort(sort)
+      v <- val_.value(sort)
     yield Exp.Val(sort, v)
 
   /** Generate a primitive application that returns given sort */
@@ -83,7 +85,7 @@ case class G(primG: term.prim.G):
     )(
       main = varCast(env, _)
     )(
-      fallback = { s => val_(s).rarely(exp(env, s)) },
+      fallback = { s => value(s).rarely(exp(env, s)) },
     )
 
   /** Generate an if-then-else chain with distinct predicates and terms */
@@ -105,7 +107,7 @@ case class G(primG: term.prim.G):
 
   def unbox(env: Check.Env, s: Sort): Gen[Exp] =
     for
-      r <- sort.G.runtime.ints
+      r <- sort.runtime.ints
       e <- arbitrary(env, r)
     yield Exp.Cast(Exp.Cast.Unbox(s), e)
 
@@ -118,8 +120,8 @@ case class G(primG: term.prim.G):
   def castToInteger(e: Exp): Gen[Exp] = e.sort match
     case Sort.Bool =>
       for
-        vt <- val_(Sort.ArbitraryInteger)
-        vf <- val_(Sort.ArbitraryInteger).ensure(_ != vt)
+        vt <- value(Sort.ArbitraryInteger)
+        vf <- value(Sort.ArbitraryInteger).ensure(_ != vt)
       yield
         compound.ite(e, vt, vf)
     case Sort.ArbitraryInteger =>
@@ -139,7 +141,7 @@ case class G(primG: term.prim.G):
     case Sort.ArbitraryInteger =>
       for
         op <- compound.cmps
-        z <- val_(Sort.ArbitraryInteger)
+        z <- value(Sort.ArbitraryInteger)
       yield
         Exp.App(Sort.Bool, op, e, z)
     case s: Sort.BoundedInteger =>
@@ -150,7 +152,7 @@ case class G(primG: term.prim.G):
     case Sort.Real =>
       for
         op <- compound.cmps
-        z <- val_(Sort.Real)
+        z <- value(Sort.Real)
       yield
         Exp.App(Sort.Bool, op, e, z)
 
@@ -171,7 +173,7 @@ case class G(primG: term.prim.G):
    * desired type.
    */
   def varCast(env: Check.Env, sort: Sort): Gen[Exp] =
-    val fallback = var_(env, sort, otherwise = val_(sort))
+    val fallback = var_(env, sort, otherwise = value(sort))
     val envX = env.map((k,v) => Exp.Var(v, k)).toIndexedSeq
 
     sort match

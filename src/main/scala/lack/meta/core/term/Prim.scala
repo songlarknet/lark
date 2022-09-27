@@ -3,7 +3,7 @@ package lack.meta.core.term
 import lack.meta.base.num
 import lack.meta.base.num.{Integer, Real}
 import lack.meta.base.{names, pretty}
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
 /** Pure total primitives.
  * This file defines the structure of checking and evaluating primitives and

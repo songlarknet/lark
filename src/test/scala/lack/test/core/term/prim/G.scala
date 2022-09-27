@@ -1,15 +1,14 @@
-package lack.meta.core.term.prim
+package lack.test.core.term.prim
 
 import lack.meta.base.pretty
 import lack.meta.core
 import lack.meta.core.term.Prim
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
-import lack.meta.test.hedgehog._
+import lack.test.hedgehog._
 
 /** Generator for primitives */
 case class G(table: IndexedSeq[G.PrimEntry] = G.table.toIndexedSeq):
-
   val lookup = table.map(pe => (pe.prim, pe)).toMap
 
   /** Generate any primitive, returning the argument and result sorts. */
@@ -69,6 +68,7 @@ case class G(table: IndexedSeq[G.PrimEntry] = G.table.toIndexedSeq):
 
 /** Generator for primitives */
 object G:
+  val sort = lack.test.core.sort.G
 
   /** How to generate argument types for a given primitive */
   trait PrimEntry:
@@ -115,7 +115,7 @@ object G:
     case class Prim_nn_b(prim: Prim.Prim_nn_b) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.logical.numeric
+          i <- sort.logical.numeric
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -140,7 +140,7 @@ object G:
     case class Prim_nn_n(prim: Prim.Prim_nn_n) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.logical.numeric
+          i <- sort.logical.numeric
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -165,7 +165,7 @@ object G:
     case class Prim_n_n(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.logical.numeric
+          i <- sort.logical.numeric
         yield (List(i))
 
       def args(result: Sort) =
@@ -185,7 +185,7 @@ object G:
     case class Prim_aa_b(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.all
+          i <- sort.all
         yield (List(i, i))
 
       def args(result: Sort) =
@@ -207,7 +207,7 @@ object G:
     case class Prim_baa_a(prim: Prim) extends PrimEntry:
       def args() =
         for
-          i <- core.sort.G.all
+          i <- sort.all
         yield (List(Sort.Bool, i, i))
 
       def args(result: Sort) =
@@ -232,7 +232,7 @@ object G:
           None
 
   val table = {
-    import Table._
+    import core.term.prim.Table._
     List(
       PrimEntry.Simple(And),
       PrimEntry.Simple(Or),

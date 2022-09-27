@@ -1,4 +1,4 @@
-package lack.meta.test
+package lack.test
 
 import lack.meta.base.{num, pretty}
 import lack.meta.macros
@@ -114,6 +114,9 @@ object hedgehog:
           else Property.point(())
       yield
         i.get
+
+    def ppr[T](value: T, name: String): h.core.PropertyT[T] =
+      Property.point(value).ppr(name)
 
   extension[T] (prop: h.core.PropertyT[T])
     def ppr(name: String): h.core.PropertyT[T] =

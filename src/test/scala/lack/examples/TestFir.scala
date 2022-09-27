@@ -1,19 +1,19 @@
-package lack.source
+package lack.examples
 
-import lack.meta.source.compound.{given, _}
-import lack.meta.source.compound.implicits._
-import lack.meta.source.stream.{Stream, SortRepr, Bool, Int32, Real}
-import lack.meta.source.stream
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.driver.check
+import lack.meta.source.Compound.{given, _}
+import lack.meta.source.Compound.implicits._
+import lack.meta.source.Node
+import lack.meta.source.Stream
+import lack.meta.source.Stream.{SortRepr, Bool, Int32, Real}
+import lack.meta.driver.Check
 
 /** Example of an FIR filter */
 class TestFIR extends munit.FunSuite:
   test("fir filter") {
-    check.success() { new LemmaFIR(3, _) }
+    Check.success() { new LemmaFIR(3, _) }
   }
 
-  class LemmaFIR(n: Int, invocation: NodeInvocation) extends Node(invocation):
+  class LemmaFIR(n: Int, invocation: Node.Invocation) extends Node(invocation):
     val signal = local[Real]
 
     val lpf = FIR(List(0.5f, 0.03f, 0.02f, 0.01f), signal)
@@ -30,7 +30,7 @@ class TestFIR extends munit.FunSuite:
       bounded_output
     }
 
-  class FIR(coefficients: List[Float], signal: Stream[Real], invocation: NodeInvocation) extends Node(invocation):
+  class FIR(coefficients: List[Float], signal: Stream[Real], invocation: Node.Invocation) extends Node(invocation):
     val out = output[Real]
 
     /** Single-unit delay, initialised with zero */
@@ -46,7 +46,7 @@ class TestFIR extends munit.FunSuite:
     out := fir(coefficients, signal)
 
   object FIR:
-    def apply(coefficients: List[Float], signal: Stream[Real])(using builder: Builder, location: lack.meta.macros.Location) =
+    def apply(coefficients: List[Float], signal: Stream[Real])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
         new FIR(coefficients, invocation.arg("signal", signal), invocation)
       }

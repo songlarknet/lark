@@ -1,21 +1,21 @@
-package lack.source
+package lack.examples
 
-import lack.meta.source.compound.{given, _}
-import lack.meta.source.compound.implicits._
-import lack.meta.source.node.{Builder, Node, NodeInvocation}
-import lack.meta.source.stream.{Stream, SortRepr, Bool, UInt8}
-import lack.meta.source.stream
-import lack.meta.driver.check
+import lack.meta.source.Compound.{given, _}
+import lack.meta.source.Compound.implicits._
+import lack.meta.source.Node
+import lack.meta.source.Stream
+import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
+import lack.meta.driver.Check
 
 /** First attempt at automaton example.
  * Manual translation from Lustre syntax to nested nodes.
  */
 class TestAutomaton extends munit.FunSuite:
   test("automaton") {
-    check.success() { new Top(_) }
+    Check.success() { new Top(_) }
   }
 
-  class Top(invocation: NodeInvocation) extends Node(invocation):
+  class Top(invocation: Node.Invocation) extends Node(invocation):
     // forall btn_on, cmd_set, ...
     val btn_on  = local[Bool]
     val cmd_set = local[Bool]
@@ -72,7 +72,7 @@ class TestAutomaton extends munit.FunSuite:
   */
 
   /** hand-translated version */
-  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: NodeInvocation) extends Node(invocation):
+  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: Node.Invocation) extends Node(invocation):
     // Should be able to generate a lot of this from a nicer representation
     val S_OFF     = u8(0)
     val S_AWAIT   = u8(1)
@@ -131,7 +131,7 @@ class TestAutomaton extends munit.FunSuite:
     }
 
   object Cruise:
-    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Builder, location: lack.meta.macros.Location) =
+    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
         new Cruise(
           invocation.arg("btn_on", btn_on),

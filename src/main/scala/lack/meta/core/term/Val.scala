@@ -3,7 +3,7 @@ package lack.meta.core.term
 import lack.meta.base.num
 import lack.meta.base.num.Integer
 import lack.meta.base.{names, pretty}
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
 /** Logical representation of values */
 sealed trait Val extends pretty.Pretty:

@@ -1,16 +1,18 @@
-package lack.meta.core.term.prim
+package lack.test.core.term.prim
 
 import lack.meta.base.pretty
 import lack.meta.core
 import lack.meta.core.term.{Prim, Val}
-import lack.meta.core.sort.Sort
+import lack.meta.core.term.prim.Table
+import lack.meta.core.Sort
 
-import lack.meta.test.hedgehog._
-import lack.meta.test.suite._
+import lack.test.hedgehog._
+import lack.test.suite.HedgehogSuite
 
 /** Properties for primitives */
-class P extends lack.meta.test.suite.HedgehogSuite:
+class P extends HedgehogSuite:
   val g = G()
+  val val_ = lack.test.core.term.val_.G
 
   test("prim table complete") {
     val missing = Table.base.filter { p =>
@@ -23,21 +25,21 @@ class P extends lack.meta.test.suite.HedgehogSuite:
   for (p <- g.table) {
     property(s"prim '${p.prim.pprString}' generate args") {
       for
-        args <- p.args().log("args")
+        args <- p.args().ppr("args")
         r = p.prim.sort(args)
       yield
-        ()
+        Result.success
     }
 
     property(s"prim '${p.prim.pprString}' generate args for result") {
       for
-        r  <- core.sort.G.all.log("r")
+        r  <- G.sort.all.ppr("r")
         ok <-
           p.args(r) match
             case None => Property.point(Result.Success)
             case Some(argsG) =>
               for
-                args <- argsG.log("args")
+                args <- argsG.ppr("args")
                 r2    = p.prim.sort(args)
               yield
                 Result.diff(r, r2)(_ == _)
@@ -46,13 +48,13 @@ class P extends lack.meta.test.suite.HedgehogSuite:
 
     property(s"prim '${p.prim.pprString}' generate partial application") {
       for
-        partial <- core.sort.G.all.list(Range.linear(0, 3)).log("partial")
+        partial <- G.sort.all.list(Range.linear(0, 3)).ppr("partial")
         ok <-
           p.partial(partial) match
             case None => Property.point(Result.Success)
             case Some(suffixG) =>
               for
-                suffix <- suffixG.log("suffix")
+                suffix <- suffixG.ppr("suffix")
                 r2      = p.prim.sort(partial ++ suffix)
               yield
                 Result.success
@@ -61,16 +63,11 @@ class P extends lack.meta.test.suite.HedgehogSuite:
 
     property(s"prim '${p.prim.pprString}' args eval") {
       for
-        sorts     <- p.args().log("sorts")
-        values    <- core.term.val_.G.sorts(sorts).log("values")
-        resultSort = p.prim.sort(sorts)
-        result     = p.prim.eval(values)
+        sorts      <- p.args().ppr("sorts")
+        values     <- val_.list(sorts).ppr("values")
+        resultSort <- Property.ppr(p.prim.sort(sorts), "resultSort")
+        result     <- Property.ppr(p.prim.eval(values), "result")
       yield
         Result.assert(Val.check(result, resultSort))
-          .log(s"resultSort: ${resultSort.pprString}")
-          .log(s"result: ${result.pprString}")
     }
   }
-
-  // TODO: props
-  // evaluation matches smt

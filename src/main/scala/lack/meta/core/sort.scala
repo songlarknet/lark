@@ -1,4 +1,4 @@
-package lack.meta.core.sort
+package lack.meta.core
 
 import lack.meta.core.term.{Exp, Val, prim}
 import lack.meta.base.names

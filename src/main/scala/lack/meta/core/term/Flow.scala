@@ -3,7 +3,7 @@ package lack.meta.core.term
 import lack.meta.base.num
 import lack.meta.base.num.Integer
 import lack.meta.base.{names, pretty}
-import lack.meta.core.sort.Sort
+import lack.meta.core.Sort
 
 /** Streaming terms */
 sealed trait Flow extends pretty.Pretty:
