@@ -269,13 +269,7 @@ object Translate:
     // guarantees \result.value == x;
     case Exp.Cast(Exp.Cast.Box(s), e) =>
       val relyR  = context.supply.freshRef(names.ComponentSymbol.PROP, forceIndex = true)
-      val unboxR = context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
       val boxR   = context.supply.freshRef(names.ComponentSymbol.BOX, forceIndex = true)
-
-      val unboxV = Exp.Var(s.logical, names.Prefix(context.node.path)(unboxR))
-      val boxV   = Exp.Var(s, names.Prefix(context.node.path)(boxR))
-
-      val relyE = s.refinesExp(unboxV)
 
       val relyJ = SystemJudgment(
         List(), relyR,
@@ -283,14 +277,18 @@ object Translate:
 
       for
         eT     <- expr(context, e)
-        relyT  <- expr(context, relyE)
-        relyTX <- SystemV.row(relyR, Sort.Bool)
-        unboxT <- SystemV.row(unboxR, s.logical)
-        boxT   <- SystemV.row(boxR, s)
+        ref    <- SystemV.letRow(s.logical, eT) { () =>
+          context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
+        }
 
-        _  <- SystemV.step(compound.equal(unboxT, eT))
+        refV  = Exp.Var(s.logical, names.Prefix(context.node.path)(ref))
+        relyT <- expr(context, s.refinesExp(refV))
+
+        relyTX <- SystemV.row(relyR, Sort.Bool)
+        boxT   <- SystemV.row(boxR, s.logical)
+
         _  <- SystemV.step(compound.equal(relyTX, relyT))
-        _  <- SystemV.step(compound.implies(relyTX, compound.equal(unboxT, boxT)))
+        _  <- SystemV.step(compound.implies(relyTX, compound.equal(eT, boxT)))
 
         _  <- SystemV(System(guarantees = List(relyJ)), ())
       yield
@@ -303,11 +301,11 @@ object Translate:
       case refinement: Sort.Refinement =>
         for
           eT  <- expr(context, e)
-          ref <- SystemV(System.empty, eT).letRow(refinement) { () =>
+          ref <- SystemV.letRow(logical, eT) { () =>
             context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
           }
 
-          refV  = Exp.Var(refinement, names.Prefix(context.node.path)(ref))
+          refV  = Exp.Var(logical, names.Prefix(context.node.path)(ref))
           satT <- expr(context, refinement.refinesExp(refV))
           _    <- SystemV.step(satT)
         yield eT
