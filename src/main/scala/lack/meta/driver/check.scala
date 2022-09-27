@@ -18,7 +18,7 @@ object Check:
       throw new Exception(s"failed: ${res.pprString}")
     res
 
-  /** Check a node and its subnodes, expecting failure.
+  /** Check a node and its subnodes, expecting failure to prove some properties.
    * Will exit with System.exit on unexpected success. */
   def failure(options: Options = Options())(f: Node.Invocation => Node): smt.Check.Summary =
     val res = checkResult(options)(f)
@@ -26,6 +26,18 @@ object Check:
     if (res.ok)
       throw new Exception(s"succeeded but expected failure: ${res.pprString}")
     res
+
+  /** Check a node and its subnodes, expecting some sort of type error.
+   * Will exit with System.exit on unexpected success. */
+  def error(options: Options = Options())(f: Node.Invocation => Node): Unit =
+    try {
+      val res = checkResult(options)(f)
+      throw new Exception(s"succeeded but expected an error: ${res.pprString}")
+    } catch {
+      case e: Exception =>
+        // ok
+    }
+
 
   /** Check a node and its subnodes, returning the summary. */
   def checkResult(options: Options = Options())(f: Node.Invocation => Node): smt.Check.Summary =

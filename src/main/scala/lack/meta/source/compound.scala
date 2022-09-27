@@ -2,6 +2,7 @@ package lack.meta.source
 
 import lack.meta.macros.Location
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
+import lack.meta.core.term.{Compound => exp}
 import lack.meta.core.term.prim.Table
 import lack.meta.source.Node.Builder
 import lack.meta.source.Stream
@@ -27,16 +28,16 @@ object Compound:
     builder.memo2(a, b) { case (e, f) => Flow.Arrow(e, f) }
 
   def and(x: Stream[Stream.Bool], y: Stream[Stream.Bool])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.And, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Table.And, e, f) }
 
   def or(x: Stream[Stream.Bool], y: Stream[Stream.Bool])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.Or, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Table.Or, e, f) }
 
   def implies(x: Stream[Stream.Bool], y: Stream[Stream.Bool])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-    builder.memo2(x, y) { case (e, f) => Flow.app(Sort.Bool, Table.Implies, e, f) }
+    builder.memo2(x, y) { case (e, f) => Flow.app(Table.Implies, e, f) }
 
   def not(x: Stream[Stream.Bool])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-    builder.memo1(x) { case e => Flow.app(Sort.Bool, Table.Not, e) }
+    builder.memo1(x) { case e => Flow.app(Table.Not, e) }
 
   extension [T: SortRepr](x: Stream[T])(using builder: Builder, location: Location)
     def ->(y: Stream[T]): Stream[T] = Compound.arrow(x, y)
@@ -55,7 +56,7 @@ object Compound:
       Compound.not(x)
 
   def ifthenelse[T: SortRepr](p: Stream[Stream.Bool], t: Stream[T], f: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    builder.memo3x1(p, t, f) { case (e, f, g) => Flow.app(t.sort, Table.Ite, e, f, g) }
+    builder.memo3x1(p, t, f) { case (e, f, g) => Flow.app(Table.Ite, e, f, g) }
 
   def int[T: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
 
@@ -69,17 +70,17 @@ object Compound:
   def i64(i: Integer): Stream[Stream.Int64]  = int[Stream.Int64](i)
 
   def real(r: Real): Stream[Stream.Real] =
-    new Stream(Exp.Val(Sort.Real, Val.Real(r)))
+    new Stream(exp.val_(Val.Real(r)))
 
   def real(r: Double): Stream[Stream.Real] =
-    new Stream(Exp.Val(Sort.Real, Val.Real(Real.decimal(r))))
+    new Stream(exp.val_(Val.Real(Real.decimal(r))))
 
   val True: Stream[Stream.Bool] = bool(true)
 
   val False: Stream[Stream.Bool] = bool(false)
 
   def bool(b: Boolean): Stream[Stream.Bool] =
-    new Stream(Exp.Val(Sort.Bool, Val.Bool(b)))
+    new Stream(exp.val_(Val.Bool(b)))
 
   object implicits:
     implicit def implicit_integer[T: SortRepr: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
@@ -122,7 +123,7 @@ object Compound:
       /** Safe cast between integer types. */
       def as[U: Num: SortRepr]: Stream[U] =
         val u = summon[SortRepr[U]].sort.asInstanceOf[Sort.Refinement]
-        new Stream(Exp.Cast(Exp.Cast.Box(u), Exp.Cast(Exp.Cast.Unbox(Sort.ArbitraryInteger), x._exp)))
+        new Stream(exp.box(u, exp.unbox(x._exp)))
 
       // Integer to integer coercions
       // Safe rounding
@@ -157,9 +158,9 @@ object Compound:
       protected def Unboxed: Sort
 
       protected def appBxB(prim: Prim, args: Exp*): Flow =
-        Flow.Pure(box(Exp.App(Unboxed, prim, args.map(unbox) : _*)))
+        Flow.Pure(box(exp.app(prim, args.map(unbox) : _*)))
       protected def appBxU(ret: Sort, prim: Prim, args: Exp*): Flow =
-        Flow.app(ret, prim, args.map(unbox) : _*)
+        Flow.app(prim, args.map(unbox) : _*)
 
       def add(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[T] =
         builder.memo2(x, y) { appBxB(Table.Add, _, _) }
@@ -192,10 +193,10 @@ object Compound:
         builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Ge, _, _) }
 
     class NumImplIntegral[T: SortRepr] extends NumImpl[T]:
-      protected def box(exp: Exp) =
-        Exp.Cast(Exp.Cast.Box(Boxed), exp)
-      protected def unbox(exp: Exp) =
-        Exp.Cast(Exp.Cast.Unbox(Unboxed), exp)
+      protected def box(e: Exp) =
+        exp.box(Boxed, e)
+      protected def unbox(e: Exp) =
+        exp.unbox(e)
       protected def Unboxed: Sort =
         Sort.ArbitraryInteger
       protected def Boxed: Sort.Refinement =
@@ -206,7 +207,7 @@ object Compound:
         summon[SortRepr[T]].sort match
           case sort: Sort.BoundedInteger =>
             require(sort.minInclusive <= i && i <= sort.maxInclusive)
-            new Stream(Exp.Val(sort, Val.Refined(sort, Val.Int(i))))
+            new Stream(exp.val_(Val.Refined(sort, Val.Int(i))))
           // case sort@Sort.ArbitraryInteger =>
           //   new Stream(Exp.Val(sort, Val.Int(i)))
 
@@ -219,7 +220,7 @@ object Compound:
         Sort.Real
 
       def const(i: Integer): Stream[Stream.Real] =
-        new Stream(Exp.Val(Sort.Real, Val.Real(Real(i))))
+        new Stream(exp.val_(Val.Real(Real(i))))
 
   def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
     conds.toList match

@@ -42,8 +42,8 @@ object Flow:
     def sort = e.sort
     def ppr  = pretty.sexpr(List("pre", e.ppr))
 
-  def app(sort: Sort, prim: Prim, args: Exp*) =
-    Flow.Pure(Exp.App(sort, prim, args : _*))
+  def app(prim: Prim, args: Exp*) =
+    Flow.Pure(Compound.app(prim, args : _*))
   def var_(sort: Sort, v: names.Ref) =
     Flow.Pure(Exp.Var(sort, v))
   def val_(sort: Sort, v: Val) =
