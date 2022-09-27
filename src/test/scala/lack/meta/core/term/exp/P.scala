@@ -39,23 +39,14 @@ class P extends HedgehogSuite:
 
   property("generated expressions eval OK (refines enabled & discarded)") {
     for
-      env <- sort.G.env(Range.linear(1, 10), sort.G.all).log("env")
-      s <- sort.G.all.log("sort")
-      e <- g.exp(env, s).log("expr")
-      heap <- term.val_.G.heap(env).log("heap")
-      _ <- Gen.constant(e.pprString).log("e.ppr")
+      env <- sort.G.env(Range.linear(1, 10), sort.G.all).ppr("env")
+      s <- sort.G.all.ppr("sort")
+      e <- g.exp(env, s).ppr("e")
+      heap <- term.val_.G.heap(env).ppr("heap")
 
-      vok <- Property.point(try {
-        (Eval.exp(heap, e, Eval.Options(checkRefinement = true)), true)
-      } catch {
-        case e: Eval.except.RefinementException =>
-          (Val.arbitrary(s), false)
-      })
-
-      v = vok._1
-      ok = vok._2
-      _ <- if !ok then Property.discard else Property.point(())
+      v <- Property.try_ {
+        Eval.exp(heap, e, Eval.Options(checkRefinement = true))
+      }.ppr("v")
     yield
       Result.assert(Val.check(v, s))
-        .log(s"v: ${v.pprString}")
   }

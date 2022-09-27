@@ -43,45 +43,6 @@ object Eval:
       case Val.Refined(_, vX) => vX
       case _ => throw new except.CastUnboxException(op, v)
 
-  /** Describe evaluation of flow streaming expressions as state transition */
-  case class Transition(flow: Flow, options: Options):
-    /** Initial state */
-    def init: Transition.State = Transition.State(flow match
-      case Flow.Pure(e) =>
-        Val.unit
-      case Flow.Arrow(first, later) =>
-        Val.Bool(false)
-
-      case Flow.Fby(v, e) =>
-        v
-
-      case Flow.Pre(e) =>
-        Val.arbitrary(flow.sort))
-
-    /** Step from current state to new in given heap */
-    def step(state: Transition.State, heap: Heap, flow: Flow):
-      (Val, Transition.State) = flow match
-      case Flow.Pure(e) =>
-        (exp(heap, e, options), state)
-
-      case Flow.Arrow(first, later) =>
-        val e =
-          if state.v == Val.Bool(false)
-          then exp(heap, first, options)
-          else exp(heap, later, options)
-        (e, Transition.State(Val.Bool(true)))
-
-      case Flow.Fby(v, e) =>
-        val vX = Transition.State(exp(heap, e, options))
-        (state.v, vX)
-
-      case Flow.Pre(e) =>
-        val vX = Transition.State(exp(heap, e, options))
-        (state.v, vX)
-
-  object Transition:
-    case class State(v: Val)
-
   object except:
     class EvalException(msg: String) extends Exception(msg)
 

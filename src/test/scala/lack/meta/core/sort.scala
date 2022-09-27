@@ -23,6 +23,10 @@ package object sort:
           s <- sorts
       yield (names.Ref.fromComponent(i),s)).list(range).map(kvs => scala.collection.immutable.SortedMap.from(kvs))
 
+    def subenv(env: term.Check.Env): Gen[term.Check.Env] =
+      Gen.sublist(env.toList)
+        .map(scala.collection.immutable.SortedMap.from(_))
+
     val componentSymbol: Gen[names.ComponentSymbol] =
       for b <- lack.meta.test.Corpus.birds
       yield names.ComponentSymbol.fromScalaSymbol(b)
