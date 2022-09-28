@@ -13,37 +13,61 @@ import lack.test.suite._
 class P extends HedgehogSuite:
   val g = G(lack.test.core.term.prim.G())
 
-  property("generated expressions typecheck") {
+  property("raw expressions typecheck") {
     for
-      env <- lack.test.core.sort.G.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
-      s <- lack.test.core.sort.G.all.ppr("sort")
-      e <- g.exp(env, s).ppr("expr")
+      env <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
+      s   <- g.sort.all.ppr("sort")
+      e   <- g.raw(env, s).ppr("expr")
       ppr <- Gen.constant(e.pprString).ppr("e.ppr")
     yield
       assertEquals(Check.exp(env, e, Check.Options()), s)
   }
 
-  property("generated expressions eval OK (refines disabled)") {
+  property("raw expressions eval OK (refines disabled)") {
     for
-      env <- lack.test.core.sort.G.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
-      s <- lack.test.core.sort.G.all.ppr("sort")
-      e <- g.exp(env, s).ppr("expr")
-      heap <- lack.test.core.term.val_.G.heap(env).ppr("heap")
-      v <- Property.ppr(Eval.exp(heap, e, Eval.Options(checkRefinement = false)), "v")
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
+      s    <- g.sort.all.ppr("sort")
+      e    <- g.raw(env, s).ppr("expr")
+      heap <- g.val_.heap(env).ppr("heap")
+      v    <- Property.ppr(Eval.exp(heap, e, Eval.Options(checkRefinement = false)), "v")
     yield
       Result.assert(v.sort == s)
   }
 
-  property("generated expressions eval OK (refines enabled & discarded)") {
+  property("raw expressions eval OK (refines enabled & discarded)") {
     for
-      env <- lack.test.core.sort.G.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
-      s <- lack.test.core.sort.G.all.ppr("sort")
-      e <- g.exp(env, s).ppr("e")
-      heap <- lack.test.core.term.val_.G.heap(env).ppr("heap")
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
+      s    <- g.sort.all.ppr("sort")
+      e    <- g.raw(env, s).ppr("e")
+      heap <- g.val_.heap(env).ppr("heap")
 
       v <- Property.try_ {
         Eval.exp(heap, e, Eval.Options(checkRefinement = true))
       }.ppr("v")
     yield
       Result.assert(Val.check(v, s))
+  }
+
+  property("Compound.simp preserves types") {
+    for
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
+      sort <- g.sort.all.ppr("sort")
+      raw  <- g.raw(env, sort).ppr("raw")
+      simp <- Property.ppr(term.Compound.simp.descend(raw), "simp")
+      sortX<- Property.ppr(Check.exp(env, simp, Check.Options()), "simplified sort")
+    yield
+      assertEquals(sort, sortX)
+  }
+
+  property("Compound.simp preserves values") {
+    for
+      env   <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
+      sort  <- g.sort.all.ppr("sort")
+      raw   <- g.raw(env, sort).ppr("raw")
+      heap  <- g.val_.heap(env).ppr("heap")
+      simp  <- Property.ppr(term.Compound.simp.descend(raw), "simp")
+      rawV  <- Property.ppr(Eval.exp(heap, raw,  Eval.Options(checkRefinement = false)), "raw value")
+      simpV <- Property.ppr(Eval.exp(heap, simp, Eval.Options(checkRefinement = false)), "simplified value")
+    yield
+      assertEquals(rawV, simpV)
   }

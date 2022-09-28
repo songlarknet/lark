@@ -225,7 +225,7 @@ object G:
           then Some(Gen.constant(List(j)))
           else None
         case List(i,j,k) =>
-          if j == k
+          if i == Sort.Bool && j == k
           then Some(Gen.constant(List()))
           else None
         case _ =>

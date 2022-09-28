@@ -24,16 +24,16 @@ case class G(exp: lack.test.core.term.exp.G):
   def flow(current: Check.Env, previous: Check.Env, sort: Sort): Gen[Flow] =
     Gen.choice1(
       for
-        e <- exp.exp(current, sort)
+        e <- exp.simp(current, sort)
       yield Flow.Pure(e),
       for
-        e <- exp.exp(current, sort)
-        f <- exp.exp(current, sort)
+        e <- exp.simp(current, sort)
+        f <- exp.simp(current, sort)
       yield Flow.Arrow(e, f),
       for
         v <- val_.value(sort)
-        e <- exp.exp(previous, sort)
+        e <- exp.simp(previous, sort)
       yield Flow.Fby(v, e),
       for
-        e <- exp.exp(previous, sort)
+        e <- exp.simp(previous, sort)
       yield Flow.Pre(e))
