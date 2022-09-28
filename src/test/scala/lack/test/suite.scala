@@ -11,6 +11,13 @@ object suite:
   implicit def badbadbadbadbad(u: Unit): h.core.Result =
     h.Result.Success
 
+  /** Set the GRIND MULTIPLIER to >1 to increase the number of tests. */
+  val HEDGEHOG_GRIND =
+    sys.env
+      .get("HEDGEHOG_GRIND")
+      .flatMap(_.toIntOption)
+      .getOrElse(1)
+
   /** Property test suite.
    *
    * hedgehog.munit.HedgehogSuite has a "HedgehogAssertions" which hides the
@@ -30,7 +37,14 @@ object suite:
         prop: => h.Property
     )(implicit loc: m.Location): Unit =
       val old = sub.munitTestsBuffer.length
-      sub.property(name, withConfig)(prop)
+
+      def withConfigX(c: PropertyConfig) =
+        val cX = withConfig(c)
+        cX.copy(
+          testLimit    = cX.testLimit.value * HEDGEHOG_GRIND,
+          discardLimit = h.core.DiscardCount(cX.discardLimit.value * HEDGEHOG_GRIND))
+
+      sub.property(name, withConfigX)(prop)
       munitTestsBuffer ++= sub.munitTestsBuffer.drop(old)
 
   // /** These tests both succeed with munit.HedgehogSuite */

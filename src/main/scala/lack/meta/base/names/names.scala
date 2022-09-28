@@ -75,6 +75,49 @@ package object names:
       require(path.nonEmpty, "fromPathUnsafe: requires non-empty path for variable reference")
       Ref(path.dropRight(1), path.last)
 
+    def parseFromString(t: String): Option[names.Ref] =
+      def mk(component: String) =
+        names.Component(names.ComponentSymbol.fromStringUnsafe(component))
+      def mkI(component: String, index: String) =
+        for
+          ix <- index.toIntOption
+          if ix.toString == index
+        yield names.Component(names.ComponentSymbol.fromStringUnsafe(component), Some(ix))
+
+      def takeIndex(chars: List[Char], component: String, index: String): Option[List[names.Component]] = chars match
+          case Nil =>
+            mkI(component, index).map(List(_))
+          case c :: chars =>
+            if c == '.'
+            then
+              for
+                here <- mkI(component, index)
+                rest <- takeComponent(chars, "")
+              yield here :: rest
+            else takeIndex(chars, component, index + c)
+
+      def takeComponent(chars: List[Char], component: String): Option[List[names.Component]] = chars match
+          case Nil =>
+            if component.nonEmpty
+            then Some(List(names.Component(names.ComponentSymbol.fromStringUnsafe(component))))
+            else None
+          case c :: chars =>
+            if c == '?'
+            then takeIndex(chars, component, "")
+            else if c == '.' && component.nonEmpty
+            then takeComponent(chars, "").map(mk(component) :: _)
+            else if c == '.' && component.isEmpty()
+            then None
+            else if Character.isWhitespace(c)
+            then None
+            else takeComponent(chars, component + c)
+
+      for
+        cs <- takeComponent(t.toList, "")
+        if cs.nonEmpty
+      yield
+        names.Ref.fromPathUnsafe(cs)
+
   given Ordering_Ref: scala.math.Ordering[Ref] with
     def compare(x: Ref, y: Ref): Int =
       summon[Ordering[(List[Component])]].compare(x.fullyQualifiedPath, y.fullyQualifiedPath)

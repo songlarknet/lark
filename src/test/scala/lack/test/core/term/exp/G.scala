@@ -14,11 +14,17 @@ case class G(primG: lack.test.core.term.prim.G):
   val sort = lack.test.core.sort.G
   val val_ = lack.test.core.term.val_.G
 
-  /** Generate an expression of given type, with given environment.
-   *
-   * Tries to generate a primitive application that returns given sort
+  /** Generate a simplified expression of given type, with given environment.
    */
-  def exp(env: Check.Env, sort: Sort): Gen[Exp] =
+  def simp(env: Check.Env, sort: Sort): Gen[Exp] =
+    raw(env, sort)
+      .map(term.Compound.simp.descend(_))
+
+  /** Generate a raw (unsimplified) expression of given type, with given
+   * environment. Tries to generate an "interesting" expression most of the
+   * time, with occasional arbitrary expressions.
+   */
+  def raw(env: Check.Env, sort: Sort): Gen[Exp] =
     interesting(env, sort).rarely(arbitrary(env, sort))
 
   /** Generate an "interesting" expression of given type, with given environment.
@@ -85,7 +91,7 @@ case class G(primG: lack.test.core.term.prim.G):
     )(
       main = varCast(env, _)
     )(
-      fallback = { s => value(s).rarely(exp(env, s)) },
+      fallback = { s => value(s).rarely(raw(env, s)) },
     )
 
   /** Generate an if-then-else chain with distinct predicates and terms */

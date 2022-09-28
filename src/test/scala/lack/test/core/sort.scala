@@ -1,6 +1,6 @@
 package lack.test.core
 
-import lack.meta.base.names
+import lack.meta.base
 import lack.meta.base.names.Ordering_Ref
 import lack.meta.core.term
 import lack.meta.core.Sort
@@ -12,6 +12,8 @@ package object sort:
 
   /** Generator for sorts. */
   object G:
+    val names = lack.test.base.names.G
+
     /** Primitive sorts */
     object logical:
       val numeric = Gen.elementIndexed_(Sort.Table.logical.numeric)
@@ -24,18 +26,10 @@ package object sort:
     val all = Gen.elementIndexed_(Sort.Table.all)
 
     def env(range: Range[Int], sorts: Gen[Sort]): Gen[term.Check.Env] =
-      (for i <- component
+      (for i <- names.component
           s <- sorts
-      yield (names.Ref.fromComponent(i),s)).list(range).map(kvs => scala.collection.immutable.SortedMap.from(kvs))
+      yield (base.names.Ref.fromComponent(i),s)).list(range).map(kvs => scala.collection.immutable.SortedMap.from(kvs))
 
     def subenv(env: term.Check.Env): Gen[term.Check.Env] =
       Gen.sublist(env.toList)
         .map(scala.collection.immutable.SortedMap.from(_))
-
-    val componentSymbol: Gen[names.ComponentSymbol] =
-      for b <- Corpus.birds
-      yield names.ComponentSymbol.fromScalaSymbol(b)
-
-    val component: Gen[names.Component] =
-      for b <- componentSymbol
-      yield names.Component(b)
