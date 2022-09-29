@@ -13,6 +13,10 @@ class TestLastN extends munit.FunSuite:
     Check.success() { new LemmaLastN(3, _) }
   }
 
+  test("lastN compile") {
+    lack.meta.driver.Compile.compile() { new LemmaLastN(3, _) }
+  }
+
   class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):
     val e      = local[Bool]
     val lastN  = LastN(n,     e)

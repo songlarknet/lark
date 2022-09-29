@@ -47,18 +47,11 @@ object Translate:
     val context: Context,
     val node: Node):
 
+    // LODO move to frozen node representation. strip will be unnecessary then.
     def stripRef(r: names.Ref): names.Ref =
-      ExpContext.stripRef(node, r)
+      lack.meta.core.node.Builder.Freezer(node.path).stripRef(r)
 
     def supply = context.supply
-
-  object ExpContext:
-    def stripRef(node: Node, r: names.Ref): names.Ref =
-      val pfx = node.path
-      require(r.prefix.startsWith(pfx),
-        s"Ill-formed node in node ${names.Prefix(node.path).pprString}: all variable references should start with the node's path, but ${r.pprString} doesn't")
-      val strip = r.prefix.drop(pfx.length)
-      names.Ref(strip, r.name)
 
   def nodes(inodes: Iterable[Node], options: Options): system.Top =
     var map = Map[List[names.Component], system.Node]()
@@ -80,7 +73,10 @@ object Translate:
       judgment.term match
         // LODO: deal with non-variables by creating a fresh row variable for them
         case Exp.Var(s, v) =>
-          SystemJudgment(List(), ExpContext.stripRef(node, v), judgment)
+          SystemJudgment(
+            List(),
+            lack.meta.core.node.Builder.Freezer(node.path).stripRef(v),
+            judgment)
 
     val sysprops = System(
       relies     = node.relies.map(prop).toList,

@@ -72,3 +72,12 @@ object Compound:
     def val_(exp: Exp): Option[Val] = exp match
       case Exp.Val(_, v) => Some(v)
       case _ => None
+
+    /** Take variables that occur in expression.
+     * The term language doesn't include any binding forms, so the variables
+     * returned are all free variables. */
+    def vars(exp: Exp): Seq[Exp.Var] = exp match
+      case v: Exp.Var => Seq(v)
+      case _: Exp.Val => Seq()
+      case Exp.App(s, p, args : _*) => args.flatMap(vars(_))
+      case Exp.Cast(op, e) => vars(e)

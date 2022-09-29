@@ -19,19 +19,19 @@ object Builder:
 
   /** Mutable binding contexts */
   sealed trait Binding extends pretty.Pretty:
-    def freeze: Immutable.Binding
-    def ppr = freeze.ppr
+    def freeze(f: Freezer): Immutable.Binding
+    def ppr = freeze(Freezer.ppr).ppr
 
   object Binding:
     class Equation(val lhs: names.Component, val rhs: Flow) extends Binding:
-      def freeze = Immutable.Binding.Equation(lhs, rhs)
+      def freeze(f: Freezer) = Immutable.Binding.Equation(lhs, f.freeze(rhs))
 
     class Subnode(val subnode: names.Component, val args: List[Exp]) extends Binding:
-      def freeze = Immutable.Binding.Subnode(subnode, args)
+      def freeze(f: Freezer) = Immutable.Binding.Subnode(subnode, args.map(f.freeze(_)))
 
     class Merge(val node: Node) extends Binding:
-      def freeze = Immutable.Binding.Merge(
-        cases.map { case (k,n) => (k, n.freeze) }.toList
+      def freeze(f: Freezer) = Immutable.Binding.Merge(
+        cases.map { case (k,n) => (f.freeze(k), n.freeze(f)) }.toList
       )
       val cases: mutable.ArrayBuffer[(Exp, Nested)] = mutable.ArrayBuffer()
 
@@ -42,15 +42,15 @@ object Builder:
         n
 
     class Reset(val clock: Exp, val nested: Nested) extends Binding:
-      def freeze = Immutable.Binding.Reset(clock, nested.freeze)
+      def freeze(f: Freezer) = Immutable.Binding.Reset(f.freeze(clock), nested.freeze(f))
 
   /** Mutable list of bindings */
   class Nested(val context: names.Component, val node: Node) extends pretty.Pretty:
     // TODO allow each nested to declare local variables
     val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-    def freeze = Immutable.Nested(context, children.map(_.freeze).toList)
-    def ppr = freeze.ppr
+    def freeze(f: Freezer) = Immutable.Nested(context, children.map(_.freeze(f)).toList)
+    def ppr = freeze(Freezer.ppr).ppr
 
     // LODO do merging / cse on append?
     def append(b: Binding): Unit =
@@ -133,11 +133,14 @@ object Builder:
 
     var nested: Nested = new Nested(supply.freshState().name, this)
 
-    def freeze: Immutable = Immutable(path, params.toList,
-      immutable.SortedMap.from(vars),
-      immutable.SortedMap.from(subnodes.mapValues(_.freeze)),
-      props.toList,
-      nested.freeze)
+    def freeze: Immutable =
+      val freezer = Freezer(this.path)
+      Immutable(
+        path, params.toList,
+        immutable.SortedMap.from(vars),
+        immutable.SortedMap.from(subnodes.mapValues(_.freeze)),
+        props.map(p => p.copy(term = freezer.freeze(p.term))).toList,
+        nested.freeze(freezer))
     def ppr = freeze.ppr
 
     def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
@@ -182,3 +185,36 @@ object Builder:
     def sorries: Iterable[Judgment] =
       props.filter(_.form == Form.Sorry)
 
+  case class Freezer(path: List[names.Component]):
+    def stripRef(r: names.Ref): names.Ref =
+      require(r.prefix.startsWith(path),
+        s"""Node ${names.Prefix(path).pprString}: invalid variable reference
+        |All variable references should start with the node's path, but ${r.pprString} doesn't.
+        |This may be due to an improper node invocation; see lack.meta.source.Node.Invocation.
+        |Variable: ${r.pprString}
+        |""".stripMargin)
+      val strip = r.prefix.drop(path.length)
+      names.Ref(strip, r.name)
+
+    def freeze(exp: Exp): Exp = exp match
+      case Exp.Var(s, v) =>
+        Exp.Var(s, stripRef(v))
+      case v: Exp.Val =>
+        v
+      case Exp.App(s, p, args : _*) =>
+        Exp.App(s, p, args.map(freeze(_)) : _*)
+      case Exp.Cast(op, e) =>
+        Exp.Cast(op, freeze(e))
+
+    def freeze(flow: Flow): Flow = flow match
+      case Flow.Pure(e) =>
+        Flow.Pure(freeze(e))
+      case Flow.Arrow(first, later) =>
+        Flow.Arrow(freeze(first), freeze(later))
+      case Flow.Pre(e) =>
+        Flow.Pre(freeze(e))
+      case Flow.Fby(v, e) =>
+        Flow.Fby(v, freeze(e))
+
+  object Freezer:
+    def ppr = Freezer(List())

@@ -35,7 +35,9 @@ case class Node(
     case _ =>
       Location.empty
 
-  def ppr =
+  def ppr = pprWithSubnodes(subnodes.toList)
+
+  def pprWithSubnodes(subnodes: List[(names.Component, Node)]) =
     val pathP = names.Prefix(path).ppr
     val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
     val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
