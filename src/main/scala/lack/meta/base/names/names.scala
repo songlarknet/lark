@@ -187,9 +187,15 @@ package object names:
     type RefMap[V] = scala.collection.immutable.SortedMap[names.Ref, V]
     type RefSet    = scala.collection.immutable.SortedSet[names.Ref]
 
+    type ComponentMap[V] = scala.collection.immutable.SortedMap[names.Component, V]
+    type ComponentSet    = scala.collection.immutable.SortedSet[names.Component]
+
   object mutable:
     type RefMap[V] = scala.collection.mutable.SortedMap[names.Ref, V]
     type RefSet    = scala.collection.mutable.SortedSet[names.Ref]
+
+    type ComponentMap[V] = scala.collection.mutable.SortedMap[names.Component, V]
+    type ComponentSet    = scala.collection.mutable.SortedSet[names.Component]
 
     /** Node-level context with a fresh name supply */
     class Supply(val path: List[names.Component]):

@@ -1,38 +1,39 @@
 package lack.meta.core.node
 
 import lack.meta.macros.Location
-import lack.meta.base.num.Integer
 import lack.meta.base.{names, pretty}
+import lack.meta.base.names.given
 import lack.meta.core.Sort
-import lack.meta.core.term.{Exp, Flow, Prim, Val}
+import lack.meta.core.term.{Exp, Flow, Val}
 import lack.meta.core.Prop.{Form, Judgment}
 
+import lack.meta.core.node.{Node => Immutable}
+
 import scala.collection.mutable
+import scala.collection.immutable
 
 /** Mutable builder for node-based transition systems.
- *
- * Once the core language settles down I'd like to add a separate immutable
- * representation of nodes. For now it's easier to just use this one
- * everywhere. LODO
  */
 object Builder:
   // LODO: want a program-level context that has map from var to node, list of all sorts, eg structs
 
   /** Mutable binding contexts */
-  sealed trait Binding extends pretty.Pretty
+  sealed trait Binding extends pretty.Pretty:
+    def freeze: Immutable.Binding
+    def ppr = freeze.ppr
+
   object Binding:
     class Equation(val lhs: names.Component, val rhs: Flow) extends Binding:
-      def ppr = lhs.ppr <+> pretty.text("=") <+> rhs.ppr
+      def freeze = Immutable.Binding.Equation(lhs, rhs)
+
     class Subnode(val subnode: names.Component, val args: List[Exp]) extends Binding:
-      def ppr = pretty.text("Subnode") <+> subnode.ppr <> pretty.tupleP(args)
+      def freeze = Immutable.Binding.Subnode(subnode, args)
 
     class Merge(val node: Node) extends Binding:
+      def freeze = Immutable.Binding.Merge(
+        cases.map { case (k,n) => (k, n.freeze) }.toList
+      )
       val cases: mutable.ArrayBuffer[(Exp, Nested)] = mutable.ArrayBuffer()
-      def ppr =
-        pretty.vsep(
-          cases.zipWithIndex.map { case ((clock, nest), ix) =>
-            pretty.text(if ix == 0 then "Merge When" else "Else When") <> pretty.parens(clock.ppr) <+> nest.ppr
-          }.toSeq)
 
       def when(clock: Exp): Nested =
         val i = node.supply.freshState()
@@ -41,15 +42,15 @@ object Builder:
         n
 
     class Reset(val clock: Exp, val nested: Nested) extends Binding:
-      def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr) <+> nested.ppr
+      def freeze = Immutable.Binding.Reset(clock, nested.freeze)
 
   /** Mutable list of bindings */
-  class Nested(val context: names.Component, val node: Node):
+  class Nested(val context: names.Component, val node: Node) extends pretty.Pretty:
     // TODO allow each nested to declare local variables
     val children: mutable.ArrayBuffer[Binding] = mutable.ArrayBuffer()
 
-    def ppr = pretty.nest(pretty.text("@context") <> pretty.parens(context.ppr) <> pretty.colon <@>
-      pretty.vsep(children.map(_.ppr).toList))
+    def freeze = Immutable.Nested(context, children.map(_.freeze).toList)
+    def ppr = freeze.ppr
 
     // LODO do merging / cse on append?
     def append(b: Binding): Unit =
@@ -123,15 +124,6 @@ object Builder:
   object Node:
     def top(): Node = new Node(new names.mutable.Supply(List()), List())
 
-  object Variable:
-    sealed trait Mode
-    case object Argument extends Mode
-    case object Local extends Mode
-    case object Output extends Mode
-    case object Generated extends Mode
-
-  case class Variable(sort: Sort, location: Location, mode: Variable.Mode)
-
   class Node(val supply: names.mutable.Supply, val path: List[names.Component]) extends pretty.Pretty:
     val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
     var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
@@ -141,18 +133,12 @@ object Builder:
 
     var nested: Nested = new Nested(supply.freshState().name, this)
 
-    def relies: Iterable[Judgment] =
-      props.filter(_.form == Form.Rely)
-    def guarantees: Iterable[Judgment] =
-      props.filter(_.form == Form.Guarantee)
-    def sorries: Iterable[Judgment] =
-      props.filter(_.form == Form.Sorry)
-
-    /** All dependent nodes in the system, including this node */
-    def allNodes: Iterable[Node] =
-      val subs = subnodes.values.flatMap(_.allNodes)
-      // TODO: filter out non-unique nodes
-      subs ++ Seq(this)
+    def freeze: Immutable = Immutable(path, params.toList,
+      immutable.SortedMap.from(vars),
+      immutable.SortedMap.from(subnodes.mapValues(_.freeze)),
+      props.toList,
+      nested.freeze)
+    def ppr = freeze.ppr
 
     def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
       val r = supply.freshRef(name, forceIndex)
@@ -182,18 +168,17 @@ object Builder:
     def prop(j: Judgment): Unit =
       props += j
 
-    def ppr =
-      val pathP = names.Prefix(path).ppr
-      val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
-      val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
-      val bindingsH = pretty.text("Bindings @context(") <> nested.context.ppr <> pretty.text("):")
-      val bindingsP = nested.children.map(x => x.ppr)
-      val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
-      val propsP = props.map(x => x.ppr)
+    // LODO move smt.translate to immutable then kill these
+    /** All dependent nodes in the system, including this node */
+    def allNodes: Iterable[Node] =
+      val subs = subnodes.values.flatMap(_.allNodes)
+      // TODO: filter out non-unique nodes
+      subs ++ Seq(this)
 
-      pretty.text("Node") <+> pretty.nest(pathP <> pretty.tuple(paramsP.toSeq) <@>
-        pretty.subgroup("Vars:", varsP.toSeq) <>
-        pretty.subgroup(bindingsH, bindingsP.toSeq) <>
-        pretty.subgroup("Subnodes:", subnodesP.toSeq) <>
-        pretty.subgroup("Props:", propsP.toSeq))
+    def relies: Iterable[Judgment] =
+      props.filter(_.form == Form.Rely)
+    def guarantees: Iterable[Judgment] =
+      props.filter(_.form == Form.Guarantee)
+    def sorries: Iterable[Judgment] =
+      props.filter(_.form == Form.Sorry)
 

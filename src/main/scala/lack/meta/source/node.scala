@@ -25,16 +25,16 @@ abstract class Node(invocation: Node.Invocation):
         assert(false, s"Internal error: bad Lhs[T]: ${_exp} should be a bare variable")
 
 
-  protected def declare[T: SortRepr](name: String, mode: core.node.Builder.Variable.Mode)(using loc: lack.meta.macros.Location): Lhs[T] =
+  protected def declare[T: SortRepr](name: String, mode: core.node.Variable.Mode)(using loc: lack.meta.macros.Location): Lhs[T] =
     val sort = summon[SortRepr[T]].sort
-    val v = core.node.Builder.Variable(sort, loc, mode)
+    val v = core.node.Variable(sort, loc, mode)
     new Lhs(builder.nodeRef.fresh(names.ComponentSymbol.fromScalaSymbol(name), v))
 
   protected def local[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-    declare(loc.prettyPath, core.node.Builder.Variable.Local)
+    declare(loc.prettyPath, core.node.Variable.Local)
 
   protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
-    declare(loc.prettyPath, core.node.Builder.Variable.Output)
+    declare(loc.prettyPath, core.node.Variable.Output)
 
   protected def bindProperty(syntax: core.Prop.Syntax, name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
     val locx = loc <> builder.nodeRef.locate(prop._exp)
@@ -173,6 +173,6 @@ object Node:
     def arg[T](name: String, argvalue: Stream[T])(using location: lack.meta.macros.Location): Stream[T] =
       val v = builder.nodeRef.fresh(
         names.ComponentSymbol.fromScalaSymbol(name),
-        core.node.Builder.Variable(argvalue.sort, location, core.node.Builder.Variable.Argument))
+        core.node.Variable(argvalue.sort, location, core.node.Variable.Argument))
       arguments += argvalue._exp
       new Stream[T](v)(using argvalue.sortRepr)
