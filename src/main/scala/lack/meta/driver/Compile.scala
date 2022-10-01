@@ -20,15 +20,15 @@ object Compile:
       val nn = n.freeze
       val graph = Schedule.Slurp(nn).graph()
       println(pretty.layout(nn.pprWithSubnodes(List())))
-      println(s"Edges ${names.Prefix(nn.path).pprString}:")
+      println(s"Edges ${nn.name.pprString}:")
       graph.edges.entries.foreach { case (k,v) =>
         val pp = pretty.parens(k.ppr) <+> pretty.text(">") <+>
           pretty.tupleP(v.toList)
         println(pretty.layout(pretty.indent(pp)))
       }
 
-      println(s"Schedule ${names.Prefix(nn.path).pprString}:")
-      graph.scheduleWithNode(nn).foreach { case k =>
+      println(s"Schedule ${nn.name.pprString}:")
+      graph.scheduleWithNode(nn).entries.foreach { case k =>
         println(pretty.layout(pretty.indent(k.ppr)))
       }
 

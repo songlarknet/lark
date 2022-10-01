@@ -6,7 +6,7 @@ import lack.meta.core.term.{Exp, Flow}
 import lack.meta.core.Prop.{Form, Judgment}
 
 case class Node(
-  path:     List[names.Component],
+  name:     names.Ref,
   params:   List[names.Component],
   vars:     names.immutable.ComponentMap[Variable],
   // LODO subnodes need location information
@@ -24,7 +24,7 @@ case class Node(
 
   def xvar(name: names.Component): Exp.Var =
     val v = vars(name)
-    Exp.Var(v.sort, names.Ref(path, name))
+    Exp.Var(v.sort, names.Ref.fromComponent(name))
 
   /** Find source location of given expression.
    * LODO expressions should just contain source locations.
@@ -38,7 +38,7 @@ case class Node(
   def ppr = pprWithSubnodes(subnodes.toList)
 
   def pprWithSubnodes(subnodes: List[(names.Component, Node)]) =
-    val pathP = names.Prefix(path).ppr
+    val nameP = name.ppr
     val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
     val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
     val bindingsH = pretty.text("Bindings @context(") <> nested.context.ppr <> pretty.text("):")
@@ -46,7 +46,7 @@ case class Node(
     val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
     val propsP = props.map(x => x.ppr)
 
-    pretty.text("Node") <+> pretty.nest(pathP <> pretty.tuple(paramsP.toSeq) <@>
+    pretty.text("Node") <+> pretty.nest(nameP <> pretty.tuple(paramsP.toSeq) <@>
       pretty.subgroup("Vars:", varsP.toSeq) <>
       pretty.subgroup(bindingsH, bindingsP.toSeq) <>
       pretty.subgroup("Subnodes:", subnodesP.toSeq) <>

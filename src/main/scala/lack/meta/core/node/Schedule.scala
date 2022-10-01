@@ -17,7 +17,7 @@ import scala.math.Ordering.Implicits._
  * when the node has two mutually-dependent equations with no delay. In this
  * case we cannot compile the node.
  */
-case class Schedule(list: Schedule.Entry)
+case class Schedule(entries: List[Schedule.Entry])
 
 object Schedule:
 
@@ -58,13 +58,13 @@ object Schedule:
     vertices: SortedSet[Entry],
     edges: MultiMap[Entry, Entry]
   ):
-    def scheduleWithNode(node: Node): List[Entry] =
+    def scheduleWithNode(node: Node): Schedule =
       try
-        topsorts(SortedSet.empty, SortedSet.empty, vertices.toList)._1
+        Schedule(topsorts(SortedSet.empty, SortedSet.empty, vertices.toList)._1)
       catch
         case e: except.CycleEntryException =>
           val cyc = cycles(e.entry).sortBy(_.length).head
-          throw new except.CyclePrettyException(node.path, Graph.Cycle(node, this, cyc))
+          throw new except.CyclePrettyException(node.name, Graph.Cycle(node, this, cyc))
 
     def cycles(to: Entry): List[List[Entry]] =
       edges(to).toList.flatMap(cycles(SortedSet(to), _))
@@ -99,7 +99,7 @@ object Schedule:
         (List(), emitted)
       else
         val (l1, e1) = topsorts(emitted + entry, successors + entry, edges(entry).toList)
-        (entry :: l1, e1)
+        (l1 :+ entry, e1)
 
   object Graph:
     case class Cycle(node: Node, graph: Graph, path: List[Entry]) extends pretty.Pretty:
@@ -228,7 +228,7 @@ object Schedule:
             case Entry(Entry.Subnode, _, _) :: _ =>
               es
             case ess =>
-              throw new except.VariableNoBindingException(node.path, var_, ess)
+              throw new except.VariableNoBindingException(node.name, var_, ess)
 
     def dependencies(entries: MultiMap[names.Component, Entry], exp: Exp): SortedSet[Entry] =
       val vs = term.Compound.take.vars(exp)
@@ -308,10 +308,10 @@ object Schedule:
   object except:
     class ScheduleException(msg: String) extends Exception(msg)
 
-    class VariableNoBindingException(val node: List[names.Component], val e: Exp.Var, val ess: List[Entry]) extends ScheduleException(
+    class VariableNoBindingException(val node: names.Ref, val e: Exp.Var, val ess: List[Entry]) extends ScheduleException(
       s"""Qualified variable '${e.pprString}' has invalid entries.
         |This should not happen in a valid program.
-        | Node: ${names.Prefix(node).pprString}
+        | Node: ${node.pprString}
         | Sort: ${e.sort.pprString}
         | Entries: ${pretty.tupleP(ess)}
         |""".stripMargin)
@@ -321,6 +321,6 @@ object Schedule:
         | Entries: ${pretty.layout(entry.ppr)}
         |""".stripMargin)
 
-    class CyclePrettyException(val node: List[names.Component], val cycle: Graph.Cycle) extends ScheduleException(
-      s"""Cannot schedule node '${names.Prefix(node).pprString}' due to a cyclic dependency.
+    class CyclePrettyException(val node: names.Ref, val cycle: Graph.Cycle) extends ScheduleException(
+      s"""Cannot schedule node '${node.pprString}' due to a cyclic dependency.
         |${cycle.pprString}""".stripMargin)

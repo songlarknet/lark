@@ -3,7 +3,7 @@ package lack.meta.core.term
 import lack.meta.base.names
 import lack.meta.core.Sort
 
-/** Dynamic semantics of expressions and flow expressions. */
+/** Dynamic semantics of pure expressions. */
 object Eval:
   type Heap = names.immutable.RefMap[Val]
 

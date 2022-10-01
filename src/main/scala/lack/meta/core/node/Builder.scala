@@ -133,10 +133,14 @@ object Builder:
 
     var nested: Nested = new Nested(supply.freshState().name, this)
 
+    def name: names.Ref = path match
+      case Nil => names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("<top>")))
+      case _ => names.Ref.fromPathUnsafe(path)
+
     def freeze: Immutable =
       val freezer = Freezer(this.path)
       Immutable(
-        path, params.toList,
+        name, params.toList,
         immutable.SortedMap.from(vars),
         immutable.SortedMap.from(subnodes.mapValues(_.freeze)),
         props.map(p => p.copy(term = freezer.freeze(p.term))).toList,
