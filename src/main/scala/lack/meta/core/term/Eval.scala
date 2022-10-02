@@ -14,17 +14,20 @@ object Eval:
    *  refinement predicate.
    * @param arbitrary
    *  How to construct uninitialised values of given type.
+   * @param prefix
+   *  When looking up variables in the heap, prefix references by this.
   */
   case class Options(
     checkRefinement: Boolean = true,
-    arbitrary: Sort => Val = Val.arbitrary
+    arbitrary: Sort => Val = Val.arbitrary,
+    prefix: names.Prefix = names.Prefix(List())
   )
 
   /** Evaluate expressions under heap */
   def exp(heap: Heap, e: Exp, options: Options): Val = e match
     case e @ Exp.Var(_, v) =>
-      heap.getOrElse(v,
-        throw new except.NoSuchVariableException(e, heap))
+      heap.getOrElse(options.prefix(v),
+        throw new except.NoSuchVariableException(e, heap, options.prefix))
     case Exp.Val(_, v) =>
       v
     case Exp.App(_, p, args : _*) =>
@@ -46,9 +49,10 @@ object Eval:
   object except:
     class EvalException(msg: String) extends Exception(msg)
 
-    class NoSuchVariableException(e: Exp.Var, heap: Heap) extends EvalException(
+    class NoSuchVariableException(e: Exp.Var, heap: Heap, prefix: names.Prefix) extends EvalException(
       s"""No such variable ${e.v.pprString} with sort ${e.sort.pprString}.
-        |Heap: ${names.Namespace.fromMap(heap).pprString}""".stripMargin)
+        |Heap: ${names.Namespace.fromMap(heap).pprString}
+        |Prefix: ${prefix.pprString}""".stripMargin)
 
     class CastUnboxException(op: Exp.Cast.Op, v: Val) extends EvalException(
       s"""Cannot unbox value ${v.pprString} with op ${op}.

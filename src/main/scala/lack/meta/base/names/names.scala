@@ -130,6 +130,12 @@ package object names:
     def apply(name: names.Component): names.Ref =
       names.Ref(prefix, name)
 
+    def ++(that: names.Prefix): names.Prefix =
+      Prefix(this.prefix ++ that.prefix)
+
+    def ++(that: names.Ref): names.Prefix =
+      Prefix(this.prefix ++ that.prefix ++ List(that.name))
+
     def ppr: pretty.Doc =
       val docs = prefix.map(_.ppr)
       pretty.ssep(docs, pretty.dot)
