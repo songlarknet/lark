@@ -158,7 +158,7 @@ object Eval:
 
     def eval(state: State, heap: Heap): Heap = f match
       case Flow.Pure(e) =>
-        heap + (ref -> term.Eval.exp(heap, e, options.exp))
+        heap + (ref -> exp(prefix, state, heap, e, options))
       case Flow.Arrow(first, later) =>
         val v = state.heap(st) match
           case Val.Bool(false) => exp(prefix, state, heap, first, options)

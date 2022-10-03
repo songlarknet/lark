@@ -21,15 +21,14 @@ class TestAutomatonSugar extends munit.FunSuite:
   }
 
   test("Grind.eval") {
-    Grind.eval(100) { new Top(_) }
+    Grind.eval(50) { new Top(_) }
   }
 
   class Top(invocation: Node.Invocation) extends Node(invocation):
-    // forall btn_on, cmd_set, ...
-    val btn_on  = local[Bool]
-    val cmd_set = local[Bool]
-    val speedo  = local[UInt8]
-    val accel   = local[UInt8]
+    val btn_on  = forall[Bool]
+    val cmd_set = forall[Bool]
+    val speedo  = forall[UInt8]
+    val accel   = forall[UInt8]
     val cruise  = Cruise(btn_on, cmd_set, speedo, accel)
     cruise.finish()
 

@@ -13,7 +13,7 @@ class TestContractNoGood extends munit.FunSuite:
   }
 
   class Lemma(invocation: Node.Invocation) extends Node(invocation):
-    val undef   = local[Int32]
+    val undef   = forall[Int32]
 
     builder.invoke(i => new Contract(i.arg("i", undef), i))
 

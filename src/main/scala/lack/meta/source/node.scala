@@ -36,6 +36,10 @@ abstract class Node(invocation: Node.Invocation):
   protected def output[T: SortRepr](using loc: lack.meta.macros.Location): Lhs[T] =
     declare(loc.prettyPath, core.node.Variable.Output)
 
+  /** Inside a lemma, declare a variable to be universally quantified */
+  protected def forall[T: SortRepr](using loc: lack.meta.macros.Location): Stream[T] =
+    declare(loc.prettyPath, core.node.Variable.Argument)
+
   protected def bindProperty(syntax: core.Prop.Syntax, name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
     val locx = loc <> builder.nodeRef.locate(prop._exp)
     builder.nodeRef.prop(core.Prop.Judgment(name, prop._exp, syntax, locx))

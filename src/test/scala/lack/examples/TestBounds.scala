@@ -14,7 +14,7 @@ class TestBounds extends munit.FunSuite:
 
   class LemmaBounds(n: Int, invocation: Node.Invocation) extends Node(invocation):
     // Use 32-bit arithmetic on 8-bit values
-    val human           = local[Int8]
+    val human           = forall[Int8]
     val OVERRIDE        = i32(100)
 
     val human32         = human.as[Int32]

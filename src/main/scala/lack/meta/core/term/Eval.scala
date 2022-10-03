@@ -57,11 +57,11 @@ object Eval:
     class CastUnboxException(op: Exp.Cast.Op, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
       s"""Cannot unbox value ${v.pprString} with op ${op}.
          |Expression: ${e.fold("")(_.pprString)}
-         |Heap: ${h.fold("")(_.toString)}
+         |Heap: ${h.fold("")(names.Namespace.fromMap(_).pprString)}
          |Expected a boxed value.""".stripMargin)
 
     class RefinementException(sort: Sort.Refinement, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
       s"""Cannot cast value ${v.pprString} to refinement type ${sort.pprString}.
          |Expression: ${e.fold("")(_.pprString)}
-         |Heap: ${h.fold("")(_.toString)}
+         |Heap: ${h.fold("")(names.Namespace.fromMap(_).pprString)}
          |""".stripMargin)
