@@ -16,10 +16,10 @@ class TestCounterexample extends munit.FunSuite:
     val counter = local[Int32]
     val undef   = local[Int32]
 
-    counter := i32(0) -> (pre(counter) + undef)
+    counter := fby(i32(0), counter) + undef
 
-    sorry("undef <= 1") {
-      undef <= 1
+    sorry("0 <= undef <= 1") {
+      i32(0) <= undef && undef <= i32(1)
     }
 
     check("falsifiable: counter < 3") {

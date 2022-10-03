@@ -16,7 +16,7 @@ class TestFIR extends munit.FunSuite:
   class LemmaFIR(n: Int, invocation: Node.Invocation) extends Node(invocation):
     val signal = local[Real]
 
-    val lpf = FIR(List(0.5f, 0.03f, 0.02f, 0.01f), signal)
+    val lpf = FIR(List(0.5, 0.03, 0.02, 0.01), signal)
     val bounded_input =
       real(0.0) <= signal && signal <= real(100.0)
     val bounded_output =
@@ -30,13 +30,13 @@ class TestFIR extends munit.FunSuite:
       bounded_output
     }
 
-  class FIR(coefficients: List[Float], signal: Stream[Real], invocation: Node.Invocation) extends Node(invocation):
+  class FIR(coefficients: List[Double], signal: Stream[Real], invocation: Node.Invocation) extends Node(invocation):
     val out = output[Real]
 
     /** Single-unit delay, initialised with zero */
     def z[T: Num: SortRepr](sig: Stream[T]): Stream[T] = fby(0, sig)
 
-    def fir(coeffs: List[Float], sig: Stream[Real]): Stream[Real] =
+    def fir(coeffs: List[Double], sig: Stream[Real]): Stream[Real] =
       coeffs match
         case List() =>
           0
@@ -46,7 +46,7 @@ class TestFIR extends munit.FunSuite:
     out := fir(coefficients, signal)
 
   object FIR:
-    def apply(coefficients: List[Float], signal: Stream[Real])(using builder: Node.Builder, location: lack.meta.macros.Location) =
+    def apply(coefficients: List[Double], signal: Stream[Real])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
         new FIR(coefficients, invocation.arg("signal", signal), invocation)
       }
