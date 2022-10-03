@@ -133,6 +133,6 @@ object Node:
         def clock: Exp =
           val nots = not.map(term.Compound.app(term.prim.Table.Not, _))
           val ands = nots ++ List(yes)
-          ands.fold(term.Compound.val_(term.Val.Bool(false))) { (a,b) =>
+          ands.fold(term.Compound.val_(term.Val.Bool(true))) { (a,b) =>
             term.Compound.app(term.prim.Table.And, a, b)
           }

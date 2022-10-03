@@ -11,6 +11,7 @@ import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
 import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 
+/** Compile a program to executable code. */
 object Compile:
   def compile(options: Options = Options())(f: Node.Invocation => Node): Unit =
     given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())

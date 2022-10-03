@@ -6,8 +6,7 @@ import lack.meta.source.Automaton
 import lack.meta.source.Node
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lack.meta.driver.Check
-import lack.meta.driver.Compile
+import lack.meta.driver.{Check, Compile, Grind}
 
 /** Full-sugar cruise control automaton
  */
@@ -19,6 +18,10 @@ class TestAutomatonSugar extends munit.FunSuite:
 
   test("automaton sugar compile") {
     Compile.compile() { new Top(_) }
+  }
+
+  test("Grind.eval") {
+    Grind.eval(100) { new Top(_) }
   }
 
   class Top(invocation: Node.Invocation) extends Node(invocation):

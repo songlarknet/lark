@@ -34,17 +34,17 @@ object Eval:
       val argsV = args.map(exp(heap, _, options))
       p.eval(argsV.toList)
     case Exp.Cast(op, e) =>
-      cast(op, exp(heap, e, options), options)
+      cast(op, exp(heap, e, options), options, Some(e), Some(heap))
 
   /** Evaluate a cast */
-  def cast(op: Exp.Cast.Op, v: Val, options: Options): Val = op match
+  def cast(op: Exp.Cast.Op, v: Val, options: Options, e: Option[Exp] = None, heap: Option[Heap] = None): Val = op match
     case Exp.Cast.Box(r) =>
       if !options.checkRefinement || r.refinesVal(v)
       then Val.Refined(r, v)
-      else throw new except.RefinementException(r, v)
+      else throw new except.RefinementException(r, v, e, heap)
     case Exp.Cast.Unbox(t) => v match
       case Val.Refined(_, vX) => vX
-      case _ => throw new except.CastUnboxException(op, v)
+      case _ => throw new except.CastUnboxException(op, v, e, heap)
 
   object except:
     class EvalException(msg: String) extends Exception(msg)
@@ -54,9 +54,14 @@ object Eval:
         |Heap: ${names.Namespace.fromMap(heap).pprString}
         |Prefix: ${prefix.pprString}""".stripMargin)
 
-    class CastUnboxException(op: Exp.Cast.Op, v: Val) extends EvalException(
+    class CastUnboxException(op: Exp.Cast.Op, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
       s"""Cannot unbox value ${v.pprString} with op ${op}.
-        |Expected a boxed value.""".stripMargin)
+         |Expression: ${e.fold("")(_.pprString)}
+         |Heap: ${h.fold("")(_.toString)}
+         |Expected a boxed value.""".stripMargin)
 
-    class RefinementException(sort: Sort.Refinement, v: Val) extends EvalException(
-      s"Cannot cast value ${v.pprString} to refinement type ${sort.pprString}.")
+    class RefinementException(sort: Sort.Refinement, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
+      s"""Cannot cast value ${v.pprString} to refinement type ${sort.pprString}.
+         |Expression: ${e.fold("")(_.pprString)}
+         |Heap: ${h.fold("")(_.toString)}
+         |""".stripMargin)

@@ -8,6 +8,7 @@ import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 import lack.meta.smt
 
+/** Check that a program satisfies its properties. */
 object Check:
   /** Check a node and its subnodes.
    * Will exit with System.exit on failure. */

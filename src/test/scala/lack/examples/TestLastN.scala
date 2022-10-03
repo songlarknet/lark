@@ -6,7 +6,7 @@ import lack.meta.source.Compound.implicits._
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
 import lack.meta.source.Stream
 import lack.meta.source.Node
-import lack.meta.driver.Check
+import lack.meta.driver.{Check, Grind}
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
@@ -15,6 +15,10 @@ class TestLastN extends munit.FunSuite:
 
   test("lastN compile") {
     lack.meta.driver.Compile.compile() { new LemmaLastN(3, _) }
+  }
+
+  test("Grind.eval") {
+    Grind.eval(100) { new LemmaLastN(3, _) }
   }
 
   class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):

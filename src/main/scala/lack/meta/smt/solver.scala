@@ -89,6 +89,15 @@ class Solver(interpreter: Interpreter, verbose: Boolean):
     command(Commands.Pop(1))
     ret
 
+  var freed = false
+  def free() =
+    if !freed then
+      interpreter.free()
+      freed = true
+
+  override def finalize() =
+    free()
+
 object Solver:
   def gimme(verbose: Boolean = false): Solver = new Solver(interpreters.z3(), verbose)
 

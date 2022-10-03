@@ -29,6 +29,9 @@ package object names:
      */
     def fromInternal(s: String): ComponentSymbol = "^" + fromScalaSymbol(s)
 
+    def isInternal(s: ComponentSymbol) =
+      s.startsWith("^")
+
     /** Trust me. */
     def fromStringUnsafe(s: String): ComponentSymbol = s
     def pretty(c: ComponentSymbol): String = c
