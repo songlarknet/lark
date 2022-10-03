@@ -49,9 +49,13 @@ object Check:
       case List() => assert(false, "No node to check")
       case ls => assert(false, "Too many nodes to check")
     def solver() = smt.Solver.gimme(verbose = options.verbose)
-    smt.Check.checkMany(subnode, options.steps, solver)
+    smt.Check.checkMany(subnode, options.steps, solver, options.translate)
 
   case class Options(
     verbose: Boolean = false,
     steps: Int = 5,
+    translate: smt.Translate.Options = smt.Translate.Options()
   )
+
+  object Options:
+    val noRefinement = Options(translate = smt.Translate.Options(checkRefinement = false))

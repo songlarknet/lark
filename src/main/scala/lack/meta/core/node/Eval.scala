@@ -18,7 +18,7 @@ import lack.meta.core.term.Eval.Heap
  * The semantics here makes the dependency on the outside evaluation order
  * explicit by requiring a static schedule (`node.Schedule`) for each node.
  *
- * (A lazy demand-driven evaluator would work fine too, but we need the
+ * (A lazy demand-driven evaluator would work fine too, but we have the
  * schedule for compilation anyway, so we might as well use it here.)
  */
 object Eval:
@@ -197,10 +197,3 @@ object Eval:
   def exp(prefix: names.Prefix, state: State, heap: Heap, e: Exp, options: Options): Val =
     val opt = options.exp.copy(prefix = options.exp.prefix ++ prefix)
     term.Eval.exp(state.heap ++ heap, e, opt)
-
-  // object except:
-  //   class EvalException(msg: String) extends Exception(msg)
-
-  //   class NoSuchVariableException(e: Exp.Var, heap: Heap) extends EvalException(
-  //     s"""No such variable ${e.v.pprString} with sort ${e.sort.pprString}.
-  //       |Heap: ${names.Namespace.fromMap(heap).pprString}""".stripMargin)

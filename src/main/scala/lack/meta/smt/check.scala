@@ -1,6 +1,7 @@
 package lack.meta.smt
 
 import lack.meta.base.names
+import lack.meta.base.names.given
 import lack.meta.base.pretty
 import lack.meta.core.node.Builder
 import lack.meta.core.node.Builder.Node
@@ -8,7 +9,7 @@ import lack.meta.core.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.Solver
-import lack.meta.smt.term.compound
+import lack.meta.smt.Term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
@@ -52,17 +53,24 @@ object Check:
   case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
     def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
   object Trace:
-    // HACK TODO not strings
-    case class Row(values: List[(String, String)]) extends pretty.Pretty:
-      def ppr = pretty.braces(pretty.csep(values.map((k,v) => pretty.text(k) <+> pretty.equal <+> pretty.text(v))))
-    // HACK TODO take node and filter out generated bindings
+    case class Row(values: List[(names.Ref, Val)]) extends pretty.Pretty:
+      def ppr = pretty.braces(pretty.csep(values.map((k,v) => k.ppr <+> pretty.equal <+> v.ppr)))
     def fromModel(steps: Int, sexpr: SExpr): Trace =
-      def allDefs(s: SExpr): Iterable[(Terms.SSymbol, SExpr)] = s match
+      def allDefs(s: SExpr): Iterable[(names.Ref, Val)] = s match
         case CommandsResponses.GetModelResponseSuccess(m) =>
           m.flatMap(allDefs)
         case Commands.DefineFun(fd) =>
           if (fd.params.isEmpty) {
-            Seq((fd.name, fd.body))
+            val r = Term.take.ref(fd.name).getOrElse {
+              throw new Solver.SolverException(s,
+                s"can't parse model counterexample: bad name ${fd.name}")
+            }
+            val v = Term.take.value(fd.body).getOrElse {
+              throw new Solver.SolverException(s,
+                s"can't parse model counterexample: bad value ${fd.body}")
+            }
+
+            Seq((r, v))
           } else {
             Seq()
           }
@@ -72,10 +80,10 @@ object Check:
       val ds = allDefs(sexpr)
 
       val stepD = for (i <- 0 to steps) yield {
-        val stepI = s"row?${i}."
-        val dsI = ds.filter((k,v) => k.name.startsWith(stepI))
-        val dsK = dsI.map((k,v) => (k.name.drop(stepI.length), v.toString))
-        val dsF = dsK.filter((k,v) => !k.contains("?"))
+        val pfx = rowPrefix(i).prefix
+        val dsI = ds.filter((k,v) => k.prefix.startsWith(pfx))
+        val dsK = dsI.map((k,v) => (k.copy(prefix = k.prefix.drop(pfx.length)), v))
+        val dsF = dsK.filter((k,v) => true) // !k.name.symbol.toString.startsWith("^"))
         val dsS = dsF.toArray.sortBy(_._1).toList
         Row(dsS)
       }
@@ -165,14 +173,14 @@ object Check:
 
     val res = top.allNodes.map { n =>
       val s = solver()
-      val r = checkNode(n, count, s)
+      val r = checkNode(n, count, s, options = options)
       println(r.pprString)
       r
     }
     Summary(res.toList)
 
-  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true): NodeSummary =
-    val sys  = declareSystem(top, solver)
+  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true, options: Translate.Options = Translate.Options()): NodeSummary =
+    val sys  = declareSystem(top, solver, options)
     val topS = sys.top
     if (skipTrivial && topS.system.guarantees.isEmpty)
       NodeSummary.Skip(top)

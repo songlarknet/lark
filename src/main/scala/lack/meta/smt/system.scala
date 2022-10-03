@@ -10,7 +10,7 @@ import lack.meta.core.Sort
 import lack.meta.core.term.{Exp, Prim, Val}
 
 import lack.meta.smt.Solver
-import lack.meta.smt.term.compound
+import lack.meta.smt.Term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
@@ -90,8 +90,8 @@ object system:
     def ppr =
       pretty.subgroup("State:", List(state.ppr)) <>
       pretty.subgroup("Row:",   List(row.ppr)) <>
-      pretty.subgroup("Init:",  List(pretty.string(term.pprTermBigAnd(init)))) <>
-      pretty.subgroup("Step:",  List(pretty.string(term.pprTermBigAnd(step)))) <>
+      pretty.subgroup("Init:",  List(pretty.string(Term.pprTermBigAnd(init)))) <>
+      pretty.subgroup("Step:",  List(pretty.string(Term.pprTermBigAnd(step)))) <>
       pretty.subgroup("Relies:",     relies.map(_.ppr)) <>
       pretty.subgroup("Guarantees:", guarantees.map(_.ppr)) <>
       pretty.subgroup("Sorries:",    sorries.map(_.ppr))
@@ -144,8 +144,8 @@ object system:
       val stateR     = names.Prefix(Prefix.row.prefix :+ fresh)
 
       // Substitute variable prefix `state` to refer to fresh prefix `stateR`.
-      val initSubst  = term.renamePrefix(Prefix.state, stateR, this.init)
-      val stepSubst  = term.renamePrefix(Prefix.state, stateR, this.step)
+      val initSubst  = Term.renamePrefix(Prefix.state, stateR, this.init)
+      val stepSubst  = Term.renamePrefix(Prefix.state, stateR, this.step)
 
       val allSame    =
         for s <- state.refs(names.Prefix(List()))
@@ -246,7 +246,7 @@ object system:
       yield ()
 
     /** Extract names.Ref variable from system value, introducing a new binding if necessary */
-    def letRow(sort: Sort, trm: Terms.Term)(supply: () => names.Ref): SystemV[names.Ref] = term.take.ref(trm) match
+    def letRow(sort: Sort, trm: Terms.Term)(supply: () => names.Ref): SystemV[names.Ref] = Term.take.ref(trm) match
       case Some(n)
         if n.prefix.startsWith(Prefix.row.prefix)
       =>
@@ -256,7 +256,7 @@ object system:
         val ref = supply()
         for
           refT <- SystemV.row(ref, sort)
-          _ <- SystemV.step(term.compound.equal(refT, trm))
+          _ <- SystemV.step(Term.compound.equal(refT, trm))
         yield ref
 
   extension[T,U] (outer: SystemV[T => U])
@@ -318,7 +318,7 @@ object system:
 
     /** Convert namespace to list of SMT-lib parameters */
     def paramsOfNamespace(prefix: names.Prefix, ns: Namespace): List[Terms.SortedVar] =
-      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(v)).id.symbol, Translate.sort(s)))
+      val vs = ns.values.toList.map((v,s) => Terms.SortedVar(compound.qid(prefix(v)).id.symbol, Term.compound.sort(s)))
       val nsX = ns.namespaces.toList.flatMap((v,n) => paramsOfNamespace(names.Prefix(prefix.prefix :+ v), n))
       vs ++ nsX
 
@@ -344,13 +344,13 @@ object system:
     val initD = Commands.FunDef(
       initI.id.symbol,
       initP(Prefix.state),
-      Translate.sort(Sort.Bool),
+      Term.compound.sort(Sort.Bool),
       system.init)
     /** Function definition for step function. */
     val stepD = Commands.FunDef(
       stepI.id.symbol,
       stepP(Prefix.state, Prefix.row, Prefix.stateX),
-      Translate.sort(Sort.Bool),
+      Term.compound.sort(Sort.Bool),
       system.step)
 
     /** Function definition for step function. */

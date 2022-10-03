@@ -1,6 +1,6 @@
 package lack.meta.smt
 
-import lack.meta.smt.term.compound
+import lack.meta.smt.Term.compound
 import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr

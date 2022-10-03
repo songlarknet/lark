@@ -1,11 +1,13 @@
 package lack.meta.smt
 
 import lack.meta.base.{names, num}
+import lack.meta.core.Sort
+import lack.meta.core.term.Val
 import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import smtlib.trees.Terms.SExpr
 
-object term:
+object Term:
 
   /** Apply function to all symbols in term.
    */
@@ -147,12 +149,30 @@ object term:
         funappNoSimp("-", List(Terms.SNumeral(- i)))
 
     def real(f: num.Real) =
-      Terms.SDecimal(f)
+      if (f >= 0)
+        Terms.SDecimal(f)
+      else
+        funappNoSimp("-", List(Terms.SDecimal(f)))
 
     def bool(b: Boolean) = qid(b.toString)
 
 
+    def sort(s: Sort): Terms.Sort = Sort.logical(s) match
+      case Sort.ArbitraryInteger => Terms.Sort(compound.id("Int"))
+      case Sort.Real => Terms.Sort(compound.id("Real"))
+      case Sort.Bool => Terms.Sort(compound.id("Bool"))
+      case sl =>
+        assert(false,
+          s"Cannot translate sort ${s.pprString} with logical sort ${s.pprString}")
+
+    def value(v: Val): Terms.Term = v match
+      case Val.Bool(b) => compound.qid(b.toString)
+      case Val.Int(i) => compound.int(i)
+      case Val.Real(f) => compound.real(f)
+      case Val.Refined(_, v) => value(v)
+
   object take:
+    /** Parse boolean from SMT-lib term */
     def bool(t: Terms.Term): Option[Boolean] = t match
       case Terms.QualifiedIdentifier(ti, _)
         if ti.symbol.name == "true" => Some(true)
@@ -160,6 +180,7 @@ object term:
         if ti.symbol.name == "false" => Some(false)
       case _ => None
 
+    /** Parse names.Ref from SMT-lib term */
     def ref(t: Terms.SSymbol): Option[names.Ref] =
       names.Ref.parseFromString(t.name)
     def ref(t: Terms.Identifier): Option[names.Ref] =
@@ -167,3 +188,45 @@ object term:
     def ref(t: Terms.Term): Option[names.Ref] = t match
       case Terms.QualifiedIdentifier(id, _) => ref(id)
       case _ => None
+
+    /** Parse Val from SMT-lib term */
+    def value(t: Terms.Term): Option[Val] = t match
+      case Terms.QualifiedIdentifier(_, _) =>
+        bool(t).map(Val.Bool(_))
+      // CVC5 requires us to pretty-print negative integers as a funapp
+      case Terms.FunctionApplication(neg, Seq(tt))
+       if neg.toString == "-" =>
+        value(tt).map { v => v match
+          case Val.Int(i) => Val.Int(- i)
+          case Val.Real(i) => Val.Real(- i)
+        }
+      // TODO use a proper rational representation
+      case Terms.FunctionApplication(neg, Seq(ti, tj))
+       if neg.toString == "/" =>
+        for
+          Val.Real(i) <- value(ti)
+          Val.Real(j) <- value(tj)
+        yield
+          Val.Real(i / j)
+      case Terms.SNumeral(i) =>
+        Some(Val.Int(i))
+      case Terms.SDecimal(i) =>
+        Some(Val.Real(i))
+      case Terms.SHexadecimal(h) =>
+        require(h.toBinary.length < 32, s"Number too big for Hexadecimal.toInt. Hexadecimal: ${h.repr}")
+        Some(Val.Int(h.toInt))
+      case _ =>
+        None
+
+    /** Parse Val as given sort */
+    def value(t: Terms.Term, s: Sort): Option[Val] = (value(t), s) match
+      case (Some(v), r: Sort.Refinement) =>
+        if r.refinesVal(v)
+        then Some(Val.Refined(r, v))
+        else None
+      case (Some(v), s) =>
+        if v.sort == s
+        then Some(v)
+        else None
+      case (None, _) =>
+        None

@@ -10,7 +10,7 @@ import lack.meta.core.{Prop, Sort}
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
 
 import lack.meta.smt.Solver
-import lack.meta.smt.term.compound
+import lack.meta.smt.Term.compound
 import lack.meta.smt.system
 import lack.meta.smt.system.{System, SystemV, SystemJudgment, Namespace}
 import smtlib.trees.{Commands, CommandsResponses, Terms}
@@ -23,20 +23,6 @@ object Translate:
   case class Options(
     checkRefinement: Boolean = true
   )
-
-  def sort(s: Sort): Terms.Sort = Sort.logical(s) match
-    case Sort.ArbitraryInteger => Terms.Sort(compound.id("Int"))
-    case Sort.Real => Terms.Sort(compound.id("Real"))
-    case Sort.Bool => Terms.Sort(compound.id("Bool"))
-    case sl =>
-      assert(false,
-        s"Cannot translate sort ${s.pprString} with logical sort ${s.pprString}")
-
-  def value(v: Val): Terms.Term = v match
-    case Val.Bool(b) => compound.qid(b.toString)
-    case Val.Int(i) => compound.int(i)
-    case Val.Real(f) => compound.real(f)
-    case Val.Refined(_, v) => value(v)
 
   class Context(
     val nodes: Map[List[names.Component], system.Node],
@@ -222,7 +208,7 @@ object Translate:
       val tinit =
         for
           st <- SystemV.state(ref, b.rhs.sort)
-        yield compound.equal(st, value(v0))
+        yield compound.equal(st, compound.value(v0))
       val tstep =
         for
           v  <- expr(context, pre)
@@ -234,7 +220,7 @@ object Translate:
   /** Translate a pure expression to a system. */
   def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
     case Exp.Val(_, v) =>
-      SystemV.pure(value(v))
+      SystemV.pure(compound.value(v))
 
     case Exp.Var(sort, v) =>
       val ref = context.stripRef(v)
