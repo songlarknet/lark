@@ -17,10 +17,12 @@ case class Node(
   nested:   Node.Nested
 ) extends pretty.Pretty:
 
+  val allSubnesteds = Seq((nested, List())) ++ nested.allSubnesteds
+
   /** Map from context name to nested context. */
   val context: names.immutable.ComponentMap[(Node.Nested, Node.Path)] =
-    val ns = Seq((nested, List())) ++ nested.allSubnesteds
-    scala.collection.immutable.SortedMap.from(ns.map { n => n._1.context -> n })
+    val ns = allSubnesteds.map { n => n._1.context -> n }
+    scala.collection.immutable.SortedMap.from(ns)
 
   def relies: Iterable[Judgment] =
     props.filter(_.form == Form.Rely)

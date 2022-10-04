@@ -38,7 +38,7 @@ abstract class Node(invocation: Node.Invocation):
 
   /** Inside a lemma, declare a variable to be universally quantified */
   protected def forall[T: SortRepr](using loc: lack.meta.macros.Location): Stream[T] =
-    declare(loc.prettyPath, core.node.Variable.Argument)
+    declare(loc.prettyPath, core.node.Variable.Forall)
 
   protected def bindProperty(syntax: core.Prop.Syntax, name: String)(prop: Stream[Stream.Bool])(using loc: lack.meta.macros.Location) =
     val locx = loc <> builder.nodeRef.locate(prop._exp)

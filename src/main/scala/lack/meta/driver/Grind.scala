@@ -30,48 +30,50 @@ object Grind:
     val allnodes = subnodes.flatMap(_.allNodes)
     val scheds   = schedule(allnodes)
     allnodes.foreach { sn =>
-      // Skip nodes without arguments - we cannot evaluate them right now
-      if sn.vars.exists(_._2.mode == core.node.Variable.Argument) then
-        checkEval(sn, count, options, scheds)
+      checkEval(sn, count, options, scheds)
     }
 
   def schedule(nodes: Iterable[core.node.Builder.Node]): names.immutable.RefMap[Schedule] =
     val scheds = nodes.map { n =>
       val nn = n.freeze
       val graph = Schedule.Slurp(nn).graph()
-      val sched = graph.scheduleWithNode(nn)
+      val sched = Schedule.scheduleWithNode(nn, graph)
       n.name -> sched
     }
     immutable.SortedMap.from(scheds)
 
   def checkEval(node: core.node.Builder.Node, count: Int, options: Options, schedules: names.immutable.RefMap[Schedule]): Unit =
     val nn = node.freeze
+    val info = core.node.Check.info(nn)
 
     val evalopt = Eval.Options(
       core.term.Eval.Options(checkRefinement = options.translate.checkRefinement),
       schedules
     )
 
-    println(s"Node: ${nn.name.pprString}")
+    println(s"Grinding node ${nn.name.pprString}")
     val solver = smt.Solver.gimme()
     // TODO smt should work on frozen node repr
     smt.Eval.generate(node, solver, options.translate).take(count).foreach { t =>
-      val steps = t.steps.map(splitRow(_, nn))
+      val steps = t.steps.map(splitRow(_, nn, info))
       val sys = Eval.node(names.Prefix(List()), nn, evalopt)
       var step = 0
       steps.foldLeft(sys.init) { case (state, (args, outs)) =>
         step = step + 1
         val heapX  = sys.eval(state, args)
         val stateX = sys.update(state, heapX)
-        val traceP =
-          pretty.vsep(steps.take(step + 1).map { case (a,o) => pretty.value(a) <+> pretty.text(":->") <+> pretty.value(o) })
+        val traceP = pretty.vsep(steps.map { case (a,o) =>
+          names.Namespace.fromMap(a).ppr <+>
+          pretty.text(":->") <+>
+          names.Namespace.fromMap(o).ppr
+        })
 
         for (k,v) <- outs do
           val vv = heapX(k)
           assert(v == vv,
             s"""Evaluator mismatch in node ${nn.name.pprString}:
                |Output ${k.pprString} has value ${v.pprString} in evaluator and ${vv.pprString} in SMT.
-               |Trace:
+               |Expected trace from SMT:
                |${pretty.layout(pretty.indent(traceP))}
                |""".stripMargin)
 
@@ -79,22 +81,23 @@ object Grind:
       }
     }
 
+  def castVal(v: core.term.Val, s: core.Sort): core.term.Val = s match
+    case r: core.Sort.Refinement => core.term.Val.Refined(r, v)
+    case _ => v
+
   def takeRow(row: smt.Trace.Row, take: names.immutable.ComponentMap[core.node.Variable]): Eval.Heap =
     val rs = row.values
       .filter { case (k,v) => k.prefix.isEmpty && take.contains(k.name) }
       .map { case (k,v) =>
         val s = take(k.name).sort
-        // TODO move to Val or compound
-        val vv = s match
-          case r: core.Sort.Refinement => core.term.Val.Refined(r, v)
-          case _ => v
+        val vv = castVal(v, s)
         (k, vv)
       }
     immutable.SortedMap.from(rs)
 
-  def splitRow(row: smt.Trace.Row, node: core.node.Node): (Eval.Heap, Eval.Heap) =
-    val args = node.vars.filter { case (k,v) => v.mode == core.node.Variable.Argument }
-    val outs = node.vars.filter { case (k,v) => v.mode == core.node.Variable.Output }
+  def splitRow(row: smt.Trace.Row, node: core.node.Node, info: core.node.Check.Info): (Eval.Heap, Eval.Heap) =
+    val args = node.vars.filter { case (k,v) => info.isUnconstrained(k)  }
+    val outs = node.vars.filter { case (k,v) => info.isWellDefined(k) }
     val a = takeRow(row, args)
     val o = takeRow(row, outs)
     (a, o)

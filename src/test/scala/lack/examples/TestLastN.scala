@@ -22,7 +22,7 @@ class TestLastN extends munit.FunSuite:
   }
 
   class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):
-    val e      = local[Bool]
+    val e      = forall[Bool]
     val lastN  = LastN(n,     e)
     val lastSN = LastN(n + 1, e)
     check("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {

@@ -204,8 +204,8 @@ object Term:
       case Terms.FunctionApplication(neg, Seq(ti, tj))
        if neg.toString == "/" =>
         for
-          Val.Real(i) <- value(ti)
-          Val.Real(j) <- value(tj)
+          Val.Real(i) <- value(ti, Sort.Real)
+          Val.Real(j) <- value(tj, Sort.Real)
         yield
           Val.Real(i / j)
       case Terms.SNumeral(i) =>
@@ -224,6 +224,8 @@ object Term:
         if r.refinesVal(v)
         then Some(Val.Refined(r, v))
         else None
+      case (Some(Val.Int(i)), Sort.Real) =>
+        Some(Val.Real(num.Real(i)))
       case (Some(v), s) =>
         if v.sort == s
         then Some(v)

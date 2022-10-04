@@ -29,7 +29,7 @@ object Compile:
       }
 
       println(s"Schedule ${nn.name.pprString}:")
-      graph.scheduleWithNode(nn).entries.foreach { case k =>
+      Schedule.scheduleWithNode(nn, graph).entries.foreach { case k =>
         println(pretty.layout(pretty.indent(k.ppr)))
       }
 

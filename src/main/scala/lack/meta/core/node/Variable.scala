@@ -7,6 +7,7 @@ import lack.meta.core.Sort
 object Variable:
   sealed trait Mode
   case object Argument extends Mode
+  case object Forall extends Mode
   case object Local extends Mode
   case object Output extends Mode
   case object Generated extends Mode
