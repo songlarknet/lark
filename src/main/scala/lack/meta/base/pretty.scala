@@ -30,3 +30,6 @@ object pretty extends kiama.output.PrettyPrinter:
       nest(head <@> vsep(items)) <> line
     else
       emptyDoc
+
+  /** Assignment syntax */
+  val gets = colon <> equal

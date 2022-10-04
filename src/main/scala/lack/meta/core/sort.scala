@@ -78,3 +78,9 @@ object Sort:
         List(UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64)
 
     val all = logical.all ++ runtime.ints
+
+
+  /** A sorted (typed) variable. */
+  case class Sorted(name: names.Component, sort: Sort) extends pretty.Pretty:
+    def ppr = name.ppr <> pretty.colon <+> sort.ppr
+    def tuple = (name, sort)

@@ -16,7 +16,7 @@ import scala.collection.immutable.SortedMap
  * no definition, and which variables are well-defined with no unguarded
  * pres. It's used in Grind.eval to decide which variables should be treated
  * as inputs and which should be checked against the spec.
- * TODO: implement type-checker
+ * TODO: implement typechecker
  */
 object Check:
 
@@ -112,6 +112,8 @@ object Check:
         a <- args
         c <- freeE(a)
       yield c
+    case v: (Node.Binding.Merge | Node.Binding.Reset) =>
+      lack.meta.base.assertions.impossible("freeB should not be called with contexts", "binding" -> b)
 
   def freeE(e: Exp): Seq[names.Component] = for
     v <- term.Compound.take.vars(e)
