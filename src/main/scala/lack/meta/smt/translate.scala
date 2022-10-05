@@ -219,7 +219,7 @@ object Translate:
 
   /** Translate a pure expression to a system. */
   def expr(context: ExpContext, exp: Exp): SystemV[Terms.Term] = exp match
-    case Exp.Val(_, v) =>
+    case Exp.Val(v) =>
       SystemV.pure(compound.value(v))
 
     case Exp.Var(sort, v) =>

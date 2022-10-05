@@ -12,7 +12,7 @@ object Compound:
     Exp.Var(sort, v)
 
   def val_(v: Val) =
-    Exp.Val(v.sort, v)
+    Exp.Val(v)
 
   def app(prim: Prim, args: Exp*): Exp =
     simp.outer(Exp.App(prim.sort(args.map(_.sort).toList), prim, args : _*))
@@ -27,7 +27,7 @@ object Compound:
     app(prim.Table.Ite, p, t, f)
 
   def subst(env: names.immutable.RefMap[Exp], exp: Exp): Exp = exp match
-    case Exp.Val(_, _) => exp
+    case Exp.Val(_) => exp
     case Exp.Var(_, v) => env.getOrElse(v, exp)
     case Exp.App(s, p, args : _*) =>
       simp.outer(Exp.App(s, p, args.map(subst(env, _)) : _*))
@@ -43,7 +43,7 @@ object Compound:
      * constant amount of work.
      */
     def outer(exp: Exp): Exp = exp match
-      case Exp.App(s, prim.Table.Ite, Exp.Val(_, Val.Bool(p)), t, f) =>
+      case Exp.App(s, prim.Table.Ite, Exp.Val(Val.Bool(p)), t, f) =>
         if p then t else f
       case Exp.App(s, prim, args : _*) =>
         Try(args.map(a => take.val_(a).get)).toOption match
@@ -51,7 +51,7 @@ object Compound:
             val_(prim.eval(vs.toList))
           case None =>
             Exp.App(prim.sort(args.map(_.sort).toList), prim, args : _*)
-      case Exp.Cast(op, Exp.Val(_, v)) =>
+      case Exp.Cast(op, Exp.Val(v)) =>
         // The cast will fail when the value does not satisfy the desired type,
         // for example, casting -1 to UInt32. In that case, we don't simplify
         // it at all so that the user can deal with this later.
@@ -79,7 +79,7 @@ object Compound:
 
   object take:
     def val_(exp: Exp): Option[Val] = exp match
-      case Exp.Val(_, v) => Some(v)
+      case Exp.Val(v) => Some(v)
       case _ => None
 
     /** Take variables that occur in expression.

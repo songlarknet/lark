@@ -50,8 +50,8 @@ object Sort:
       case _          => false
     def refinesExp(v: Exp) =
       Exp.App(Bool, prim.Table.And,
-        Exp.App(Bool, prim.Table.Le, Exp.Val(ArbitraryInteger, Val.Int(minInclusive)), v),
-        Exp.App(Bool, prim.Table.Le, v, Exp.Val(ArbitraryInteger, Val.Int(maxInclusive))))
+        Exp.App(Bool, prim.Table.Le, Exp.Val(Val.Int(minInclusive)), v),
+        Exp.App(Bool, prim.Table.Le, v, Exp.Val(Val.Int(maxInclusive))))
 
   case object Int8   extends BoundedInteger(8, true)
   case object UInt8  extends BoundedInteger(8, false)

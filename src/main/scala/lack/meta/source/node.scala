@@ -138,8 +138,9 @@ object Node:
     val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()
 
     // TODO keep track of meta-level arguments
-    def typearg[T: SortRepr](name: String): Unit = {}
-    def metaarg(name: String, v: Integer): Unit = {}
+    def arg[T: SortRepr](name: String): Unit = {}
+    def arg(name: String, value: Integer)(using location: lack.meta.macros.Location): Integer =
+      value
 
     /** Mark an expression as an argument to a subnode.
      *

@@ -62,7 +62,7 @@ object Builder:
       m
 
     def reset(clock: Exp): Nested =
-      if (clock == Exp.Val(Sort.Bool, Val.Bool(false)))
+      if (clock == Exp.Val(Val.Bool(false)))
         this
       else
         val i = node.supply.freshState()

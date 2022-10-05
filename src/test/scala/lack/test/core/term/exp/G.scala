@@ -75,7 +75,7 @@ case class G(primG: lack.test.core.term.prim.G):
   def value(sort: Sort): Gen[Exp] =
     for
       v <- val_.value(sort)
-    yield Exp.Val(sort, v)
+    yield Exp.Val(v)
 
   /** Generate a primitive application that returns given sort */
   def prim(env: Check.Env, s: Sort): Gen[Exp] =
@@ -215,8 +215,8 @@ case class G(primG: lack.test.core.term.prim.G):
           e
 
   object compound:
-    def vi(i: num.Integer): Exp.Val = Exp.Val(Sort.ArbitraryInteger, Val.Int(i))
-    def vr(i: num.Real): Exp.Val = Exp.Val(Sort.Real, Val.Real(i))
+    def vi(i: num.Integer): Exp.Val = Exp.Val(Val.Int(i))
+    def vr(i: num.Real): Exp.Val = Exp.Val(Val.Real(i))
     def ite(p: Exp, t: Exp, f: Exp) = Exp.App(t.sort, term.prim.Table.Ite, p, t, f)
 
     val cmps: Gen[term.Prim] = {

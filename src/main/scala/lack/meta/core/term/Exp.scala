@@ -16,8 +16,8 @@ object Exp:
     def ppr = v.ppr
 
   /** Value */
-  // TODO kill sort
-  case class Val(sort: Sort, v: lack.meta.core.term.Val) extends Exp:
+  case class Val(v: lack.meta.core.term.Val) extends Exp:
+    def sort = v.sort
     def ppr = v.ppr
 
   /** Pure primitive application */

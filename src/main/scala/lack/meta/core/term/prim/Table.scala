@@ -97,8 +97,8 @@ object Table:
    * for integers. However, SMTLib's bitvector semantics for division are that bvudiv
    * returns a bitvector with all ones. For signed division with bvsdiv, the result
    * is -1 or 1 depending on the sign of the left-hand-side.
-   * We probably want to wrap bv.div to keep the x/0=0 semantics.
-   * TODO: wrap bitvector division in smt encoding
+   * If we ever use bitvectors, we must be careful to wrap bv.div to keep the
+   * x/0=0 semantics.
    * TODO: what about reals?
    */
   case object Div extends Prim_nn_n:

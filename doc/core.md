@@ -357,12 +357,13 @@ XXX: if step type is `state -> row -> state' -> (bool, value)` then might reduce
  }
 ```
 
-TODO: try with extracting semantics where system has type `{state; row; init : state; extract : state -> row -> bool; step : state -> row -> step' -> bool; }`
+Also try with extracting semantics where system has type `{state; row; init : state; extract : state -> row -> bool; step : state -> row -> step' -> bool; }`
 ==> I think this makes reset hard to write.
 
-TODO: also try with non-empty semantics where system has type `{state; row; zero : row -> state' -> bool; succ: state -> row -> state' -> bool; }`
+Also try with non-empty semantics where system has type `{state; row; zero : row -> state' -> bool; succ: state -> row -> state' -> bool; }`
 
 Will either of these be clearer?
+The non-empty semantics means that resets have to choose between calling zero or succ, which essentially duplicates the step relation.
 
 ### Scheduled semantics
 

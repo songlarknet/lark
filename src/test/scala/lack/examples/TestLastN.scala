@@ -17,9 +17,9 @@ class TestLastN extends munit.FunSuite:
     lack.meta.driver.Compile.compile() { new LemmaLastN(3, _) }
   }
 
-  test("Grind.eval") {
-    Grind.eval(100) { new LemmaLastN(3, _) }
-  }
+  // test("Grind.eval") {
+  //   Grind.eval(100) { new LemmaLastN(3, _) }
+  // }
 
   class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):
     val e      = forall[Bool]
@@ -58,6 +58,5 @@ class TestLastN extends munit.FunSuite:
   object LastN:
     def apply(n: Integer, e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
       builder.invoke { invocation =>
-        invocation.metaarg("n", n)
-        new LastN(n, invocation.arg("e", e), invocation)
+        new LastN(invocation.arg("n", n), invocation.arg("e", e), invocation)
       }

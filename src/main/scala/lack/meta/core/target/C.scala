@@ -19,7 +19,7 @@ object C:
     basename: String,
     classes:  names.immutable.RefMap[Class],
     includes: List[String] = List("#include <lack.h>"),
-    version: String = "v0" // TODO
+    version: String = "v0" // TODO hook version numbers up to git and ci
   )
 
   def header(options: Options): pretty.Doc =
@@ -191,7 +191,7 @@ object C:
           lack.meta.base.assertions.impossible(
             "Ill-formed variable reference in Obc expression",
             "exp" -> e)
-      case Exp.Val(_, v) => val_(v)
+      case Exp.Val(v) => val_(v)
 
       // TODO: do we need to insert casts?
       case Exp.Cast(_, e) =>

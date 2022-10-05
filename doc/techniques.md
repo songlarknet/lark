@@ -492,11 +492,14 @@ They use CVC4 to generate the detailed proof certificates.
 Tool for describing requirements in a English-like language with clear semantics.
 Generates interactive simulator for some states from the requirements.
 
-# TODO
+# Other stuff
 
 Remaining techniques to read about.
 
 ## Lemma tightening
-## One-state vs two-state system
 What does this mean?
 
+## One-state vs two-state invariant generation
+Kind2 talks about doing invariant generation for one-state vs two-state.
+One-state means generating invariants that only look at the current state, eg `state0.x <= state0.y`.
+Two-state means generating invariants that look at two consecutive states, eg `state0.x <= state1.x`.

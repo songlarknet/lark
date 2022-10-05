@@ -28,7 +28,7 @@ object Eval:
     case e @ Exp.Var(_, v) =>
       heap.getOrElse(options.prefix(v),
         throw new except.NoSuchVariableException(e, heap, options.prefix))
-    case Exp.Val(_, v) =>
+    case Exp.Val(v) =>
       v
     case Exp.App(_, p, args : _*) =>
       val argsV = args.map(exp(heap, _, options))

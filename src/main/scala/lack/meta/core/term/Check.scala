@@ -27,7 +27,7 @@ object Check:
     case e @ Exp.Var(_, v) =>
       env.getOrElse(v,
         throw new except.NoSuchVariableException(e, env))
-    case Exp.Val(_, v) =>
+    case Exp.Val(v) =>
       val_(v, options)
     case Exp.App(expectT, p, args : _*) =>
       val argsT = args.map(exp(env, _, options)).toList
