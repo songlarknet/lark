@@ -3,7 +3,7 @@ package lack.meta.core.obc
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
 
-import lack.meta.core.Sort
+import lack.meta.core.{Prop, Sort}
 import lack.meta.core.term.{Exp, Flow, Val, Compound}
 import lack.meta.core.term
 import lack.meta.core.node.{Node, Schedule, Variable}
@@ -147,7 +147,7 @@ object FromNode:
         List(), List(), List(),
         Statement.concat(inits))
 
-    def step(n: Node, schedule: Schedule): Method =
+    def step(n: Node, schedule: Schedule): (Method, List[Prop.Judgment]) =
       def vars(mp: names.immutable.ComponentMap[Variable]) =
         mp.toList.map { case (k,v) => Sort.Sorted(k, v.sort) }
 
@@ -186,9 +186,17 @@ object FromNode:
         updateX = Entry.path(e, n, Statement.Skip, update, subst)
       yield updateX
 
-      Method(Method.step,
+      val m = Method(Method.step,
         params, returns, locals ++ localsX.map(_._2),
         Statement.concat(evals) <> Statement.concat(updates))
+
+      val props =
+        for
+          p <- n.props
+        yield
+          p.copy(term = subst(p.term))
+
+      (m, props)
 
   def klass(n: Node, schedule: Schedule): Class =
     val fields = for
@@ -201,13 +209,14 @@ object FromNode:
     yield (k -> e.name)
 
     val reset = Methods.reset(n, schedule)
-    val step  = Methods.step(n, schedule)
+    val (step, props) = Methods.step(n, schedule)
 
     Class(
-      name = n.name,
-      fields = fields,
+      name    = n.name,
+      fields  = fields,
       objects = objects,
-      methods = List(reset, step)
+      methods = List(reset, step),
+      props   = props
     )
 
   def program(nodes: Iterable[Node], schedules: names.immutable.RefMap[Schedule]): names.immutable.RefMap[Class] =

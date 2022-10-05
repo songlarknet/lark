@@ -18,18 +18,25 @@ import scala.collection.immutable.SortedMap
 /** Compile a program to executable code. */
 object Compile:
   def compile()(f: Node.Invocation => Node): Unit =
-    given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
+    val top = lack.meta.core.node.Builder.Node.top()
+    given builder: Builder = new Builder(top)
     builder.invoke(f)
-    val subnodes = builder.nodeRef.allNodes
+    val subnodes = builder.nodeRef.allNodes.filter(_ != top)
     val frozen = subnodes.map(_.freeze)
     val scheds = schedules(frozen)
     val obcs = core.obc.FromNode.program(frozen, scheds)
-    obcs.foreach { case (k,v) =>
-      println(s"Node ${k.pprString}")
-      println(pretty.layout(pretty.indent(v.ppr)))
-    }
 
     core.obc.Check.program(obcs, core.obc.Check.Options())
+
+    val opts = core.target.C.Options(basename = "lack", classes = obcs)
+    val doc  = core.target.C.header(opts)
+    val src  = core.target.C.source(opts)
+    println(pretty.layout(doc))
+    println(pretty.layout(src))
+    // obcs.foreach { case (k,v) =>
+    //   println(s"Node ${k.pprString}")
+    //   println(pretty.layout(pretty.indent(v.ppr)))
+    // }
 
 
   def printSchedules()(f: Node.Invocation => Node): Unit =

@@ -2,7 +2,7 @@ package lack.meta.core.obc
 
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
-import lack.meta.core.Sort
+import lack.meta.core.{Prop, Sort}
 import lack.meta.core.term.Exp
 
 import scala.collection.immutable.SortedMap
@@ -101,6 +101,7 @@ object Obc:
     fields:  List[Sort.Sorted],
     objects: List[(names.Component, names.Ref)],
     methods: List[Method],
+    props:   List[Prop.Judgment],
   ) extends pretty.Pretty:
     def ppr =
       pretty.text("class   ") <+> name.ppr <@>
