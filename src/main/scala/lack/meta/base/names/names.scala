@@ -217,5 +217,5 @@ package object names:
         ixes(name) += 1
         names.Ref(path, names.Component(name, ixy))
 
-      def freshState(): names.Ref =
-        freshRef(names.ComponentSymbol.STATE, forceIndex = true)
+      def freshState(forceIndex: Boolean = true): names.Ref =
+        freshRef(names.ComponentSymbol.STATE, forceIndex = forceIndex)

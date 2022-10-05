@@ -97,26 +97,24 @@ object Eval:
     entries.foldLeft(System.empty)(_ <> _)
 
   def entry(prefix: names.Prefix, n: Node, entry: Schedule.Entry, options: Options): System =
-    val ctxname = entry.path.lastOption.getOrElse(entry.name)
-    val (ctx, ctxpath) = n.context(ctxname)
-    val sys = entry.kind match
-      case Schedule.Entry.Equation =>
-        val flo = ctx.bindings(entry.name).asInstanceOf[Node.Binding.Equation]
+    val sys = entry.binding(n) match
+      case Some((flo: Node.Binding.Equation, ctx)) =>
         val st  = prefix(names.Ref(List(ctx.context), entry.name))
         val ref = prefix(names.Ref.fromComponent(entry.name))
         flow(prefix, st, ref, flo.rhs, options)
-      case Schedule.Entry.Subnode =>
-        val sub     = ctx.bindings(entry.name).asInstanceOf[Node.Binding.Subnode]
+      case Some((sub: Node.Binding.Subnode, ctx)) =>
         val subnode = n.subnodes(entry.name)
         val prefixx = names.Prefix(prefix.prefix ++ List(entry.name))
         val args    = subnode.params.zip(sub.args).map { case (p, e) =>
           expbind(prefix, prefixx(p), e, options)
         }
         args.fold(System.empty)(_ <> _) <> node(prefixx, subnode, options)
-      case Schedule.Entry.Nested =>
+      case None =>
         // Don't need to do anything for nested contexts.
         // TODO: bind INIT flag if it's useful.
         System.empty
+
+    val (_, ctxpath) = entry.nested(n)
 
     ctxpath.foldRight(sys) { (entry, sys) =>
       path(prefix, entry, options, sys)
@@ -150,7 +148,7 @@ object Eval:
       case Flow.Pure(_) =>
         State.empty
       case Flow.Arrow(_, _) =>
-        State.empty + (st -> Val.Bool(false))
+        State.empty + (st -> Val.Bool(true))
       case Flow.Fby(v, _) =>
         State.empty + (st -> v)
       case Flow.Pre(_) =>
@@ -161,8 +159,8 @@ object Eval:
         heap + (ref -> exp(prefix, state, heap, e, options))
       case Flow.Arrow(first, later) =>
         val v = state.heap(st) match
-          case Val.Bool(false) => exp(prefix, state, heap, first, options)
-          case Val.Bool(true) => exp(prefix, state, heap, later, options)
+          case Val.Bool(true) => exp(prefix, state, heap, first, options)
+          case Val.Bool(false) => exp(prefix, state, heap, later, options)
           case st_ =>
             impossible("state contains value of wrong type",
               "exp" -> f, "state" -> state, "st" -> st)
@@ -178,7 +176,7 @@ object Eval:
       case Flow.Pure(e) =>
         state
       case Flow.Arrow(first, later) =>
-        state + (st -> Val.Bool(true))
+        state + (st -> Val.Bool(false))
       case Flow.Fby(_, e) =>
         state + (st -> exp(prefix, state, heap, e, options))
       case Flow.Pre(e) =>

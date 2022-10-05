@@ -196,9 +196,10 @@ object Term:
       // CVC5 requires us to pretty-print negative integers as a funapp
       case Terms.FunctionApplication(neg, Seq(tt))
        if neg.toString == "-" =>
-        value(tt).map { v => v match
-          case Val.Int(i) => Val.Int(- i)
-          case Val.Real(i) => Val.Real(- i)
+        value(tt).flatMap { v => v match
+          case Val.Int(i) => Some(Val.Int(- i))
+          case Val.Real(i) => Some(Val.Real(- i))
+          case _ => None
         }
       // TODO use a proper rational representation
       case Terms.FunctionApplication(neg, Seq(ti, tj))

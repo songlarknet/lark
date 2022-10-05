@@ -98,13 +98,13 @@ object Check:
         throw new except.InClass(self, e)
 
   object except:
-    class CheckException(msg: String) extends Exception()
+    class CheckException(msg: String) extends Exception(msg)
 
     class InMethod(k: Class, m: Method, exception: Exception) extends Exception(
-      s"\nIn method ${k.name}::${m.name}.", exception)
+      s"\nIn method ${k.name.pprString}::${m.name.pprString}.", exception)
 
     class InClass(k: Class, exception: Exception) extends Exception(
-      s"\nIn class ${k.name}.", exception)
+      s"\nIn class ${k.name.pprString}.", exception)
 
     class NoSuchVariableException(x: names.Component, env: term.Check.Env) extends CheckException(
       s"""No such variable ${x.pprString}.
@@ -116,7 +116,7 @@ object Check:
       map: scala.collection.immutable.SortedMap[K, V]
     ) extends CheckException(
       s"""No such ${typ} ${entry.pprString} in ${typ} map.
-        |Options: ${pretty.tuple(map.keys.map(_.ppr).toSeq)}""".stripMargin)
+        |Options: ${pretty.layout(pretty.tuple(map.keys.map(_.ppr).toSeq))}""".stripMargin)
 
     class TypeMismatch(e: pretty.Doc, s: Sort, t: Sort) extends CheckException(
       s"""Type mismatch: ${s.pprString} != ${t.pprString}.
@@ -133,3 +133,10 @@ object Check:
     ) =
       map.getOrElse(key,
         throw new NoSuchEntryException(typ, key, map))
+
+  def program(
+    classes: names.immutable.RefMap[Class],
+    options: Options
+  ): Unit = classes.foreach { case (k,c) =>
+    klass(classes, c, options)
+  }

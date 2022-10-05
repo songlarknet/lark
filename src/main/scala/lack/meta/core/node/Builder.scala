@@ -131,7 +131,7 @@ object Builder:
     var subnodes: mutable.Map[names.Component, Node]     = mutable.Map()
     var props:    mutable.ArrayBuffer[Judgment]          = mutable.ArrayBuffer()
 
-    var nested: Nested = new Nested(supply.freshState().name, this)
+    var nested: Nested = new Nested(supply.freshState(forceIndex = false).name, this)
 
     def name: names.Ref = path match
       case Nil => names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("<top>")))

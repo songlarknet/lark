@@ -14,7 +14,16 @@ import scala.collection.immutable.SortedMap
 object Obc:
 
   /** Imperative statements */
-  sealed trait Statement extends pretty.Pretty
+  sealed trait Statement extends pretty.Pretty:
+    def <>(that: Statement): Statement = (this, that) match
+      case (Statement.Skip, _) => that
+      case (_, Statement.Skip) => this
+      case (Statement.Seq(s1, s2), _) => Statement.Seq(s1, s2 <> that)
+      case (Statement.Ite(p, t, f), Statement.Ite(px, tx, fx))
+        if p == px =>
+          Statement.Ite(p, t <> tx, f <> fx)
+      case _ => Statement.Seq(this, that)
+
   object Statement:
 
     /** Assignment to local variable */
@@ -36,6 +45,10 @@ object Obc:
           case _ => pretty.text("else") <@>
             pretty.indent(f.ppr))
 
+    def ite(p: Exp, t: Statement, f: Statement): Statement = (t, f) match
+      case (Skip, Skip) => Skip
+      case _ => Ite(p, t, f)
+
     /** Sequential composition (semicolon) */
     case class Seq(s: Statement, t: Statement) extends Statement:
       def ppr = s.ppr <@> t.ppr
@@ -56,6 +69,10 @@ object Obc:
           klass.ppr <> pretty.text("::") <> method.ppr <>
           pretty.tupleP(instance :: args)
 
+
+    def concat(is: List[Statement]): Statement =
+      is.fold(Skip)(_ <> _)
+
   final case class Method(
     name:    names.Component,
     params:  List[Sort.Sorted],
@@ -66,12 +83,18 @@ object Obc:
     def ppr =
       pretty.text("method ") <+> name.ppr <> pretty.tupleP(params) <@>
       pretty.text("returns") <+> pretty.tupleP(returns) <@>
-      pretty.text("locals ") <+> pretty.tupleP(locals) <@>
+      pretty.text("locals ") <+> pretty.tupleP(locals) <> pretty.colon <@>
       pretty.indent(body.ppr)
 
     val paramsMap  = SortedMap.from(params.map(_.tuple))
     val returnsMap = SortedMap.from(returns.map(_.tuple))
     val localsMap  = SortedMap.from(locals.map(_.tuple))
+
+  object Method:
+    val reset: names.Component =
+      names.Component(names.ComponentSymbol.fromScalaSymbol("reset"))
+    val step: names.Component =
+      names.Component(names.ComponentSymbol.fromScalaSymbol("step"))
 
   final case class Class(
     name:    names.Ref,
@@ -88,3 +111,6 @@ object Obc:
     val fieldsMap  = SortedMap.from(fields.map(_.tuple))
     val objectsMap = SortedMap.from(objects)
     val methodsMap = SortedMap.from(methods.map(m => (m.name, m)))
+
+  object Class:
+    def self: names.Prefix = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("self"))))

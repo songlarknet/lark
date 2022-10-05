@@ -38,6 +38,23 @@ object Schedule:
   ) extends pretty.Pretty:
     def ppr = kind.ppr <> pretty.colon <+> names.Ref(path, name).ppr
 
+    /** Find the binding that corresponds to this entry in the node.
+     * For equation and subnode entries, returns the equation or subnode
+     * binding as well as the context that encloses the binding.
+     * For nested entries, returns None: not all nested contexts have bindings
+     * (ie the top context), and merge bindings can have many nesteds.
+     */
+    def binding(node: Node): Option[(Node.Binding.Simple, Node.Nested)] =
+      this.kind match
+        case (Schedule.Entry.Equation | Schedule.Entry.Subnode) =>
+          val (ctx, _) = nested(node)
+          Some((ctx.bindings(this.name), ctx))
+        case Schedule.Entry.Nested =>
+          None
+
+    def nested(node: Node): (Node.Nested, Node.Path) =
+      node.context(this.path.lastOption.getOrElse(this.name))
+
   object Entry:
     trait Kind extends pretty.Pretty
     /** Streaming equation including pure expressions and followed-by. */

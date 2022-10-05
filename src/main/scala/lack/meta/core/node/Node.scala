@@ -65,6 +65,9 @@ object Node:
     case class Subnode(subnode: names.Component, args: List[Exp]) extends Binding:
       def ppr = pretty.text("Subnode") <+> subnode.ppr <> pretty.tupleP(args)
 
+    /** Non-compound bindings with no nesting */
+    type Simple = Equation | Subnode
+
     case class Merge(cases: List[(Exp, Nested)]) extends Binding:
       def ppr =
         pretty.vsep(
@@ -87,12 +90,12 @@ object Node:
     //   names.Component(names.ComponentSymbol.INIT))
 
     /** Map of named equation and subnode bindings in this context. */
-    val bindings: names.immutable.ComponentMap[Binding] =
+    val bindings: names.immutable.ComponentMap[Binding.Simple] =
       scala.collection.immutable.SortedMap.from(
         children.flatMap { b => b match
-          case Binding.Equation(lhs, _) =>
+          case b @ Binding.Equation(lhs, _) =>
             Seq(lhs -> b)
-          case Binding.Subnode(subnode, _) =>
+          case b @ Binding.Subnode(subnode, _) =>
             Seq(subnode -> b)
           case _ =>
             Seq()
@@ -135,6 +138,6 @@ object Node:
         def clock: Exp =
           val nots = not.map(term.Compound.app(term.prim.Table.Not, _))
           val ands = nots ++ List(yes)
-          ands.fold(term.Compound.val_(term.Val.Bool(true))) { (a,b) =>
+          ands.reduce { (a,b) =>
             term.Compound.app(term.prim.Table.And, a, b)
           }

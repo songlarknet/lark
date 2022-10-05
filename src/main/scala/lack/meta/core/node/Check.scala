@@ -57,7 +57,7 @@ object Check:
     paths: List[Node.Path],
   )
 
-  type Bindings = MultiMap[names.Component, (Node.Path, Node.Binding)]
+  type Bindings = MultiMap[names.Component, (Node.Path, Node.Binding.Simple)]
   type Variables = names.immutable.ComponentMap[Var]
 
   def takeBindings(node: Node): Bindings =

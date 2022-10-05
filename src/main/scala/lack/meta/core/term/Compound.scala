@@ -26,6 +26,15 @@ object Compound:
   def ite(p: Exp, t: Exp, f: Exp) =
     app(prim.Table.Ite, p, t, f)
 
+  def subst(env: names.immutable.RefMap[Exp], exp: Exp): Exp = exp match
+    case Exp.Val(_, _) => exp
+    case Exp.Var(_, v) => env.getOrElse(v, exp)
+    case Exp.App(s, p, args : _*) =>
+      simp.outer(Exp.App(s, p, args.map(subst(env, _)) : _*))
+    case Exp.Cast(op, e) =>
+      simp.outer(Exp.Cast(op, subst(env, e)))
+
+
   object simp:
     /** Simplify outer-most layer of expression without descending into
      * the expression.

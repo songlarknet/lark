@@ -1,7 +1,9 @@
 package lack.meta.driver
 
 import lack.meta.base.names
+import lack.meta.base.names.given
 import lack.meta.base.pretty
+import lack.meta.core
 import lack.meta.core.node.Schedule
 
 import lack.meta.source.Compound.{given, _}
@@ -11,12 +13,30 @@ import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
 import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 
+import scala.collection.immutable.SortedMap
+
 /** Compile a program to executable code. */
 object Compile:
-  def compile(options: Options = Options())(f: Node.Invocation => Node): Unit =
+  def compile()(f: Node.Invocation => Node): Unit =
     given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
     builder.invoke(f)
     val subnodes = builder.nodeRef.allNodes
+    val frozen = subnodes.map(_.freeze)
+    val scheds = schedules(frozen)
+    val obcs = core.obc.FromNode.program(frozen, scheds)
+    obcs.foreach { case (k,v) =>
+      println(s"Node ${k.pprString}")
+      println(pretty.layout(pretty.indent(v.ppr)))
+    }
+
+    core.obc.Check.program(obcs, core.obc.Check.Options())
+
+
+  def printSchedules()(f: Node.Invocation => Node): Unit =
+    given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
+    builder.invoke(f)
+    val subnodes = builder.nodeRef.allNodes
+
     subnodes.foreach { n =>
       val nn = n.freeze
       val graph = Schedule.Slurp(nn).graph()
@@ -35,6 +55,10 @@ object Compile:
 
     }
 
-  case class Options(
-    verbose: Boolean = false,
-  )
+  def schedules(nodes: Iterable[core.node.Node]): names.immutable.RefMap[Schedule] =
+    val scheds = nodes.map { n =>
+      val graph = Schedule.Slurp(n).graph()
+      val sched = Schedule.scheduleWithNode(n, graph)
+      n.name -> sched
+    }
+    SortedMap.from(scheds)
