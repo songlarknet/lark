@@ -80,31 +80,36 @@ object Schedule:
         val cyc = graph.cycles(e.value).sortBy(_.length).head
         throw new except.CyclePrettyException(node.name, Cycle(node, graph, cyc))
 
+  /** "Slurp" the graph vertices and edges from the program. */
   case class Slurp(node: Node):
     def entry(kind: Entry.Kind, path: List[names.Component], name: names.Component) =
-      MultiMapSet.just(name, Entry(kind, path, name))
+      val e = Entry(kind, path, name)
+      (MultiMapSet.just(name, e), List(e))
 
     def entries(
       path: List[names.Component],
       binding: Node.Binding
-    ): MultiMapSet[names.Component, Entry] = binding match
+    ): (MultiMapSet[names.Component, Entry], List[Entry]) = binding match
       case b: Node.Binding.Equation =>
         entry(Entry.Equation, path, b.lhs)
       case b: Node.Binding.Subnode =>
         entry(Entry.Subnode, path, b.subnode)
       case b: Node.Binding.Merge =>
         val children = b.cases.map { case (k,n) => entries(path, n) }
-        MultiMapSet.concat(children)
+        (MultiMapSet.concat(children.map(_._1)), children.flatMap(_._2))
       case b: Node.Binding.Reset =>
         entries(path, b.nested)
 
-    def entries(path: List[names.Component], nested: Node.Nested): MultiMapSet[names.Component, Entry] =
+    def entries(
+      path: List[names.Component],
+      nested: Node.Nested
+    ): (MultiMapSet[names.Component, Entry], List[Entry]) =
       val entry    = this.entry(Entry.Nested, path, nested.context)
       val pathX    = path :+ nested.context
       val children = nested.children.map(entries(pathX, _))
-      entry <> MultiMapSet.concat(children)
+      (entry._1 <> MultiMapSet.concat(children.map(_._1)), entry._2 ++ children.flatMap(_._2))
 
-    def entries(): MultiMapSet[names.Component, Entry] =
+    def entries(): (MultiMapSet[names.Component, Entry], List[Entry]) =
       entries(List(), node.nested)
 
     /** Get entries that this variable depends on. */
@@ -214,10 +219,9 @@ object Schedule:
       (entry, MultiMapSet(depsX.toSeq : _*))
 
     def graph(): Graph[Entry] =
-      val mpEntries = entries()
+      val (mpEntries, listEntries) = entries()
       val (_, deps) = dependencies(mpEntries, List(), node.nested)
-      val vertices = mpEntries.entries.values.foldLeft(SortedSet.empty)(_ ++ _)
-      Graph(vertices, deps)
+      Graph(listEntries, deps)
 
 
   /** Information about a non-causal cycle, which is used for displaying an

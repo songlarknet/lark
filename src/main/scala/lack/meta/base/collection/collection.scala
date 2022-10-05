@@ -8,9 +8,12 @@ import scala.math.Ordering.Implicits._
 
 package object collection:
 
-  /** Graph with no edge information. */
+  /** Graph with no edge information.
+   * Vertices are stored in an (ordered) list so that the topological sort can
+   * reuse that order wherever possible.
+   */
   case class Graph[T: scala.math.Ordering](
-    vertices: SortedSet[T],
+    vertices: List[T],
     edges: MultiMapSet[T, T]
   ):
     /** Find cycles that go through given node. */
@@ -28,7 +31,7 @@ package object collection:
     /** Topological sort.
      * Throws except.CycleException if no topological ordering exists. */
     def topsort: List[T] =
-      topsortMany(SortedSet.empty, SortedSet.empty, vertices.toList)._1
+      topsortMany(SortedSet.empty, SortedSet.empty, vertices)._1
 
     def topsortMany(
       emitted: SortedSet[T],
