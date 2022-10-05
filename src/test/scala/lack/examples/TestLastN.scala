@@ -35,7 +35,7 @@ class TestLastN extends munit.FunSuite:
   class LastN(n: Integer, e: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
     require(n <= 255)
 
-    val count     = local[UInt8]
+    val count     = output[UInt8]
     val out       = output[Bool]
     val pre_count = u8(0) -> pre(count)
 

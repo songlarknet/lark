@@ -148,20 +148,28 @@ object FromNode:
         Statement.concat(inits))
 
     def step(n: Node, schedule: Schedule): Method =
-      val params = n.params.map(k => Sort.Sorted(k, n.vars(k).sort))
-      val returns = n.vars.filter { case (k,v) => v.mode == Variable.Output }.toList
-        .map { case (k,v) => Sort.Sorted(k, v.sort)}
+      def vars(mp: names.immutable.ComponentMap[Variable]) =
+        mp.toList.map { case (k,v) => Sort.Sorted(k, v.sort) }
 
-      val locals = n.vars.filter { case (k,v) => v.mode != Variable.Output && v.mode != Variable.Argument }.toList
+      val params  =
+        n.params.map(k => Sort.Sorted(k, n.vars(k).sort)) ++
+        vars(n.vars.filter(_._2.mode == Variable.Forall))
+      val returns =
+        vars(n.vars.filter(_._2.mode == Variable.Output))
+        n.vars.filter { case (k,v) => v.mode == Variable.Output }.toList
         .map { case (k,v) => Sort.Sorted(k, v.sort)}
+      val locals =
+        vars(n.vars.filter(kv => kv._2.mode != Variable.Output &&
+          kv._2.mode != Variable.Argument &&
+          kv._2.mode != Variable.Forall))
       val localsX = for
         (s, sn) <- n.subnodes.toList
         l <- Subnode.locals(s, sn)
       yield l
+
       val substMap = SortedMap.from(localsX.map { case (k,v) =>
         k -> Compound.var_(v.sort, names.Ref(List(), v.name))
       })
-
       def subst(e: Exp): Exp =
         Compound.subst(substMap, e)
 
