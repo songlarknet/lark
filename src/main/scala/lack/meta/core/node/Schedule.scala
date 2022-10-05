@@ -82,34 +82,31 @@ object Schedule:
 
   /** "Slurp" the graph vertices and edges from the program. */
   case class Slurp(node: Node):
-    def entry(kind: Entry.Kind, path: List[names.Component], name: names.Component) =
-      val e = Entry(kind, path, name)
-      (MultiMapSet.just(name, e), List(e))
-
     def entries(
       path: List[names.Component],
       binding: Node.Binding
-    ): (MultiMapSet[names.Component, Entry], List[Entry]) = binding match
+    ): List[Entry] = binding match
       case b: Node.Binding.Equation =>
-        entry(Entry.Equation, path, b.lhs)
+        List(Entry(Entry.Equation, path, b.lhs))
       case b: Node.Binding.Subnode =>
-        entry(Entry.Subnode, path, b.subnode)
+        List(Entry(Entry.Subnode, path, b.subnode))
       case b: Node.Binding.Merge =>
-        val children = b.cases.map { case (k,n) => entries(path, n) }
-        (MultiMapSet.concat(children.map(_._1)), children.flatMap(_._2))
+        b.cases.flatMap { case (k,n) =>
+          entries(path, n)
+        }
       case b: Node.Binding.Reset =>
         entries(path, b.nested)
 
     def entries(
       path: List[names.Component],
       nested: Node.Nested
-    ): (MultiMapSet[names.Component, Entry], List[Entry]) =
-      val entry    = this.entry(Entry.Nested, path, nested.context)
+    ): List[Entry] =
+      val entry    = Entry(Entry.Nested, path, nested.context)
       val pathX    = path :+ nested.context
-      val children = nested.children.map(entries(pathX, _))
-      (entry._1 <> MultiMapSet.concat(children.map(_._1)), entry._2 ++ children.flatMap(_._2))
+      val children = nested.children.flatMap(entries(pathX, _))
+      entry :: children
 
-    def entries(): (MultiMapSet[names.Component, Entry], List[Entry]) =
+    def entries(): List[Entry] =
       entries(List(), node.nested)
 
     /** Get entries that this variable depends on. */
@@ -219,9 +216,11 @@ object Schedule:
       (entry, MultiMapSet(depsX.toSeq : _*))
 
     def graph(): Graph[Entry] =
-      val (mpEntries, listEntries) = entries()
+      val vertices  = entries()
+      val mpEntries = MultiMapSet.concat(
+        vertices.map(e => MultiMapSet.just(e.name, e)))
       val (_, deps) = dependencies(mpEntries, List(), node.nested)
-      Graph(listEntries, deps)
+      Graph(vertices, deps)
 
 
   /** Information about a non-causal cycle, which is used for displaying an
