@@ -7,7 +7,7 @@ import lack.meta.core.target.c.{Printer => P}
 
 import lack.meta.core.Sort
 import lack.meta.core.term
-import lack.meta.core.term.{Exp, Val}
+import lack.meta.core.term.{Exp, Val, Compound}
 import lack.meta.core.node.{Node, Schedule, Variable}
 
 import lack.meta.core.obc
@@ -54,9 +54,9 @@ object C:
       P.Ident.suffix(klass, "state")
     def stateP(klass: names.Ref) = P.Ident.ref(state(klass))
 
-    def out(name: names.Ref): names.Ref =
-      P.Ident.suffix(name, "out")
-    def outP(name: names.Ref) = P.Ident.ref(out(name))
+    def out(klass: names.Ref, method: names.Component): names.Ref =
+      P.Ident.suffix(names.Ref(klass.fullyQualifiedPath, method), "out")
+    def outP(klass: names.Ref, method: names.Component) = P.Ident.ref(out(klass, method))
 
   object Header:
     def state(k: Class): pretty.Doc =
@@ -79,8 +79,9 @@ object C:
           val fieldsP = rets.map { kv =>
             P.Decl.var_(kv.name, kv.sort)
           }
-          val out = P.Decl.struct(Names.out(name), fieldsP)
-          (List(out), P.Type.void, List(P.Type.ptr(Names.outP(name))))
+          val outN = Names.out(k.name, m.name)
+          val out  = P.Decl.struct(outN, fieldsP)
+          (List(out), P.Type.void, List(P.Type.ptr(P.Ident.ref(outN))))
 
       val argsP =
         P.Type.ptr(Names.stateP(k.name)) ::
@@ -113,6 +114,26 @@ object C:
         fresh.headOption.getOrElse(
           throw new Exception(s"Can't generate free variable for ${base} in set ${usedS}"))
 
+    object Ops:
+      def binop(prim: term.Prim): (String, Int) =
+        import term.prim.Table._
+        prim match
+          case Or  => ("||", 12)
+          case And => ("&&", 11)
+          case Lt  => ("<",  6)
+          case Le  => ("<=", 6)
+          case Gt  => (">",  6)
+          case Ge  => (">",  6)
+          case Eq  => ("==", 6)
+          case Add => ("+",  4)
+          case Sub => ("-",  4)
+          case Mul => ("*",  3)
+          case Div => ("/",  3)
+      val UNARY_PREC   = 2
+      val TERNARY_PREC = 13
+      val COMMA_PREC   = 15
+      val PARENS_PREC  = 16
+
     def val_(v: Val): pretty.Doc = v match
       case Val.Bool(b) => b.toString
       case Val.Refined(s: Sort.BoundedInteger, Val.Int(i)) =>
@@ -123,68 +144,107 @@ object C:
           case (_,     _)  => ""
         pretty.value(i) <> suffix
       case Val.Real(r) => pretty.value(r)
-      // TODO hmm
-      case Val.Int(i) =>
-        pretty.value(i)
       case _ =>
         throw new P.except.BigNumberException("value", v.ppr)
 
-    def binop(prim: term.Prim): (String, Int) =
-      import term.prim.Table._
-      prim match
-        case Or  => ("||", 12)
-        case And => ("&&", 11)
-        case Lt  => ("<",  6)
-        case Le  => ("<=", 6)
-        case Gt  => (">",  6)
-        case Ge  => (">",  6)
-        case Eq  => ("==", 6)
-        case Add => ("+",  4)
-        case Sub => ("-",  4)
-        case Mul => ("*",  3)
-        case Div => ("/",  3)
-    val COMMA_PREC = 15
-    val PARENS_PREC = 16
+    /** Print value with a hint about the integer precision. */
+    def valWithPrecision(v: Val, s: Option[Sort.BoundedInteger]) = (s, v) match
+      case (None, _) => val_(v)
+      case (Some(s), Val.Int(_)) =>
+        val vv = Val.Refined(s, v)
+        Val.check(vv, s)
+        val_(vv)
+      case (_, _) => val_(v)
 
-    //   10 +  2 * 5   < 10
-    // ((10 + (2 * 5)) < 10)
-    // a +  b + c
-    // a + (b + c)
-    def nest(self: pretty.Doc, e: Exp, p: Int, limit: Int) =
-      if p <= limit
-      then pretty.parens(exp(self, e, PARENS_PREC))
-      else exp(self, e, p)
+    /** Nest expression, inserting parentheses if precedence of enclosing
+     * operator is lower than or equal to the precedence of inner operator.
+     */
+    def nest(enclosing: Int, inner: Int, doc: pretty.Doc) =
+      if enclosing < inner
+      then pretty.parens(doc)
+      else doc
 
-    def exp(self: pretty.Doc, e: Exp, p: Int): pretty.Doc = e match
+    /** Print an expression at given precedence level.
+     *
+     * @param self
+     *  the identifier used to refer to the current method's object (this)
+     * @param e
+     *  expression to print
+     * @param p
+     *  precedence level
+     * @param s
+     *  the integer type that we expect the result to be, used to insert casts
+     */
+    def exp(
+      self: pretty.Doc,
+      e: Exp,
+      p: Int,
+      s: Option[Sort.BoundedInteger]
+    ): pretty.Doc = e match
       case Exp.Var(_, r) => r.prefix match
+        // Print "self.x" variables as self->x.
+        // Print other variables as-is.
         case self_ :: rest
          if List(self_) == Class.self.prefix =>
           P.Term.fieldptr(self, P.Term.fields(rest, r.name))
         case _ =>
           P.Term.fields(r.prefix, r.name)
-      case Exp.Val(v) => val_(v)
+      case Exp.Val(v) =>
+        // Use precision hint to print literal integers
+        valWithPrecision(v, s)
 
-      // TODO: do we need to insert casts?
+      // Unboxing a fixed-precision integer of different precision to what the
+      // result should be, so insert a cast
+      case Exp.Cast(Exp.Cast.Unbox(r), e)
+        if s.isDefined && s != Some(e.sort) =>
+        pretty.parens(P.Type.sort(s.get)) <> pretty.parens(exp(self, e, Ops.PARENS_PREC, None))
+      case Exp.Cast(Exp.Cast.Box(r: Sort.BoundedInteger), e) =>
+        exp(self, e, p, Some(r))
       case Exp.Cast(_, e) =>
-        exp(self, e, p)
+        exp(self, e, p, None)
 
+      // Unary operators
       case Exp.App(_, term.prim.Table.Negate, a) =>
-        pretty.text("-") <> nest(self, a, p, 2)
+        nest(p, Ops.UNARY_PREC, pretty.text("-") <> exp(self, a, Ops.UNARY_PREC, s))
       case Exp.App(_, term.prim.Table.Not, a) =>
-        pretty.text("!") <> nest(self, a, p, 2)
+        nest(p, Ops.UNARY_PREC, pretty.text("!") <> exp(self, a, Ops.UNARY_PREC, None))
+
+      // Special-case binary operators
       case Exp.App(_, term.prim.Table.Implies, a, b) =>
-        P.Term.fun("lack_implies", List(exp(self, a, COMMA_PREC), exp(self, b, COMMA_PREC)))
+        P.Term.fun("lack_implies", List(exp(self, a, Ops.COMMA_PREC, None), exp(self, b, Ops.COMMA_PREC, None)))
+      case Exp.App(ret, term.prim.Table.Div, a, b) =>
+        val rep  = s.orElse(repr(a)).orElse(repr(b))
+        val sort = (ret, rep) match
+          case (_, Some(s)) => s
+          case (Sort.Real, _) => Sort.Real
+          case (_, None) =>
+            throw new Exception(s"Cannot perform division with result type ${ret.pprString} with unknown representation")
+        val div  = pretty.text("lack_div_") <> P.Type.sort(sort)
+        P.Term.fun(div, List(exp(self, a, Ops.COMMA_PREC, rep), exp(self, b, Ops.COMMA_PREC, rep)))
+
       case Exp.App(_, op, a, b) =>
-        val (o, pp) = binop(op)
-        nest(self, a, p, pp) <+> o <+> nest(self, b, p, pp + 1)
+        val (o, pp) = Ops.binop(op)
+        val rep = s.orElse(repr(a)).orElse(repr(b))
+        nest(p, pp, exp(self, a, pp, rep) <+> o <+> exp(self, b, pp - 1, rep))
       case Exp.App(_, term.prim.Table.Ite, pred, t, f) =>
-        nest(self, pred, p, 13) <+> "?" <+>
-          nest(self, t, p, 13) <+> ":" <+>
-          nest(self, f, p, 13)
+        nest(p, Ops.TERNARY_PREC,
+          exp(self, pred, Ops.TERNARY_PREC - 1, None) <+> "?" <+>
+          exp(self, t,    Ops.TERNARY_PREC - 1, s) <+> ":" <+>
+          exp(self, f,    Ops.TERNARY_PREC - 1, s))
       case Exp.App(_, p, _ : _*) =>
         throw new Exception(s"prim not supported: ${p}")
 
-    def exp(self: pretty.Doc, e: Exp): pretty.Doc = exp(self, e, PARENS_PREC)
+    def exp(self: pretty.Doc, e: Exp): pretty.Doc =
+      exp(self, e, Ops.PARENS_PREC, None)
+
+    /** Get integer type required to store expression */
+    def repr(e: Exp): Option[Sort.BoundedInteger] = e match
+      case Exp.Var(s: Sort.BoundedInteger, _) => Some(s)
+      case Exp.Val(Val.Refined(s: Sort.BoundedInteger, _)) => Some(s)
+      case Exp.Cast(Exp.Cast.Unbox(_), e) => repr(e)
+      case Exp.Cast(Exp.Cast.Box(s: Sort.BoundedInteger), _) => Some(s)
+      case Exp.App(s: Sort.BoundedInteger, _, _ : _*) => Some(s)
+      case _ => None
 
     def statement(self: pretty.Doc, s: Statement, options: Options): pretty.Doc = s match
       case Statement.Skip =>
@@ -206,7 +266,7 @@ object C:
         val name  = names.Ref(klass.fullyQualifiedPath, method)
         val instP = P.Term.address(P.Term.fieldptr(self, instance))
         val argsP = args.map(exp(self, _))
-        val outT = Names.outP(name)
+        val outT = Names.outP(klass, method)
         val outV = P.Ident.component(instance)
         val meth = options.classes(klass).methodsMap(method)
         (assigns, meth.returns) match
@@ -238,7 +298,7 @@ object C:
           val stms = rets.map { r =>
             P.Stm.assign(P.Term.fieldptr(out, r.name), P.Ident.component(r.name))
           }
-          (P.Type.void, List(P.Type.ptr(Names.outP(name)) <+> out), stms)
+          (P.Type.void, List(P.Type.ptr(Names.outP(k.name, m.name)) <+> out), stms)
 
       val argsP =
         (P.Type.ptr(Names.stateP(k.name)) <+> self) ::
@@ -249,8 +309,7 @@ object C:
         P.Decl.var_(kv.name, kv.sort)
       }
       val storage = m.storage.map { case s =>
-        val out = Names.outP(names.Ref(s.klass.fullyQualifiedPath, s.method))
-        P.Decl.var_(s.name, out)
+        P.Decl.var_(s.name, Names.outP(s.klass, s.method))
       }
 
       val stms =

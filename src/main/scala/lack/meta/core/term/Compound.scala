@@ -60,11 +60,16 @@ object Compound:
         catch
           case e: Eval.except.EvalException =>
             exp
-      case Exp.Cast(Exp.Cast.Unbox(r), Exp.Cast(Exp.Cast.Box(_), e)) =>
-        e
+      // XXX: this is logically fine, but it can remove precision information
+      // needed to compile to C.
+      // case Exp.Cast(Exp.Cast.Unbox(r), Exp.Cast(Exp.Cast.Box(_), e)) =>
+      //   e
       case Exp.Cast(Exp.Cast.Box(r), Exp.Cast(Exp.Cast.Unbox(_), e))
         if e.sort == r =>
         e
+      // case Exp.Cast(Exp.Cast.Box(r), Exp.Cast(Exp.Cast.Unbox(_), Exp.Cast(Exp.Cast.Box(rX), e)))
+      //   if r.includes(rX) == Some(true) =>
+      //   e
       case _ => exp
 
     /** Recursively simplify expression.
