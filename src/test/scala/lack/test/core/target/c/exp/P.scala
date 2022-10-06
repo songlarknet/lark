@@ -19,26 +19,17 @@ import lack.test.core.target.c.Cbmc
 
 import scala.collection.immutable.SortedMap
 
-/** C code gen test: generate expressions and check evaluation OK */
+/** C code gen test: generate expressions and check C code against our evaluator */
 class P extends HedgehogSuite:
   val g = lack.test.core.term.exp.G(lack.test.core.term.prim.G())
 
-  // property("raw expressions eval OK (refines disabled)") {
-  //   for
-  //     env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.all).ppr("env")
-  //     s    <- g.sort.all.ppr("sort")
-  //     e    <- g.raw(env, s).ppr("expr")
-  //     heap <- g.val_.heap(env).ppr("heap")
-  //     v    <- Property.ppr(Eval.exp(heap, e, Eval.Options(checkRefinement = false)), "v")
-  //   yield
-  //     Result.assert(v.sort == s)
-  // }
-
   property("raw expressions eval OK (refines enabled & discarded)") {
     for
-      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")
-      s    <- g.sort.all.ppr("sort")
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.nofloats).ppr("env")
+      s    <- g.sort.runtime.nofloats.ppr("sort")
+
       e    <- g.raw(env, s).ppr("e")
+
       heap <- g.val_.heap(env).ppr("heap")
 
       v <- Property.try_ {
@@ -46,10 +37,11 @@ class P extends HedgehogSuite:
       }.ppr("v")
 
       self = pretty.text("NO_SELF_ACCESS")
-      binds =
+      binds <- Property.try_ {
         for (k, v) <- heap
         yield Pr.Type.sort(v.sort) <+> Pr.Ident.component(k.name) <+> pretty.equal <+> C.Source.val_(v) <> pretty.semi
-      asserts =
+      }
+      asserts <- Property.try_ {
         for
           (e,i) <- List(e).zipWithIndex
           vi = pretty.text("$$") <> pretty.value(i)
@@ -58,6 +50,7 @@ class P extends HedgehogSuite:
           Pr.Type.sort(s) <+> vi <+> pretty.equal <+>
             C.Source.exp(self, e) <> pretty.semi <@>
           Pr.Term.fun("assert", List(expect)) <> pretty.semi
+      }
 
       code <- Property.ppr(pretty.vsep(
         binds.toList ++ List(pretty.emptyDoc) ++ asserts.toList

@@ -123,7 +123,7 @@ object C:
           case Lt  => ("<",  6)
           case Le  => ("<=", 6)
           case Gt  => (">",  6)
-          case Ge  => (">",  6)
+          case Ge  => (">=", 6)
           case Eq  => ("==", 6)
           case Add => ("+",  4)
           case Sub => ("-",  4)
@@ -138,12 +138,13 @@ object C:
       case Val.Bool(b) => b.toString
       case Val.Refined(s: Sort.BoundedInteger, Val.Int(i)) =>
         val suffix = (s.signed, s.width) match
-          case (true,  64) => "ul"
-          case (false, 64) => "l"
-          case (true,  32) => "u"
+          case (true,  64) => "l"
+          case (false, 64) => "ul"
+          case (true,  32) => ""
+          case (false, 32) => "u"
           case (_,     _)  => ""
         pretty.value(i) <> suffix
-      case Val.Real(r) => pretty.value(r)
+      case Val.Real(r) => pretty.value(r) <> "f"
       case _ =>
         throw new P.except.BigNumberException("value", v.ppr)
 
@@ -152,7 +153,13 @@ object C:
       case (None, _) => val_(v)
       case (Some(s), Val.Int(_)) =>
         val vv = Val.Refined(s, v)
-        Val.check(vv, s)
+        if !Val.check(vv, s)
+        then throw new Exception(s"Value ${v.pprString} doesn't fit into bounded type ${s.pprString}")
+        val_(vv)
+      case (Some(s), Val.Refined(_, v: Val.Int)) =>
+        val vv = Val.Refined(s, v)
+        if !Val.check(vv, s)
+        then throw new Exception(s"Value ${v.pprString} doesn't fit into bounded type ${s.pprString}")
         val_(vv)
       case (_, _) => val_(v)
 
@@ -205,7 +212,14 @@ object C:
 
       // Unary operators
       case Exp.App(_, term.prim.Table.Negate, a) =>
-        nest(p, Ops.UNARY_PREC, pretty.text("-") <> exp(self, a, Ops.UNARY_PREC, s))
+        val rep = checkReprs(List(s, repr(a)), e)
+        rep.foreach { s =>
+          if !s.signed
+          then throw new Exception(s"can't negate unsigned integers: ${e.pprString}")
+        }
+
+        // Print subexpression with UNARY_PREC-1 so that Negate(Negate(x)) is printed as -(-x)
+        nest(p, Ops.UNARY_PREC, pretty.text("-") <+> exp(self, a, Ops.UNARY_PREC - 1, s))
       case Exp.App(_, term.prim.Table.Not, a) =>
         nest(p, Ops.UNARY_PREC, pretty.text("!") <> exp(self, a, Ops.UNARY_PREC, None))
 
@@ -213,7 +227,7 @@ object C:
       case Exp.App(_, term.prim.Table.Implies, a, b) =>
         P.Term.fun("lack_implies", List(exp(self, a, Ops.COMMA_PREC, None), exp(self, b, Ops.COMMA_PREC, None)))
       case Exp.App(ret, term.prim.Table.Div, a, b) =>
-        val rep  = s.orElse(repr(a)).orElse(repr(b))
+        val rep  = checkReprs(List(s, repr(a), repr(b)), e)
         val sort = (ret, rep) match
           case (_, Some(s)) => s
           case (Sort.Real, _) => Sort.Real
@@ -224,9 +238,10 @@ object C:
 
       case Exp.App(_, op, a, b) =>
         val (o, pp) = Ops.binop(op)
-        val rep = s.orElse(repr(a)).orElse(repr(b))
+        val rep = checkReprs(List(s, repr(a), repr(b)), e)
         nest(p, pp, exp(self, a, pp, rep) <+> o <+> exp(self, b, pp - 1, rep))
       case Exp.App(_, term.prim.Table.Ite, pred, t, f) =>
+        val rep = checkReprs(List(s, repr(t), repr(f)), e)
         nest(p, Ops.TERNARY_PREC,
           exp(self, pred, Ops.TERNARY_PREC - 1, None) <+> "?" <+>
           exp(self, t,    Ops.TERNARY_PREC - 1, s) <+> ":" <+>
@@ -245,6 +260,13 @@ object C:
       case Exp.Cast(Exp.Cast.Box(s: Sort.BoundedInteger), _) => Some(s)
       case Exp.App(s: Sort.BoundedInteger, _, _ : _*) => Some(s)
       case _ => None
+
+    /** Check representations are OK */
+    def checkReprs(reprs: List[Option[Sort.BoundedInteger]], e: Exp) =
+      val ds = reprs.flatMap(identity).distinct
+      if ds.length > 1
+      then throw new Exception(s"bad representations ${ds} for expression ${e.pprString}")
+      ds.headOption
 
     def statement(self: pretty.Doc, s: Statement, options: Options): pretty.Doc = s match
       case Statement.Skip =>

@@ -32,7 +32,8 @@ object suite:
 
     def property(
         name: String,
-        withConfig: PropertyConfig => PropertyConfig = identity
+        withConfig: PropertyConfig => PropertyConfig = identity,
+        grind: Option[Int] = None
     )(
         prop: => h.Property
     )(implicit loc: m.Location): Unit =
@@ -41,8 +42,8 @@ object suite:
       def withConfigX(c: PropertyConfig) =
         val cX = withConfig(c)
         cX.copy(
-          testLimit    = cX.testLimit.value * HEDGEHOG_GRIND,
-          discardLimit = h.core.DiscardCount(cX.discardLimit.value * HEDGEHOG_GRIND))
+          testLimit    = cX.testLimit.value * grind.getOrElse(1) * HEDGEHOG_GRIND,
+          discardLimit = h.core.DiscardCount(cX.discardLimit.value * grind.getOrElse(1) * HEDGEHOG_GRIND))
 
       sub.property(name, withConfigX)(prop)
       munitTestsBuffer ++= sub.munitTestsBuffer.drop(old)

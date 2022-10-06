@@ -23,6 +23,7 @@ package object sort:
     object runtime:
       val ints = Gen.elementIndexed_(Sort.Table.runtime.ints)
       val all = Gen.elementIndexed_(Sort.Table.runtime.all)
+      val nofloats = Gen.elementIndexed_(Sort.Table.runtime.nofloats)
 
     val all = Gen.elementIndexed_(Sort.Table.all)
 

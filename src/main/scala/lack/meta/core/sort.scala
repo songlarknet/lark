@@ -76,6 +76,8 @@ object Sort:
     object runtime:
       val ints =
         List(UInt8, Int8, UInt16, Int16, UInt32, Int32, UInt64, Int64)
+      val nofloats =
+        Bool :: ints
       val all =
         Bool :: Real :: ints
 

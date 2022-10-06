@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/** Base types: give reals a scary name for now because of the logic gap
+ * between reals and floats. */
 typedef float float32_unsound_t;
 
 /** Logical connectives */
