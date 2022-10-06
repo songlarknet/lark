@@ -235,9 +235,6 @@ object Translate:
         SystemV.row(ref, sort)
 
     case Exp.App(sort, prim, args : _*) =>
-      // require(!(sort.isInstanceOf[Sort.Mod] && prim.isInstanceOf[Prim.Div.type]),
-      //   "TODO: division for bitvectors has weird semantics in SMT-lib, need to wrap division to get consistent div-by-zero behaviour")
-
       for
         targs <- SystemV.conjoin(args.map(expr(context, _)))
       yield compound.funapp(prim.pprString, targs : _*)

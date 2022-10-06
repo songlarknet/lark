@@ -7,21 +7,43 @@ package object names:
   /** Sanitized symbols.
    * These are ensured to be valid SMT-lib identifiers with some extra restrictions.
    *
-   * Component symbols allow special characters to be ~, !, @, $, %, ^, &, *, -, +, <, >, /, and _.
-   * These are the symbols allowed by SMT-lib except SMT-lib also allows '?' and '.' and doesn't
-   * support unicode.
+   * Component symbols cannot contain unicode.
+   * Component symbols allow special characters to be ~, !, @, $, %, &, *, -, +, <, >, /, and _.
+   * These are the symbols allowed by SMT-lib except SMT-lib also allows '?', '^' and '.',
+   * which are reserved for internal use.
    * Scala symbols allow special characters to be $ and _.
    */
   opaque type ComponentSymbol = String
 
   object ComponentSymbol:
-    /** Make an identifier from given Scala identifier. */
+
+    object Char:
+      val specials = "_~!@$%&*-+<>/"
+      def special(c: Char): Boolean =
+        specials.contains(c)
+      def letter(c: Char): Boolean =
+        (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+      def digit(c: Char): Boolean =
+        (c >= '0' && c <= '9')
+
+    /** Make an identifier from given Scala identifier.
+     * Unicode is not supported.
+     */
     def fromScalaSymbol(s: String): ComponentSymbol = {
-      // TODO: check no bad characters, disallow ^ and ? and .
-      // TODO: what about unicode?
-      require(!s.contains("."), s"Illegal character: '$s' should not contain '.'")
-      require(!s.contains("^"), s"Illegal character: '$s' should not contain '^'")
-      require(!s.contains("?"), s"Illegal character: '$s' should not contain '?'")
+      // PERF: this runs for every symbol, fix if it becomes a bottleneck
+      var first = true
+      s.foreach { c =>
+        if first
+        then require(Char.special(c) || Char.letter(c),
+          s"""Invalid identifier '${s}' bad character '${c}'.
+             |First character should be a letter or one of ${Char.specials}
+             |Unicode is not supported.""".stripMargin)
+        else require(Char.special(c) || Char.letter(c) || Char.digit(c),
+          s"""Invalid identifier '${s}' bad character '${c}'.
+             |Characters should be a letter or a digit one of ${Char.specials}
+             |Unicode is not supported.""".stripMargin)
+        first = false
+      }
       s
     }
     /** Make an internal component name.
