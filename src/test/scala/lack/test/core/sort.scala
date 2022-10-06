@@ -22,6 +22,7 @@ package object sort:
     /** Sorts with a runtime representation */
     object runtime:
       val ints = Gen.elementIndexed_(Sort.Table.runtime.ints)
+      val all = Gen.elementIndexed_(Sort.Table.runtime.all)
 
     val all = Gen.elementIndexed_(Sort.Table.all)
 

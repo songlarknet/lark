@@ -125,6 +125,8 @@ object hedgehog:
         _ <- Property.writeLog(v match
           case v: pretty.Pretty =>
             h.core.Info(name + ": " + v.pprString)
+          case v: pretty.Doc =>
+            h.core.Info(name + ": " + pretty.layout(v))
           case _ =>
             h.core.Info(name + ": " + v.toString()))
       yield

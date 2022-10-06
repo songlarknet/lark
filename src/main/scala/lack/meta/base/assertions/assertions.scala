@@ -8,6 +8,7 @@ package object assertions:
     val ns = notes.map { case (n,obj) =>
       val pp = obj match
         case pp: pretty.Pretty => pp.ppr
+        case pp: pretty.Doc => pp
         case _ => pretty.value(obj)
       pretty.text(n) <> pretty.colon <+> pretty.nest(pp)
     }

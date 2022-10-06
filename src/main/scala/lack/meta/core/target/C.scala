@@ -21,7 +21,7 @@ object C:
   case class Options(
     basename: String,
     classes:  names.immutable.RefMap[Class],
-    includes: List[String] = List("#include <lack.h>"),
+    includes: List[String] = List("#include <lack/lack.h>"),
     version: String = "v0", // TODO hook version numbers up to git and ci
     check: obc.Check.Options = obc.Check.Options()
   )
@@ -318,7 +318,7 @@ object C:
         List(Source.statement(self, m.body, options)) ++
         ret_stms
 
-      ret_ty <+> P.Ident.ref(name) <> pretty.tuple(argsP) <>
+      ret_ty <+> P.Ident.ref(name) <> pretty.tuple(argsP) <+>
         P.Stm.block(pretty.vsep(stms)) <>
         pretty.line
 
