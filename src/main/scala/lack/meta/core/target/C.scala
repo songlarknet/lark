@@ -305,8 +305,6 @@ object C:
           case (Some(storage), _ :: _) =>
             P.Stm.fun(name, instP +: argsP :+ P.Term.address(P.Ident.component(storage)))
 
-
-
     def method(k: Class, m: Method, options: Options): pretty.Doc =
       val name = names.Ref(k.name.fullyQualifiedPath, m.name)
       val used = (m.params ++ m.returns ++ m.locals).map(_.name) ++ m.storage.map(_.name)

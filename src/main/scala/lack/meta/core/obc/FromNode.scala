@@ -66,53 +66,53 @@ object FromNode:
           val Some(st) = fields(entry, node)
           Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
 
-    def eval(entry: Schedule.Entry, node: Node, subst: Exp => Exp): Statement =
+    def eval(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
         case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case Flow.Pure(e) =>
-            Statement.Assign(lhs, subst(e))
+            Statement.Assign(lhs, e)
           case Flow.Arrow(first, later) =>
             Statement.ite(
               Compound.var_(Sort.Bool, Class.self(contextFlag(ctx))),
-              Statement.Assign(lhs, subst(first)),
-              Statement.Assign(lhs, subst(later)))
+              Statement.Assign(lhs, first),
+              Statement.Assign(lhs, later))
           case _ : (Flow.Fby | Flow.Pre) =>
             val Some(st) = fields(entry, node)
             Statement.Assign(lhs, Compound.var_(st.sort, Class.self(st.name)))
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
-          val args     = sub.args.map(subst)
+          val args     = sub.args
           Statement.Call(Some(instance), klass = subnode.name, method = Method.step, instance = instance, args = args)
         case None =>
           Statement.Skip
 
-    def update(entry: Schedule.Entry, node: Node, subst: Exp => Exp): Statement =
+    def update(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
         case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case _ : (Flow.Pure | Flow.Arrow) =>
             Statement.Skip
           case Flow.Fby(_, e) =>
             val Some(st) = fields(entry, node)
-            Statement.AssignSelf(st.name, subst(e))
+            Statement.AssignSelf(st.name, e)
           case Flow.Pre(e) =>
             val Some(st) = fields(entry, node)
-            Statement.AssignSelf(st.name, subst(e))
+            Statement.AssignSelf(st.name, e)
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           Statement.Skip
         case None =>
           val Some(st) = fields(entry, node)
           Statement.AssignSelf(st.name, Compound.val_(Val.Bool(false)))
 
-    def path(entry: Schedule.Entry, node: Node, reset: Statement, statement: Statement, subst: Exp => Exp): Statement =
+    def path(entry: Schedule.Entry, node: Node, reset: Statement, statement: Statement): Statement =
       val (ctx, ctxpath) = entry.nested(node)
-      ctxpath.foldRight(statement)(path1(node, subst, reset, _, _))
+      ctxpath.foldRight(statement)(path1(node, reset, _, _))
 
-    def path1(node: Node, subst: Exp => Exp, reset: Statement, path: Node.Path.Entry, statement: Statement): Statement =
+    def path1(node: Node, reset: Statement, path: Node.Path.Entry, statement: Statement): Statement =
       path match
         case m: Node.Path.Entry.Merge =>
           Statement.ite(
-            subst(m.clock),
+            m.clock,
             statement,
             Statement.Skip
           )
@@ -140,7 +140,7 @@ object FromNode:
         List(), List(), List(), List(),
         Statement.concat(inits))
 
-    def step(n: Node, schedule: Schedule): (Method, List[Prop.Judgment]) =
+    def step(n: Node, schedule: Schedule): Method =
       def vars(mp: names.immutable.ComponentMap[Variable]) =
         mp.toList.map { case (k,v) => Sort.Sorted(k, v.sort) }
 
@@ -156,24 +156,17 @@ object FromNode:
           kv._2.mode != Variable.Argument &&
           kv._2.mode != Variable.Forall))
 
-      // val substMap = SortedMap.from(localsX.map { case (k,v) =>
-      //   k -> Compound.var_(v.sort, names.Ref(List(), v.name))
-      // })
-      // TODO kill subst, clean props
-      def subst(e: Exp): Exp =
-        e
-
       val evals = for
         e <- schedule.entries
         reset = Entry.reset(e, n)
-        eval  = Entry.eval(e, n, subst)
-        evalX = Entry.path(e, n, reset, eval, subst)
+        eval  = Entry.eval(e, n)
+        evalX = Entry.path(e, n, reset, eval)
       yield evalX
 
       val updates = for
         e <- schedule.entries
-        update  = Entry.update(e, n, subst)
-        updateX = Entry.path(e, n, Statement.Skip, update, subst)
+        update  = Entry.update(e, n)
+        updateX = Entry.path(e, n, Statement.Skip, update)
       yield updateX
 
       val storage = for
@@ -185,13 +178,7 @@ object FromNode:
         params, returns, locals, storage,
         Statement.concat(evals) <> Statement.concat(updates))
 
-      val props =
-        for
-          p <- n.props
-        yield
-          p.copy(term = subst(p.term))
-
-      (m, props)
+      m
 
   def klass(n: Node, schedule: Schedule): Class =
     val fields = for
@@ -204,14 +191,14 @@ object FromNode:
     yield (k -> e.name)
 
     val reset = Methods.reset(n, schedule)
-    val (step, props) = Methods.step(n, schedule)
+    val step  = Methods.step(n, schedule)
 
     Class(
       name    = n.name,
       fields  = fields,
       objects = objects,
       methods = List(reset, step),
-      props   = props
+      props   = n.props
     )
 
   def program(nodes: Iterable[Node], schedules: names.immutable.RefMap[Schedule]): names.immutable.RefMap[Class] =
