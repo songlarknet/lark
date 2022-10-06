@@ -9,6 +9,14 @@ The language is very similar to a cut-down version of Lustre.
 The idea is that having Scala as the meta-language will make it easy to write larger programs, without needing too many fancy language support.
 Features like polymorphism or templates come for free, and generating lookup tables programmatically should be straightforward.
 
+## Building
+Requirements:
+* Z3
+* CBMC
+
+These should be installed on your path.
+I am using z3 4.8.17 and cbmc 5.67.0.
+
 ## Roadmap
 
 What is the bare minimum feature set that is required to be useful?
