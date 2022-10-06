@@ -17,7 +17,9 @@ class TestAutomatonSugar extends munit.FunSuite:
   }
 
   test("automaton sugar compile") {
-    Compile.compile() { new Top(_) }
+    Compile.compile(
+      basename = "automaton_sugar",
+      output = Some(java.nio.file.Paths.get("scratch/c/"))) { new Top(_) }
   }
 
   test("Grind.eval") {

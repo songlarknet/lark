@@ -58,14 +58,16 @@ object Obc:
       def ppr = "skip"
 
     /** Method call on a sub-object of the current instance.
-     * The assigns list can refer to local or return variables in the current
-     * method. Instance refers to an object instance in the current class.
-     * The method implementation is statically determined by the type of the
-     * object instance.
+     * The storage name refers to a local output record that will contain the
+     * results. It can be None for calls that have no results. Instance refers
+     * to an object instance in the current class. The method implementation is
+     * statically determined by the type of the object instance.
      */
-    case class Call(assigns: List[names.Component], klass: names.Ref, method: names.Component, instance: names.Component, args: List[Exp]) extends Statement:
+    case class Call(storage: Option[names.Component], klass: names.Ref, method: names.Component, instance: names.Component, args: List[Exp]) extends Statement:
       def ppr =
-        pretty.tupleP(assigns) <+> pretty.gets <+>
+        (storage match
+          case Some(s) => s.ppr <+> pretty.gets <> pretty.space
+          case None => pretty.emptyDoc) <>
           klass.ppr <> pretty.text("::") <> method.ppr <>
           pretty.tupleP(instance :: args)
 
@@ -73,22 +75,34 @@ object Obc:
     def concat(is: List[Statement]): Statement =
       is.fold(Skip)(_ <> _)
 
+  /** Local storage for the output of a method call. */
+  final case class Storage(
+    name:   names.Component,
+    klass:  names.Ref,
+    method: names.Component
+  ) extends pretty.Pretty:
+    def ppr =
+      name.ppr <> pretty.colon <+> klass.ppr <> pretty.colon <> pretty.colon <> method.ppr
+
   final case class Method(
     name:    names.Component,
     params:  List[Sort.Sorted],
     returns: List[Sort.Sorted],
     locals:  List[Sort.Sorted],
+    storage: List[Storage],
     body:    Statement,
   ) extends pretty.Pretty:
     def ppr =
       pretty.text("method ") <+> name.ppr <> pretty.tupleP(params) <@>
       pretty.text("returns") <+> pretty.tupleP(returns) <@>
-      pretty.text("locals ") <+> pretty.tupleP(locals) <> pretty.colon <@>
+      pretty.text("locals ") <+> pretty.tupleP(locals) <@>
+      pretty.text("storage ") <+> pretty.tupleP(storage) <> pretty.colon <@>
       pretty.indent(body.ppr)
 
     val paramsMap  = SortedMap.from(params.map(_.tuple))
     val returnsMap = SortedMap.from(returns.map(_.tuple))
     val localsMap  = SortedMap.from(locals.map(_.tuple))
+    val storageMap = SortedMap.from(storage.map(s => s.name -> s))
 
   object Method:
     val reset: names.Component =

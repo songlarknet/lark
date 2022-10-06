@@ -14,10 +14,11 @@ import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 
 import scala.collection.immutable.SortedMap
+import java.nio.file.{Path, Files, Paths}
 
 /** Compile a program to executable code. */
 object Compile:
-  def compile()(f: Node.Invocation => Node): Unit =
+  def compile(basename: String = "lack", output: Option[Path] = None)(f: Node.Invocation => Node): Unit =
     val top = lack.meta.core.node.Builder.Node.top()
     given builder: Builder = new Builder(top)
     builder.invoke(f)
@@ -26,17 +27,26 @@ object Compile:
     val scheds = schedules(frozen)
     val obcs = core.obc.FromNode.program(frozen, scheds)
 
-    core.obc.Check.program(obcs, core.obc.Check.Options())
-
-    val opts = core.target.C.Options(basename = "lack", classes = obcs)
-    val doc  = core.target.C.header(opts)
-    val src  = core.target.C.source(opts)
-    println(pretty.layout(doc))
-    println(pretty.layout(src))
     // obcs.foreach { case (k,v) =>
     //   println(s"Node ${k.pprString}")
     //   println(pretty.layout(pretty.indent(v.ppr)))
     // }
+
+    core.obc.Check.program(obcs, core.obc.Check.Options())
+
+    val opts   = core.target.C.Options(basename = basename, classes = obcs)
+    val header = core.target.C.header(opts)
+    val source = core.target.C.source(opts)
+
+    output match
+      case None =>
+        println(pretty.layout(header))
+        println(pretty.layout(source))
+      case Some(p) =>
+        val h = p.resolve(basename + ".h")
+        val c = p.resolve(basename + ".c")
+        Files.writeString(h, pretty.layout(header))
+        Files.writeString(c, pretty.layout(source))
 
 
   def printSchedules()(f: Node.Invocation => Node): Unit =

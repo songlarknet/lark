@@ -2,12 +2,13 @@ package lack.meta.core.obc
 
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
+import lack.meta.base.collection.MultiMap
 
 import lack.meta.core.Sort
 import lack.meta.core.term.Exp
 import lack.meta.core.term
 
-import lack.meta.core.obc.Obc.{Statement, Method, Class}
+import lack.meta.core.obc.Obc.{Statement, Method, Class, Storage}
 
 import scala.collection.immutable.SortedMap
 
@@ -20,11 +21,45 @@ object Check:
     self: Class
   )
 
+  /** Options for typechecking programs.
+   *
+   * @param callsReturnLocals
+   *  If true, the storage struct returned by method calls will also include
+   *  local variables, including the method call's nested method calls. This
+   *  option is useful when invariants need to refer to variables deep inside
+   *  another node.
+   *
+   * @param exp
+   *  Term typechecking options including whether to perform integer bounds
+   *  checks on literal integers (checkRefinement).
+   */
   case class Options(
+    callsReturnLocals: Boolean = false,
     exp: term.Check.Options = term.Check.Options()
   )
 
-  def statement(env: Env, s: Statement, options: Options): Unit = s match
+  /** Get the value environment for a given local method result storage struct.
+   * This is usually just the method's return values. If we enable sneaky
+   * invariant mode (callsReturnLocals) then the caller is able to inspect all
+   * of the called method's local variables, including nested calls.
+   */
+  def heapOfStorage(env: Env, prefix: names.Prefix, storage: Storage, options: Options): term.Check.Env =
+    val pfx = names.Prefix(prefix.prefix ++ List(storage.name))
+    val c = except.getEntry("class", storage.klass, env.classes)
+    val m = except.getEntry("method", storage.method, c.methodsMap)
+
+    if !options.callsReturnLocals
+    then SortedMap.from(
+        m.returns.map { kv =>
+          pfx(kv.name) -> kv.sort
+        })
+    else SortedMap.from(
+        (m.params ++ m.returns ++ m.locals).map { kv =>
+          pfx(kv.name) -> kv.sort
+        }) ++
+        m.storageMap.flatMap(s => heapOfStorage(env, pfx, s._2, options))
+
+  def statement(env: Env, m: Method, s: Statement, options: Options): Unit = s match
     case Statement.Assign(x, e) =>
       val xs = except.getEntry("variable",
         names.Ref.fromComponent(x), env.values)
@@ -38,43 +73,57 @@ object Check:
     case Statement.Ite(p, t, f) =>
       val ps = term.Check.exp(env.values, p, options.exp)
       except.assertEqual(p.ppr, ps, Sort.Bool)
-      statement(env, t, options)
-      statement(env, f, options)
+      statement(env, m, t, options)
+      statement(env, m, f, options)
     case Statement.Seq(p, q) =>
-      statement(env, p, options)
-      statement(env, q, options)
+      statement(env, m, p, options)
+      statement(env, m, q, options)
     case Statement.Skip =>
     case c: Statement.Call =>
       val i = except.getEntry("instance",
         c.instance, env.self.objectsMap)
       val k = except.getEntry("class",
         c.klass, env.classes)
-      val m = except.getEntry("method",
+      val target = except.getEntry("method",
         c.method, k.methodsMap)
 
-      c.assigns.zip(m.returns).foreach { case (o,r) =>
-        val os = except.getEntry("variable",
-          names.Ref.fromComponent(o), env.values)
-        except.assertEqual(
-          pretty.text(s"method call ${c.klass}::${c.method} return value ${r.name} bound to ${o}"),
-          os, r.sort)
-      }
-
-      c.args.zip(m.params).foreach { case (a,p) =>
+      c.args.zip(target.params).foreach { case (a,p) =>
         val as = term.Check.exp(env.values, a, options.exp)
         except.assertEqual(
-          pretty.text(s"method call ${c.klass}::${c.method} parameter ${p.name} bound to") <+> a.ppr,
+          pretty.text(s"method call ${c.klass.pprString}::${c.method.pprString} parameter ${p.name.pprString} bound to") <+> a.ppr,
           as, p.sort)
       }
 
+      c.storage match
+        case None =>
+        case Some(s) =>
+          val st = except.getEntry("storage", s, m.storageMap)
+          if st.klass != c.klass || st.method != c.method
+          then throw new except.CheckException(
+            s"method call ${c.klass.pprString}::${c.method.pprString} tried to store result in ${s.pprString} of type ${st.klass.pprString}::${st.method.pprString} ")
+
   def method(env: Env, m: Method, options: Options): Unit =
     try
+      val allNames =
+        (m.params ++ m.returns ++ m.locals).map { kv => kv.name -> kv.ppr} ++
+        m.storage.map { s => s.name -> s.ppr }
+      val distinct =
+        MultiMap(allNames.map { kv => kv._1 -> List(kv._2) } : _*).entries
+        .filter { kv => kv._2.length > 1 }
+
+      if (distinct.nonEmpty) {
+        throw new except.DuplicateVariablesException(distinct.map(_._2).toList)
+      }
+
       val v0 = env.values
       val v1 = SortedMap.from((m.params ++ m.returns ++ m.locals).map { kv =>
         names.Ref.fromComponent(kv.name) -> kv.sort
       })
-      val envX = env.copy(values = v0 ++ v1)
-      statement(envX, m.body, options)
+      val v2 = m.storage.map(heapOfStorage(env, names.Prefix(List()), _, options))
+        .fold(SortedMap.empty[names.Ref, Sort])(_ ++ _)
+
+      val envX = env.copy(values = v0 ++ v1 ++ v2)
+      statement(envX, m, m.body, options)
     catch
       case e: Exception =>
         throw new except.InMethod(env.self, m, e)
@@ -85,6 +134,7 @@ object Check:
     options: Options
   ): Unit =
     try
+      // TODO initial heap should include substates too if sneaky invariants enabled
       val pfx = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("self"))))
       val v0 = SortedMap.from(self.fields.map { kv =>
         pfx(kv.name) -> kv.sort
@@ -109,6 +159,10 @@ object Check:
     class NoSuchVariableException(x: names.Component, env: term.Check.Env) extends CheckException(
       s"""No such variable ${x.pprString}.
         |Environment: ${names.Namespace.fromMap(env).pprString}""".stripMargin)
+
+    class DuplicateVariablesException(dups: List[List[pretty.Doc]]) extends CheckException(
+      s"""Variable name clash. Name shadowing is not permitted.
+        |${pretty.layout(pretty.indent(pretty.vsep(dups.map(pretty.tuple(_)))))}""".stripMargin)
 
     class NoSuchEntryException[K <: pretty.Pretty: scala.math.Ordering, V](
       typ: String,

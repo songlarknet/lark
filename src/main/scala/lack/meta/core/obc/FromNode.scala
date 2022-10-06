@@ -8,7 +8,7 @@ import lack.meta.core.term.{Exp, Flow, Val, Compound}
 import lack.meta.core.term
 import lack.meta.core.node.{Node, Schedule, Variable}
 
-import lack.meta.core.obc.Obc.{Statement, Method, Class}
+import lack.meta.core.obc.Obc.{Statement, Method, Class, Storage}
 
 import scala.collection.immutable.SortedMap
 
@@ -61,8 +61,7 @@ object FromNode:
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
-          val locals   = List()
-          Statement.Call(locals, klass = subnode.name, method = Method.reset, instance = instance, args = List())
+          Statement.Call(None, klass = subnode.name, method = Method.reset, instance = instance, args = List())
         case None =>
           val Some(st) = fields(entry, node)
           Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
@@ -83,9 +82,8 @@ object FromNode:
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
-          val locals   = FromNode.Subnode.locals(instance, subnode).map(_._2.name)
           val args     = sub.args.map(subst)
-          Statement.Call(locals, klass = subnode.name, method = Method.step, instance = instance, args = args)
+          Statement.Call(Some(instance), klass = subnode.name, method = Method.step, instance = instance, args = args)
         case None =>
           Statement.Skip
 
@@ -123,19 +121,14 @@ object FromNode:
             r.clock, reset, Statement.Skip
           ) <> statement
 
-  object Subnode:
-    /** Get the extra local variables bound by subnode invocations. */
-    def locals(sub: names.Component, subnode: Node): List[(names.Ref, Sort.Sorted)] =
-      val returns = subnode.vars.filter { case (k,v) => v.mode == Variable.Output }
-      returns.map { case (k,v) =>
-        names.Ref(List(sub), k) -> Sort.Sorted(makeSubnodeReturnName(sub, k), v.sort)
-      }.toList
-
-    /** Make a local name for subnode return. */
-    def makeSubnodeReturnName(sub: names.Component, returns: names.Component): names.Component =
-      // TODO need fresh name supply
-      val prefix = sub.symbol.toString() + sub.ix.fold("")(i => "$" + i)
-      names.Component(names.ComponentSymbol.fromScalaSymbol(prefix + "$" + returns.symbol.toString), returns.ix)
+    def storage(entry: Schedule.Entry, node: Node): List[Storage] =
+      entry.binding(node) match
+        case Some((sub: Node.Binding.Subnode, ctx)) =>
+          val instance = sub.subnode
+          val subnode  = node.subnodes(instance)
+          List(Storage(instance, subnode.name, Method.step))
+        case Some((Node.Binding.Equation(lhs, eq), ctx)) => List()
+        case None => List()
 
   object Methods:
     def reset(n: Node, schedule: Schedule): Method =
@@ -144,7 +137,7 @@ object FromNode:
       yield Entry.reset(e, n)
 
       Method(Method.reset,
-        List(), List(), List(),
+        List(), List(), List(), List(),
         Statement.concat(inits))
 
     def step(n: Node, schedule: Schedule): (Method, List[Prop.Judgment]) =
@@ -162,16 +155,13 @@ object FromNode:
         vars(n.vars.filter(kv => kv._2.mode != Variable.Output &&
           kv._2.mode != Variable.Argument &&
           kv._2.mode != Variable.Forall))
-      val localsX = for
-        (s, sn) <- n.subnodes.toList
-        l <- Subnode.locals(s, sn)
-      yield l
 
-      val substMap = SortedMap.from(localsX.map { case (k,v) =>
-        k -> Compound.var_(v.sort, names.Ref(List(), v.name))
-      })
+      // val substMap = SortedMap.from(localsX.map { case (k,v) =>
+      //   k -> Compound.var_(v.sort, names.Ref(List(), v.name))
+      // })
+      // TODO kill subst, clean props
       def subst(e: Exp): Exp =
-        Compound.subst(substMap, e)
+        e
 
       val evals = for
         e <- schedule.entries
@@ -186,8 +176,13 @@ object FromNode:
         updateX = Entry.path(e, n, Statement.Skip, update, subst)
       yield updateX
 
+      val storage = for
+        e <- schedule.entries
+        s <- Entry.storage(e, n)
+      yield s
+
       val m = Method(Method.step,
-        params, returns, locals ++ localsX.map(_._2),
+        params, returns, locals, storage,
         Statement.concat(evals) <> Statement.concat(updates))
 
       val props =

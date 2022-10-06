@@ -3,11 +3,14 @@ package lack.meta.core.target
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
 
+import lack.meta.core.target.c.{Printer => P}
+
 import lack.meta.core.Sort
 import lack.meta.core.term
 import lack.meta.core.term.{Exp, Val}
 import lack.meta.core.node.{Node, Schedule, Variable}
 
+import lack.meta.core.obc
 import lack.meta.core.obc.Obc.{Statement, Method, Class}
 
 import scala.collection.immutable.SortedMap
@@ -19,7 +22,8 @@ object C:
     basename: String,
     classes:  names.immutable.RefMap[Class],
     includes: List[String] = List("#include <lack.h>"),
-    version: String = "v0" // TODO hook version numbers up to git and ci
+    version: String = "v0", // TODO hook version numbers up to git and ci
+    check: obc.Check.Options = obc.Check.Options()
   )
 
   def header(options: Options): pretty.Doc =
@@ -45,76 +49,47 @@ object C:
       "") ++ options.includes ++ List("")
     pretty.vsep(lines.map(pretty.text(_)))
 
-  object Base:
-    def state(klass: names.Ref): names.Ref = names.Ref(
-      klass.fullyQualifiedPath,
-      names.Component(names.ComponentSymbol.fromScalaSymbol("state")))
+  object Names:
+    def state(klass: names.Ref): names.Ref =
+      P.Ident.suffix(klass, "state")
+    def stateP(klass: names.Ref) = P.Ident.ref(state(klass))
 
-    def out(name: names.Ref): names.Ref = names.Ref(
-      name.fullyQualifiedPath,
-      names.Component(names.ComponentSymbol.fromScalaSymbol("out")))
-
-    def sort(s: Sort): pretty.Doc = s match
-      case Sort.Bool => "bool"
-      case b: Sort.BoundedInteger => pretty.text(
-        (if b.signed then "int" else "uint") +
-        b.width.toString + "_t")
-      case Sort.Real =>
-        // TODO UNSOUND: compiling reals to floats for now
-        pretty.text("float32_unsound_t")
-      case Sort.ArbitraryInteger =>
-        throw new except.BigNumberException("Sort", s.ppr)
-
-    val void = pretty.text("void")
-
-    def ptr(doc: pretty.Doc): pretty.Doc =
-      doc <> "*"
-
-    def deref(ptr: pretty.Doc, field: pretty.Doc): pretty.Doc =
-      ptr <> "->" <> field
-
-    def field(struct: pretty.Doc, field: pretty.Doc): pretty.Doc =
-      struct <> "." <> field
+    def out(name: names.Ref): names.Ref =
+      P.Ident.suffix(name, "out")
+    def outP(name: names.Ref) = P.Ident.ref(out(name))
 
   object Header:
-    def struct(n: names.Ref, fields: pretty.Doc): pretty.Doc =
-      pretty.text("typedef struct {") <@>
-        pretty.indent(fields) <@>
-      pretty.text("}") <+> Ident.ref(n) <> pretty.semi
-
     def state(k: Class): pretty.Doc =
       val objectsP = k.objects.map { case (k,v) =>
-        Ident.ref(Base.state(v)) <+> Ident.component(k) <> pretty.semi
+        P.Decl.var_(k, Names.state(v))
       }
       val fieldsP = k.fields.map { kv =>
-        Base.sort(kv.sort) <+> Ident.component(kv.name) <> pretty.semi
+        P.Decl.var_(kv.name, kv.sort)
       }
 
-      struct(Base.state(k.name),
-        pretty.vsep(objectsP ++ fieldsP))
+      P.Decl.struct(Names.state(k.name), objectsP ++ fieldsP)
 
     def method(k: Class, m: Method): pretty.Doc =
       val name = names.Ref(k.name.fullyQualifiedPath, m.name)
 
       val (struct_decl, ret_ty, ret_args) = m.returns match
-        case List() => (List(), Base.void, List())
-        case List(r) => (List(), Base.sort(r.sort), List())
+        case List() => (List(), P.Type.void, List())
         case rets =>
+          // TODO sneaky invariant mode declare nested fields here
           val fieldsP = rets.map { kv =>
-            Base.sort(kv.sort) <+> Ident.component(kv.name) <> pretty.semi
+            P.Decl.var_(kv.name, kv.sort)
           }
-          val out = struct(Base.out(name),
-            pretty.vsep(fieldsP))
-          (List(out), Base.void, List(Base.ptr(Ident.ref(Base.out(name)))))
+          val out = P.Decl.struct(Names.out(name), fieldsP)
+          (List(out), P.Type.void, List(P.Type.ptr(Names.outP(name))))
 
       val argsP =
-        Base.ptr(Ident.ref(Base.state(k.name))) ::
-          m.params.map { kv => Base.sort(kv.sort) <+> Ident.component(kv.name) } ++
+        P.Type.ptr(Names.stateP(k.name)) ::
+          m.params.map { kv => P.Type.sort(kv.sort) <+> P.Ident.component(kv.name) } ++
           ret_args
 
       pretty.vsep(
         struct_decl ++
-        List(ret_ty <+> Ident.ref(name) <> pretty.tuple(argsP) <> pretty.semi)
+        List(P.Decl.fun(ret_ty, name, argsP))
       ) <> pretty.line
 
     def klass(k: Class): pretty.Doc =
@@ -125,7 +100,7 @@ object C:
   object Source:
     def freshen(base: String, used: List[names.Component]) =
       val baseS = base
-      val usedS = used.map(Ident.componentString)
+      val usedS = used.map(P.Ident.componentString(_))
       if !usedS.contains(baseS)
       then pretty.text(baseS)
       else
@@ -152,7 +127,7 @@ object C:
       case Val.Int(i) =>
         pretty.value(i)
       case _ =>
-        throw new except.BigNumberException("value", v.ppr)
+        throw new P.except.BigNumberException("value", v.ppr)
 
     def binop(prim: term.Prim): (String, Int) =
       import term.prim.Table._
@@ -182,15 +157,11 @@ object C:
 
     def exp(self: pretty.Doc, e: Exp, p: Int): pretty.Doc = e match
       case Exp.Var(_, r) => r.prefix match
-        case self_
-         if self_ == Class.self.prefix =>
-          Base.deref(self, Ident.component(r.name))
-        case List() =>
-          Ident.component(r.name)
+        case self_ :: rest
+         if List(self_) == Class.self.prefix =>
+          P.Term.fieldptr(self, P.Term.fields(rest, r.name))
         case _ =>
-          lack.meta.base.assertions.impossible(
-            "Ill-formed variable reference in Obc expression",
-            "exp" -> e)
+          P.Term.fields(r.prefix, r.name)
       case Exp.Val(v) => val_(v)
 
       // TODO: do we need to insert casts?
@@ -202,7 +173,7 @@ object C:
       case Exp.App(_, term.prim.Table.Not, a) =>
         pretty.text("!") <> nest(self, a, p, 2)
       case Exp.App(_, term.prim.Table.Implies, a, b) =>
-        pretty.text("lack_implies") <> pretty.tuple(List(exp(self, a, COMMA_PREC), exp(self, b, COMMA_PREC)))
+        P.Term.fun("lack_implies", List(exp(self, a, COMMA_PREC), exp(self, b, COMMA_PREC)))
       case Exp.App(_, op, a, b) =>
         val (o, pp) = binop(op)
         nest(self, a, p, pp) <+> o <+> nest(self, b, p, pp + 1)
@@ -216,130 +187,82 @@ object C:
     def exp(self: pretty.Doc, e: Exp): pretty.Doc = exp(self, e, PARENS_PREC)
 
     def statement(self: pretty.Doc, s: Statement, options: Options): pretty.Doc = s match
+      case Statement.Skip =>
+        pretty.emptyDoc
+      case Statement.Seq(p, q) =>
+        statement(self, p, options) <@>
+          statement(self, q, options)
       case Statement.Assign(name, e) =>
-        Ident.component(name) <+> pretty.equal <+> exp(self, e) <> pretty.semi
+        P.Stm.assign(P.Ident.component(name), exp(self, e))
       case Statement.AssignSelf(name, e) =>
-        Base.deref(self, Ident.component(name)) <+> pretty.equal <+> exp(self, e) <> pretty.semi
+        P.Stm.assign(P.Term.fieldptr(self, name), exp(self, e))
       case Statement.Ite(p, t, f) =>
         val else_ = f match
-          case Statement.Skip => pretty.emptyDoc
-          case _ => pretty.text("else") <+> "{" <@>
-            pretty.indent(statement(self, f, options)) <@>
-           "}"
+          case Statement.Skip => None
+          case _ => Some(statement(self, f, options))
+        P.Stm.if_(exp(self, p), statement(self, t, options), else_)
 
-        pretty.text("if") <+> pretty.parens(exp(self, p)) <+> "{" <@>
-          pretty.indent(statement(self, t, options)) <@>
-        "}" <> else_
       case Statement.Call(assigns, klass, method, instance, args) =>
         val name  = names.Ref(klass.fullyQualifiedPath, method)
-        val nameP = Ident.ref(name)
-        val instP = Base.deref(self, Ident.component(instance))
+        val instP = P.Term.address(P.Term.fieldptr(self, instance))
         val argsP = args.map(exp(self, _))
-        assigns match
-          case List() =>
-            nameP <> pretty.tuple(instP :: argsP) <> pretty.semi
-          case List(o) =>
-            Ident.component(o) <+> pretty.equal <+> nameP <> pretty.tuple(instP :: argsP) <> pretty.semi
-          case _ =>
-            val outT = Ident.ref(Base.out(name))
-            val outV = Ident.component(instance)
-            val meth = options.classes(klass).methods.find(_.name == method).get
-            val assignsP = assigns.zip(meth.returns).map { case (a, r) =>
-              Ident.component(a) <+> pretty.equal <+> Base.field(outV, Ident.component(r.name)) <> pretty.semi
-            }
-            outT <+> outV <> pretty.semi <@>
-              nameP <> pretty.tuple(instP :: argsP ++ List(pretty.ampersand <> outV)) <> pretty.semi <@>
-              pretty.vsep(assignsP)
+        val outT = Names.outP(name)
+        val outV = P.Ident.component(instance)
+        val meth = options.classes(klass).methodsMap(method)
+        (assigns, meth.returns) match
+          case (None, List()) =>
+            P.Stm.fun(name, instP :: argsP)
+          case (Some(_), List()) =>
+            P.Stm.fun(name, instP :: argsP)
+          case (None, _ :: _) =>
+            val discard = pretty.text("$$discard")
+            P.Stm.block(
+              outT <+> discard <> pretty.semi <@>
+              P.Stm.fun(name, instP +: argsP :+ discard)
+            )
+          case (Some(storage), _ :: _) =>
+            P.Stm.fun(name, instP +: argsP :+ P.Term.address(P.Ident.component(storage)))
 
-      case Statement.Seq(p, q) =>
-        statement(self, p, options) <@> statement(self, q, options)
-      case Statement.Skip => pretty.emptyDoc
 
 
     def method(k: Class, m: Method, options: Options): pretty.Doc =
       val name = names.Ref(k.name.fullyQualifiedPath, m.name)
-      val used = (m.params ++ m.returns ++ m.locals).map(_.name)
+      val used = (m.params ++ m.returns ++ m.locals).map(_.name) ++ m.storage.map(_.name)
       val self = freshen("self", used)
       val out  = freshen("out", used)
 
       val (ret_ty, ret_args, ret_stms) = m.returns match
         case List() =>
-          (Base.void, List(), List())
-        case List(r) =>
-          val stm = pretty.text("return") <+> Ident.component(r.name) <> pretty.semi
-          (Base.sort(r.sort), List(), List(stm))
+          (P.Type.void, List(), List())
         case rets =>
           val stms = rets.map { r =>
-            Base.deref(out, Ident.component(r.name)) <+> pretty.equal <+> Ident.component(r.name) <> pretty.semi
+            P.Stm.assign(P.Term.fieldptr(out, r.name), P.Ident.component(r.name))
           }
-          (Base.void, List(Base.ptr(Ident.ref(Base.out(name))) <+> out), stms)
+          (P.Type.void, List(P.Type.ptr(Names.outP(name)) <+> out), stms)
 
       val argsP =
-        (Base.ptr(Ident.ref(Base.state(k.name))) <+> self) ::
-          m.params.map { kv => Base.sort(kv.sort) <+> Ident.component(kv.name) } ++
+        (P.Type.ptr(Names.stateP(k.name)) <+> self) ::
+          m.params.map { kv => P.Type.sort(kv.sort) <+> P.Ident.component(kv.name) } ++
           ret_args
 
-      val allocs = (m.locals ++ m.returns).map { case kv =>
-        Base.sort(kv.sort) <+> Ident.component(kv.name) <> pretty.semi
+      val locals = (m.locals ++ m.returns).map { case kv =>
+        P.Decl.var_(kv.name, kv.sort)
+      }
+      val storage = m.storage.map { case s =>
+        val out = Names.outP(names.Ref(s.klass.fullyQualifiedPath, s.method))
+        P.Decl.var_(s.name, out)
       }
 
       val stms =
-        allocs ++
+        locals ++
+        storage ++
         List(Source.statement(self, m.body, options)) ++
         ret_stms
 
-      ret_ty <+> Ident.ref(name) <> pretty.tuple(argsP) <@>
-        pretty.text("{") <@>
-        pretty.indent(
-          pretty.vsep(stms)
-        ) <@>
-        pretty.text("}") <@>
-        pretty.emptyDoc
+      ret_ty <+> P.Ident.ref(name) <> pretty.tuple(argsP) <>
+        P.Stm.block(pretty.vsep(stms)) <>
+        pretty.line
 
     def klass(k: Class, options: Options): pretty.Doc =
       val methods = k.methods.map(method(k, _, options))
       pretty.vsep(methods)
-
-  /** Identifiers
-   * Properties we want:
-   * *  "nice" identifiers containing only alpha, digit and underscore should be passed as-is
-   * * encode is injective
-   * * encode contains only alpha, digit, underscore and dollar
-   * * I don't care how ugly other chars get
-   *
-   * Examples:
-   * > component(grebe)       = grebe
-   * > component(grebe?0)     = grebe$0
-   * > component(name<weird>) = $$name$$3cweird$$3e
-   * > ref(crested.grebe)     = crested$grebe
-   * > ref(crested.grebe?1)   = crested$grebe$1
-   * > ref(cre$ted?0.grebe)   = cre$$24ted$0$grebe
-   */
-  object Ident:
-    /** Pretty-print a qualified identifier. */
-    def ref(r: names.Ref): pretty.Doc =
-      r.fullyQualifiedPath.map(componentString(_)).mkString("$")
-
-    /** Pretty-print a simple identifier. */
-    def component(c: names.Component): pretty.Doc =
-      componentString(c)
-
-    def componentString(c: names.Component): String =
-      encode(c.symbol.toString) + (c.ix.fold("")(i => "$" + i))
-
-    def encode(s: String): String =
-      val enc = s.flatMap(encodeChar(_))
-      if enc.length == s.length
-      then s
-      else "$$" + enc
-
-    def encodeChar(c: Char): String =
-      if c.isLetter || c.isDigit || c == '_'
-      then c.toString
-      else "$$" + f"${c.toInt}%02X"
-
-  object except:
-    class BigNumberException(typ: String, doc: pretty.Doc) extends Exception(
-      s"""Arbitrary-precision integers can't be compiled to C.
-          |${typ}: ${pretty.layout(doc)}
-          |""".stripMargin)
