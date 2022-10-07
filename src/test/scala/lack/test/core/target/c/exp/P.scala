@@ -23,10 +23,10 @@ import scala.collection.immutable.SortedMap
 class P extends HedgehogSuite:
   val g = lack.test.core.term.exp.G(lack.test.core.term.prim.G())
 
-  property("raw expressions eval OK (refines enabled & discarded)") {
+  property("raw expressions eval OK (refines enabled & discarded)", grind = Some(1)) {
     for
-      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.nofloats).ppr("env")
-      s    <- g.sort.runtime.nofloats.ppr("sort")
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")
+      s    <- g.sort.runtime.all.ppr("sort")
 
       e    <- g.raw(env, s).ppr("e")
 
@@ -45,11 +45,19 @@ class P extends HedgehogSuite:
         for
           (e,i) <- List(e).zipWithIndex
           vi = pretty.text("$$") <> pretty.value(i)
-          expect = vi <+> pretty.text("==") <+> C.Source.val_(v)
+          expect =
+            s match
+              // Use approximate equality for floats. This only makes sense for
+              // continuous expressions but hopefully expressions with
+              // branching won't be too near the threshold.
+              case Sort.Real =>
+                Pr.Term.fun("lack_float_approx", List(vi, C.Source.val_(v)))
+              case _ =>
+                vi <+> pretty.text("==") <+> C.Source.val_(v)
         yield
           Pr.Type.sort(s) <+> vi <+> pretty.equal <+>
             C.Source.exp(self, e) <> pretty.semi <@>
-          Pr.Term.fun("assert", List(expect)) <> pretty.semi
+            Pr.Term.fun("assert", List(expect)) <> pretty.semi
       }
 
       code <- Property.ppr(pretty.vsep(
