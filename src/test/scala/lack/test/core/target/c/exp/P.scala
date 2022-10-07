@@ -23,27 +23,50 @@ import scala.collection.immutable.SortedMap
 class P extends HedgehogSuite:
   val g = lack.test.core.term.exp.G(lack.test.core.term.prim.G())
 
-  property("raw expressions eval OK (refines enabled & discarded)", grind = Some(1)) {
+  property("bounded is as bounded does", grind = Some(100), withConfig = p => p.copy(discardLimit = hedgehog.core.DiscardCount(1000))) {
     for
       env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")
       s    <- g.sort.runtime.all.ppr("sort")
 
       e    <- g.raw(env, s).ppr("e")
+      eX   <- Property.try_ {
+        term.Bounded.bound(e).annotated
+      }.ppr("eX")
+
+      heap <- g.val_.heap(env).ppr("heap")
+
+      vX <- Property.try_ {
+        Eval.exp(heap, eX, Eval.Options(checkRefinement = true))
+      }.ppr("vX")
+
+      v <- Property.ppr(Eval.exp(heap, eX, Eval.Options(checkRefinement = true)), "v")
+    yield
+      Result.assert(v == vX)
+  }
+
+  property("raw expressions eval OK (refines enabled & discarded)", grind = Some(100), withConfig = p => p.copy(discardLimit = hedgehog.core.DiscardCount(1000))) {
+    for
+      env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")
+      s    <- g.sort.runtime.all.ppr("sort")
+
+      e    <- g.raw(env, s).ppr("e")
+      eX   <- Property.try_ {
+        term.Bounded.bound(e).annotated
+      }.ppr("eX")
 
       heap <- g.val_.heap(env).ppr("heap")
 
       v <- Property.try_ {
-        Eval.exp(heap, e, Eval.Options(checkRefinement = true))
+        Eval.exp(heap, eX, Eval.Options(checkRefinement = true))
       }.ppr("v")
 
       self = pretty.text("NO_SELF_ACCESS")
-      binds <- Property.try_ {
+      binds =
         for (k, v) <- heap
-        yield Pr.Type.sort(v.sort) <+> Pr.Ident.component(k.name) <+> pretty.equal <+> C.Source.val_(v) <> pretty.semi
-      }
-      asserts <- Property.try_ {
+        yield Pr.Type.sort(v.sort) <+> Pr.Ident.component(k.name) <+> pretty.equal <+> C.Term.val_(v) <> pretty.semi
+      asserts =
         for
-          (e,i) <- List(e).zipWithIndex
+          (e,i) <- List(eX).zipWithIndex
           vi = pretty.text("$$") <> pretty.value(i)
           expect =
             s match
@@ -51,14 +74,13 @@ class P extends HedgehogSuite:
               // continuous expressions but hopefully expressions with
               // branching won't be too near the threshold.
               case Sort.Real =>
-                Pr.Term.fun("lack_float_approx", List(vi, C.Source.val_(v)))
+                Pr.Term.fun("lack_float_approx", List(vi, C.Term.val_(v)))
               case _ =>
-                vi <+> pretty.text("==") <+> C.Source.val_(v)
+                vi <+> pretty.text("==") <+> C.Term.val_(v)
         yield
           Pr.Type.sort(s) <+> vi <+> pretty.equal <+>
-            C.Source.exp(self, e) <> pretty.semi <@>
+            C.Term.exp(self, e) <> pretty.semi <@>
             Pr.Term.fun("assert", List(expect)) <> pretty.semi
-      }
 
       code <- Property.ppr(pretty.vsep(
         binds.toList ++ List(pretty.emptyDoc) ++ asserts.toList

@@ -43,7 +43,9 @@ object Cbmc:
     pb
 
   val arith_checks =
-    List("--div-by-zero-check", "--signed-overflow-check", "--unsigned-overflow-check", "--conversion-check")
+    // Disable unsigned-overflow-check as "-0u" triggers it, but since the value is OK it doesn't trigger the evaluator.
+    List("--div-by-zero-check", "--signed-overflow-check", "--conversion-check")
+    // List("--div-by-zero-check", "--signed-overflow-check", "--unsigned-overflow-check", "--conversion-check")
   val trace =
     List("--compact-trace")
   val dCBMC =

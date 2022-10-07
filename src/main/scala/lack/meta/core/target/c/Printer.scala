@@ -135,6 +135,21 @@ object Printer:
       then c.toString
       else "$$" + f"${c.toInt}%02X"
 
+    def freshen(base: String, used: List[names.Component]): pretty.Doc =
+      val baseS = base
+      val usedS = used.map(componentString(_))
+      if !usedS.contains(baseS)
+      then pretty.text(baseS)
+      else
+        val fresh =
+          for
+            k <- 1 to 100
+            baseK = baseS + "$" + k
+            if !usedS.contains(baseK)
+          yield pretty.text(baseK)
+        fresh.headOption.getOrElse(
+          throw new Exception(s"Can't generate free variable for ${base} while avoiding set ${usedS}"))
+
   object except:
     class BigNumberException(typ: String, doc: pretty.Doc) extends Exception(
       s"""Arbitrary-precision integers can't be compiled to C.
