@@ -35,7 +35,9 @@ object G:
         Gen.constant(Val.Real(0)),
         Gen.constant(Val.Real(1)),
         Gen.constant(Val.Real(-1)),
-        Gen.rational32(Range.linearFrom(0, -10000, 10000), Range.constant(10, 10)).map(Val.Real(_))
+        // Generate rationals with a constant denominator of 4. This should
+        // give nice counterexamples with no decimal conversion error.
+        Gen.rational32(Range.linearFrom(0, -10000, 10000), Range.constant(4, 4)).map(Val.Real(_))
       )
 
   def niceInts(minInclusive: num.Integer, maxInclusive: num.Integer): Gen[num.Integer] =

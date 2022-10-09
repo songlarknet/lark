@@ -45,7 +45,13 @@ object Bounded:
     /** For a primitive that takes logically unbounded arguments, apply to bounded arguments. */
     case class ReboundApp(original: Exp.App, repr: Sort, args: List[BEX]) extends BEX:
       def annotated =
-        val argsU = args.map(a => Exp.Cast(Exp.Cast.Unbox(a.original.sort), a.annotated))
+        val argsU = args.map { a =>
+          a.repr match
+            case s: Sort.Refinement =>
+              Exp.Cast(Exp.Cast.Unbox(s.logical), a.annotated)
+            case _ =>
+              a.annotated
+        }
         val app = Exp.App(original.sort, original.prim, argsU : _*)
         repr match
           case s: Sort.Refinement =>
@@ -193,16 +199,16 @@ object Bounded:
               else sort
             BEX.ReboundApp(exp, repr, argsX.toList)
 
-    /** Try to infer representation type without recursing */
-    def inferShallow(exp: Exp): Option[Sort] = exp match
-      case Exp.Cast(Exp.Cast.Unbox(_), sub) =>
-        if isBounded(sub.sort)
-        then Some(sub.sort)
-        else None
-      case _ =>
-        if isBounded(exp.sort)
-        then Some(exp.sort)
-        else None
+  /** Try to infer representation type without recursing */
+  def inferShallow(exp: Exp): Option[Sort] = exp match
+    case Exp.Cast(Exp.Cast.Unbox(_), sub) =>
+      if isBounded(sub.sort)
+      then Some(sub.sort)
+      else None
+    case _ =>
+      if isBounded(exp.sort)
+      then Some(exp.sort)
+      else None
 
   /** Check if a sort has a runtime representation. */
   def isBounded(sort: Sort): Boolean = sort match
@@ -210,6 +216,18 @@ object Bounded:
       false
     case _ =>
       true
+
+  /** Get all subexpressions contained anywhere in the given expression,
+   * including the expression itself. */
+  def allSubexpressions(b: BEX): List[BEX] = b match
+    case _: (BEX.Var | BEX.Val) =>
+      List(b)
+    case b: BEX.App =>
+      b +: b.args.flatMap(allSubexpressions(_))
+    case b: BEX.ReboundApp =>
+      b +: b.args.flatMap(allSubexpressions(_))
+    case b: BEX.ReboundCast =>
+      b +: allSubexpressions(b.sub)
 
   object except:
     class CannotCompileException(message: String) extends Exception(message)

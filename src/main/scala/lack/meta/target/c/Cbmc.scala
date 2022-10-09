@@ -1,4 +1,4 @@
-package lack.test.core.target.c
+package lack.meta.target.c
 
 import lack.meta.base.pretty
 
@@ -6,13 +6,18 @@ import java.nio.file.{Files, Path, Paths}
 import java.lang.ProcessBuilder
 import java.lang.Process
 
+/** Helper for checking code with CBMC.
+ *
+ * This is used for testing.
+ */
 object Cbmc:
-  def check(c: pretty.Doc, options: List[String] = defaults) =
+  /** Check the given C source. Code should be a complete C file. */
+  def check(code: pretty.Doc, options: List[String] = defaults) =
     import java.nio.file.{Files, Paths}
     val tmp = Files.createTempDirectory("lack-cbmc")
     val src = tmp.resolve("input.c")
     val out = tmp.resolve("output.log")
-    Files.writeString(src, pretty.layout(c))
+    Files.writeString(src, pretty.layout(code))
 
     val pb = cbmc(src, options)
     pb.redirectErrorStream(true)

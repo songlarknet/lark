@@ -10,7 +10,7 @@ typedef float float32_unsound_t;
 bool lack_float_approx(float32_unsound_t a, float32_unsound_t b) {
   float32_unsound_t diff = fabs(a - b);
   float32_unsound_t max = fmax(fabs(a), fabs(b));
-  float32_unsound_t eps = 1e-20f;
+  float32_unsound_t eps = 1e-7f;
   float32_unsound_t diffx = max == 0 ? eps : diff / max;
 
   return fabs(diffx) < eps || (fabs(a) < eps && fabs(b) < eps);

@@ -29,7 +29,7 @@ object Val:
    * These values are logically reals, but the compiled runtime
    * representation is a float, which is a bit of a lie. */
   case class Real(r: num.Real) extends Val:
-    def ppr = pretty.value(r)
+    def ppr = pretty.value(r.toDouble)
     def sort = Sort.Real
 
   /** Boxed values that satisfy some predicate. */

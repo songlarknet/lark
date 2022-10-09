@@ -1,9 +1,9 @@
-package lack.meta.core.target
+package lack.meta.target
 
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
 
-import lack.meta.core.target.c.{Printer => P}
+import lack.meta.target.c.{Printer => P}
 
 import lack.meta.core.Sort
 import lack.meta.core.term
@@ -211,10 +211,10 @@ object C:
       case Val.Bool(b) => b.toString
       case Val.Refined(s: Sort.BoundedInteger, Val.Int(i)) =>
         val suffix = (s.signed, s.width) match
-          case (true,  64) => "l"
-          case (false, 64) => "ul"
-          case (true,  32) => ""
-          case (false, 32) => "u"
+          case (true,  64) => "ll"
+          case (false, 64) => "ull"
+          case (true,  32) => "l"
+          case (false, 32) => "ul"
           case (_,     _)  => ""
         pretty.value(i) <> suffix
       case Val.Real(r) => pretty.value(r) <> "f"

@@ -1,4 +1,4 @@
-package lack.meta.core.target.c
+package lack.meta.target.c
 
 import lack.meta.base.{names, pretty}
 import lack.meta.base.names.given
@@ -98,11 +98,13 @@ object Printer:
    * * encode is injective
    * * encode contains only alpha, digit, underscore and dollar
    * * I don't care how ugly other chars get
+   * * keywords get encoded to non-keywords
    *
    * Examples:
    * > component(grebe)       = grebe
    * > component(grebe?0)     = grebe$0
    * > component(name<weird>) = $$name$$3cweird$$3e
+   * > component(if)          = $$if
    * > ref(crested.grebe)     = crested$grebe
    * > ref(crested.grebe?1)   = crested$grebe$1
    * > ref(cre$ted?0.grebe)   = cre$$24ted$0$grebe
@@ -126,7 +128,7 @@ object Printer:
 
     def encode(s: String): String =
       val enc = s.flatMap(encodeChar(_))
-      if enc.length == s.length
+      if enc.length == s.length && !blacklist(s)
       then s
       else "$$" + enc
 
@@ -140,6 +142,8 @@ object Printer:
       val usedS = used.map(componentString(_))
       if !usedS.contains(baseS)
       then pretty.text(baseS)
+      else if !usedS.contains("$$" + baseS)
+      then pretty.text("$$" + baseS)
       else
         val fresh =
           for
@@ -149,6 +153,25 @@ object Printer:
           yield pretty.text(baseK)
         fresh.headOption.getOrElse(
           throw new Exception(s"Can't generate free variable for ${base} while avoiding set ${usedS}"))
+
+    /** Don't use these as variables. */
+    val keywords = Set(
+      // Keywords
+      "_Alignas", "_Alignof", "_Bool", "_Generic", "_Complex", "_Imaginary",
+      "_Static_assert", "__alignof", "__alignof__", "__asm", "__asm__", "__attribute",
+      "__attribute__", "__builtin_va_arg", "__builtin_offsetof", "__const",
+      "__const__", "__extension__", "__inline", "__inline__", "__packed__", "__restrict",
+      "__restrict__", "__signed", "__signed__", "__volatile", "__volatile__", "asm",
+      "auto", "break", "case", "char", "const", "continue", "default", "do", "double",
+      "else", "enum", "extern", "float", "for", "goto", "if", "inline", "_Noreturn",
+      "int", "long", "register", "restrict", "return", "short", "signed", "sizeof",
+      "static", "struct", "switch", "typedef", "union", "unsigned", "void",
+      "volatile", "while",
+      // Base functions that shouldn't be shadowed
+      "assert")
+    def blacklist(string: String): Boolean =
+      keywords.contains(string) ||
+        string.startsWith("lack_")
 
   object except:
     class BigNumberException(typ: String, doc: pretty.Doc) extends Exception(

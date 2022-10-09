@@ -5,6 +5,7 @@ import lack.meta.base.names.given
 import lack.meta.base.pretty
 import lack.meta.core
 import lack.meta.core.node.Schedule
+import lack.meta.target
 
 import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
@@ -34,9 +35,9 @@ object Compile:
 
     core.obc.Check.program(obcs, core.obc.Check.Options())
 
-    val opts   = core.target.C.Options(basename = basename, classes = obcs)
-    val header = core.target.C.header(opts)
-    val source = core.target.C.source(opts)
+    val opts   = target.C.Options(basename = basename, classes = obcs)
+    val header = target.C.header(opts)
+    val source = target.C.source(opts)
 
     output match
       case None =>

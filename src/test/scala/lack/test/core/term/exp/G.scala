@@ -15,6 +15,7 @@ case class G(primG: lack.test.core.term.prim.G):
   val val_ = lack.test.core.term.val_.G
 
   /** Generate a simplified expression of given type, with given environment.
+   * Tries to ensure that expression is bounded, but no guarantee.
    */
   def simp(env: Check.Env, sort: Sort): Gen[Exp] =
     raw(env, sort)
@@ -23,6 +24,7 @@ case class G(primG: lack.test.core.term.prim.G):
   /** Generate a raw (unsimplified) expression of given type, with given
    * environment. Tries to generate an "interesting" expression most of the
    * time, with occasional arbitrary expressions.
+   * Tries to ensure that expression is bounded, but no guarantee.
    */
   def raw(env: Check.Env, sort: Sort): Gen[Exp] =
     interesting(env, sort).rarely(arbitrary(env, sort))
@@ -33,11 +35,10 @@ case class G(primG: lack.test.core.term.prim.G):
    */
   def interesting(env: Check.Env, sort: Sort): Gen[Exp] = sort match
     case s: Sort.BoundedInteger =>
-      Gen.choice1(
-        prim(env, sort).rarely(ite(env, sort)),
-        for
-          e <- interesting(env, Sort.ArbitraryInteger)
-        yield Exp.Cast(Exp.Cast.Box(s), e))
+      boundedPrim(env, s).rarely(
+        Gen.choice1(
+          prim(env, sort),
+          ite(env, sort)))
     case _ =>
       prim(env, sort).rarely(ite(env, sort))
 
@@ -62,7 +63,8 @@ case class G(primG: lack.test.core.term.prim.G):
         varCast(env, sort),
         value(sort),
         prim(env, sort),
-        box(env, s)
+        boundedPrim(env, s)
+        // box(env, s)
       )
     case Sort.Real =>
       Gen.choice1(
@@ -80,19 +82,40 @@ case class G(primG: lack.test.core.term.prim.G):
   /** Generate a primitive application that returns given sort */
   def prim(env: Check.Env, s: Sort): Gen[Exp] =
     for
+      bt <- sort.runtime.ints
       (p,argsT) <- primG.result(s)
-      argsV <- args(env, argsT)
-    yield Exp.App(s, p, argsV : _*)
+      argsTX = argsT.map { t =>
+        if t == Sort.ArbitraryInteger then bt else t
+      }
+      argsV <- args(env, argsTX)
+      argsVX = argsV.zip(argsT).map { case (e,t) =>
+        if t == Sort.ArbitraryInteger then Exp.Cast(Exp.Cast.Unbox(Sort.ArbitraryInteger), e) else e
+      }
+    yield Exp.App(s, p, argsVX : _*)
+
+  /** Generate a bounded primitive of given sort */
+  def boundedPrim(env: Check.Env, s: Sort.BoundedInteger): Gen[Exp] =
+    for
+      (p,argsT) <- primG.result(s.logical)
+      argsTX = argsT.map { t =>
+        if t == s.logical then s else t
+      }
+      argsV <- args(env, argsTX)
+      argsVX = argsV.zip(argsT).map { case (e,t) =>
+        if t == s.logical then Exp.Cast(Exp.Cast.Unbox(s.logical), e) else e
+      }
+    yield Exp.Cast(Exp.Cast.Box(s), Exp.App(s.logical, p, argsVX : _*))
 
   /** Generate unique-ish simple arguments for given sorts */
   def args(env: Check.Env, sorts: List[Sort]): Gen[List[Exp]] =
-    Gen.tryUniques(
-      seeds = sorts
-    )(
-      main = varCast(env, _)
-    )(
-      fallback = { s => value(s).rarely(raw(env, s)) },
-    )
+    def main(s: Sort) = Gen.sized { size =>
+      if size.value > 1
+      then Gen.choice1(raw(env, s), varCast(env, s)).small
+      else varCast(env, s)
+    }
+    def fallback(s: Sort) =
+      Gen.choice1(varCast(env, s), value(s))
+    Gen.tryUniques(seeds = sorts)(main)(fallback)
 
   /** Generate an if-then-else chain with distinct predicates and terms */
   def ite(env: Check.Env, s: Sort): Gen[Exp] =
@@ -103,7 +126,7 @@ case class G(primG: lack.test.core.term.prim.G):
         for
           f <- go(pts)
         yield
-          Exp.App(s, term.prim.Table.Ite, p, t, f)
+          compound.ite(p, t, f)
     for
       n <- Gen.int(Range.linear(1, 5))
       ts <- args(env, List.fill(n)(s))
@@ -114,22 +137,23 @@ case class G(primG: lack.test.core.term.prim.G):
   def unbox(env: Check.Env, s: Sort): Gen[Exp] =
     for
       r <- sort.runtime.ints
-      e <- arbitrary(env, r)
+      e <- raw(env, r)
     yield Exp.Cast(Exp.Cast.Unbox(s), e)
 
   def box(env: Check.Env, s: Sort.Refinement): Gen[Exp] =
     for
-      e <- arbitrary(env, Sort.ArbitraryInteger)
+      e <- raw(env, Sort.ArbitraryInteger)
     yield Exp.Cast(Exp.Cast.Box(s), e)
 
   /** Cast given expression to Sort.ArbitraryInteger */
   def castToInteger(e: Exp): Gen[Exp] = e.sort match
     case Sort.Bool =>
       for
-        vt <- value(Sort.ArbitraryInteger)
-        vf <- value(Sort.ArbitraryInteger).ensure(_ != vt)
+        int <- sort.runtime.ints
+        vt  <- value(int)
+        vf  <- value(int).ensure(_ != vt)
       yield
-        compound.ite(e, vt, vf)
+        Exp.Cast(Exp.Cast.Unbox(int.logical), compound.ite(e, vt, vf))
     case Sort.ArbitraryInteger =>
       Gen.constant(e)
     case s: Sort.BoundedInteger =>
@@ -152,9 +176,10 @@ case class G(primG: lack.test.core.term.prim.G):
         Exp.App(Sort.Bool, op, e, z)
     case s: Sort.BoundedInteger =>
       for
-        ei <- castToInteger(e)
-        eb <- castToBool(ei)
-      yield eb
+        op <- compound.cmps
+        z <- value(s)
+      yield
+        Exp.App(Sort.Bool, op, Exp.Cast(Exp.Cast.Unbox(s.logical), e), Exp.Cast(Exp.Cast.Unbox(s.logical), z))
     case Sort.Real =>
       for
         op <- compound.cmps
