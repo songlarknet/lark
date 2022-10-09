@@ -55,6 +55,19 @@ object Translate:
     val sys        = nested(context, node, node.nested).system
     val params     = node.params.map { p => names.Ref.fromComponent(p) }.toList
 
+    // We need to unbox each parameter with a bounded type to ensure that the
+    // bounded integer constraints are added. Otherwise, the SMT translation
+    // would allow out-of-range values for unused parameters, which can be
+    // pretty confusing.
+    val paramsS    = System.conjoin(node.params.map { p =>
+      val x = node.xvar(p)
+      x.sort match
+        case s: Sort.Refinement =>
+          expr(ExpContext(context, node), Exp.Cast(Exp.Cast.Unbox(s), x)).system
+        case _ =>
+          System.empty
+    }.toSeq)
+
     def prop(judgment: Judgment): SystemJudgment =
       judgment.term match
         // LODO: deal with non-variables by creating a fresh row variable for them
@@ -69,7 +82,7 @@ object Translate:
       guarantees = node.guarantees.map(prop).toList,
       sorries    = node.sorries.map(prop).toList)
 
-    system.Node(node.path, params, sys <> sysprops)
+    system.Node(node.path, params, sys <> paramsS <> sysprops)
 
   def nested(context: Context, node: Node, nested: Builder.Nested): SystemV[Unit] =
     val contextPrefix = names.Prefix(List(nested.context))

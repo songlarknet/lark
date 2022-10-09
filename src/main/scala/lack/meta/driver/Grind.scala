@@ -159,7 +159,6 @@ object Grind:
         pretty.vsep(stepsP)
       )
 
-    println(pretty.layout(main))
     target.c.Cbmc.check(cCode <@> main, target.c.Cbmc.defaults)
 
   def castVal(v: core.term.Val, s: core.Sort): core.term.Val = s match
