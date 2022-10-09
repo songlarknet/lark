@@ -129,3 +129,9 @@ object Obc:
 
   object Class:
     def self: names.Prefix = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("self"))))
+
+  case class Program(classes: List[Class]) extends pretty.Pretty:
+    def classesMap: names.immutable.RefMap[Class] =
+      SortedMap.from(classes.map { c => (c.name, c) })
+
+    def ppr = pretty.vsep(classes.map(_.ppr))

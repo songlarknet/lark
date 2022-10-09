@@ -15,8 +15,8 @@ class TestAutomaton extends munit.FunSuite:
     Check.success() { new Top(_) }
   }
 
-  test("Grind.eval") {
-    Grind.eval(50) { new Top(_) }
+  test("Grind.grind") {
+    Grind.grind() { new Top(_) }
   }
 
   class Top(invocation: Node.Invocation) extends Node(invocation):

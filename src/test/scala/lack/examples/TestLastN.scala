@@ -17,8 +17,8 @@ class TestLastN extends munit.FunSuite:
     lack.meta.driver.Compile.compile() { new LemmaLastN(3, _) }
   }
 
-  test("Grind.eval") {
-    Grind.eval(100) { new LemmaLastN(3, _) }
+  test("Grind") {
+    Grind.grind() { new LemmaLastN(3, _) }
   }
 
   class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):

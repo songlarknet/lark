@@ -22,8 +22,8 @@ class TestAutomatonSugar extends munit.FunSuite:
       output = Some(java.nio.file.Paths.get("scratch/c/"))) { new Top(_) }
   }
 
-  test("Grind.eval") {
-    Grind.eval(50) { new Top(_) }
+  test("Grind") {
+    Grind.grind() { new Top(_) }
   }
 
   class Top(invocation: Node.Invocation) extends Node(invocation):

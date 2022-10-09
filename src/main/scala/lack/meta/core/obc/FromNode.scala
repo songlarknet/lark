@@ -8,7 +8,7 @@ import lack.meta.core.term.{Exp, Flow, Val, Compound}
 import lack.meta.core.term
 import lack.meta.core.node.{Node, Schedule, Variable}
 
-import lack.meta.core.obc.Obc.{Statement, Method, Class, Storage}
+import lack.meta.core.obc.Obc.{Statement, Method, Class, Program, Storage}
 
 import scala.collection.immutable.SortedMap
 
@@ -201,9 +201,6 @@ object FromNode:
       props   = n.props
     )
 
-  def program(nodes: Iterable[Node], schedules: names.immutable.RefMap[Schedule]): names.immutable.RefMap[Class] =
-    SortedMap.from(for
-      n <- nodes
-      s = schedules(n.name)
-    yield
-      n.name -> klass(n, s))
+  def program(nodes: Iterable[Node], schedules: names.immutable.RefMap[Schedule]): Program =
+    Program(
+      nodes.map { n => klass(n, schedules(n.name)) }.toList)

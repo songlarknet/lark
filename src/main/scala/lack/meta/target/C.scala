@@ -12,7 +12,7 @@ import lack.meta.core.term.Bounded.BEX
 import lack.meta.core.node.{Node, Schedule, Variable}
 
 import lack.meta.core.obc
-import lack.meta.core.obc.Obc.{Statement, Method, Class}
+import lack.meta.core.obc.Obc.{Statement, Method, Class, Program}
 
 import scala.collection.immutable.SortedMap
 
@@ -21,7 +21,7 @@ object C:
 
   case class Options(
     basename: String,
-    classes:  names.immutable.RefMap[Class],
+    program:  Program,
     includes: List[String] = List("#include <lack/lack.h>"),
     version: String = "v0", // TODO hook version numbers up to git and ci
     check: obc.Check.Options = obc.Check.Options()
@@ -30,7 +30,7 @@ object C:
   /** Print header file with structs and function prototypes. */
   def header(options: Options): pretty.Doc =
     prelude(options) <@>
-    pretty.vsep(options.classes.values.map(Header.klass(_)).toSeq)
+    pretty.vsep(options.program.classes.map(Header.klass(_)).toSeq)
 
   /** Print source file with function definitions. */
   def source(options: Options, selfInclude: Boolean = true): pretty.Doc =
@@ -39,7 +39,12 @@ object C:
       then options.includes ++ List(s"#include \"${options.basename}.h\"")
       else options.includes
     prelude(options.copy(includes = includes)) <@>
-    pretty.vsep(options.classes.values.map(Source.klass(_, options)).toSeq)
+    pretty.vsep(options.program.classes.map(Source.klass(_, options)).toSeq)
+
+  /** Print source file with both headers and function definitions. */
+  def headersource(options: Options): pretty.Doc =
+    header(options) <@>
+    source(options.copy(includes = List()), selfInclude = false)
 
   /** Prelude with information about generated file */
   def prelude(options: Options): pretty.Doc =
@@ -58,9 +63,13 @@ object C:
       P.Ident.suffix(klass, "state")
     def stateP(klass: names.Ref) = P.Ident.ref(state(klass))
 
-    def out(klass: names.Ref, method: names.Component): names.Ref =
-      P.Ident.suffix(names.Ref(klass.fullyQualifiedPath, method), "out")
+    def out(klass: names.Ref, _method: names.Component): names.Ref =
+      P.Ident.suffix(method(klass, _method), "out")
     def outP(klass: names.Ref, method: names.Component) = P.Ident.ref(out(klass, method))
+
+    def method(klass: names.Ref, _method: names.Component): names.Ref =
+      names.Ref(klass.fullyQualifiedPath, _method)
+    def methodP(klass: names.Ref, _method: names.Component) = P.Ident.ref(method(klass, _method))
 
   /** Printing headers */
   object Header:
@@ -127,7 +136,7 @@ object C:
         val argsP = args.map(Term.exp(self, _))
         val outT = Names.outP(klass, method)
         val outV = P.Ident.component(instance)
-        val meth = options.classes(klass).methodsMap(method)
+        val meth = options.program.classesMap(klass).methodsMap(method)
         (assigns, meth.returns) match
           case (None, List()) =>
             P.Stm.fun(name, instP :: argsP)
@@ -206,21 +215,6 @@ object C:
       val COMMA_PREC   = 15
       val PARENS_PREC  = 16
 
-    /** Pretty-print a value */
-    def val_(v: Val): pretty.Doc = v match
-      case Val.Bool(b) => b.toString
-      case Val.Refined(s: Sort.BoundedInteger, Val.Int(i)) =>
-        val suffix = (s.signed, s.width) match
-          case (true,  64) => "ll"
-          case (false, 64) => "ull"
-          case (true,  32) => "l"
-          case (false, 32) => "ul"
-          case (_,     _)  => ""
-        pretty.value(i) <> suffix
-      case Val.Real(r) => pretty.value(r) <> "f"
-      case _ =>
-        throw new P.except.BigNumberException("value", v.ppr)
-
     /** Nest expression, inserting parentheses if precedence of enclosing
      * operator is lower than or equal to the precedence of inner operator.
      */
@@ -243,7 +237,7 @@ object C:
       b: BEX,
       p: Int
     ): pretty.Doc = b match
-      case BEX.Val(_, v) => val_(v)
+      case BEX.Val(_, v) => P.Term.val_(v)
       case BEX.Var(Exp.Var(_, r)) => r.prefix match
         // Print "self.x" variables as self->x.
         // Print other variables as-is.

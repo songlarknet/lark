@@ -24,18 +24,18 @@ object Compile:
     given builder: Builder = new Builder(top)
     builder.invoke(f)
     val subnodes = builder.nodeRef.allNodes.filter(_ != top)
-    val frozen = subnodes.map(_.freeze)
-    val scheds = schedules(frozen)
-    val obcs = core.obc.FromNode.program(frozen, scheds)
+    val frozen   = subnodes.map(_.freeze)
+    val scheds   = schedules(frozen)
+    val program  = core.obc.FromNode.program(frozen, scheds)
 
     // obcs.foreach { case (k,v) =>
     //   println(s"Node ${k.pprString}")
     //   println(pretty.layout(pretty.indent(v.ppr)))
     // }
 
-    core.obc.Check.program(obcs, core.obc.Check.Options())
+    core.obc.Check.program(program, core.obc.Check.Options())
 
-    val opts   = target.C.Options(basename = basename, classes = obcs)
+    val opts   = target.C.Options(basename = basename, program = program)
     val header = target.C.header(opts)
     val source = target.C.source(opts)
 

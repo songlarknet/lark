@@ -12,8 +12,8 @@ class TestCounterexample extends munit.FunSuite:
     Check.failure() { new LemmaCounterexample(_) }
   }
 
-  test("Grind.eval") {
-    Grind.eval(100) { new LemmaCounterexample(_) }
+  test("Grind") {
+    Grind.grind() { new LemmaCounterexample(_) }
   }
 
 

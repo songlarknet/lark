@@ -76,6 +76,21 @@ object Printer:
     def fields(path: List[names.Component], name: names.Component): pretty.Doc =
       pretty.ssep((path :+ name).map(Ident.component(_)), pretty.dot)
 
+    /** Pretty-print a value */
+    def val_(v: Val): pretty.Doc = v match
+      case Val.Bool(b) => b.toString
+      case Val.Refined(s: Sort.BoundedInteger, Val.Int(i)) =>
+        val suffix = (s.signed, s.width) match
+          case (true,  64) => "ll"
+          case (false, 64) => "ull"
+          case (true,  32) => "l"
+          case (false, 32) => "ul"
+          case (_,     _)  => ""
+        pretty.value(i) <> suffix
+      case Val.Real(r) => pretty.value(r) <> "f"
+      case _ =>
+        throw new except.BigNumberException("value", v.ppr)
+
   object Stm:
     def block(stms: pretty.Doc) =
       pretty.text("{") <@> pretty.indent(stms) <@> pretty.text("}")
@@ -91,6 +106,17 @@ object Printer:
 
     def fun(name: names.Ref, args: List[pretty.Doc]): pretty.Doc =
       Term.fun(Ident.ref(name), args) <> pretty.semi
+
+    def assert(cond: pretty.Doc): pretty.Doc =
+      Term.fun(pretty.text("assert"), List(cond)) <> pretty.semi
+
+    def assertEquals(one: pretty.Doc, other: pretty.Doc, sort: Sort): pretty.Doc =
+      val cond = sort match
+        case Sort.Real =>
+          Term.fun("lack_float_approx", List(one, other))
+        case _ =>
+          one <+> pretty.text("==") <+> other
+      assert(cond)
 
   /** Identifiers
    * Properties we want:

@@ -8,6 +8,7 @@ import lack.meta.core.term.Eval
 import lack.meta.core.term.Exp
 import lack.meta.core.term.Val
 import lack.meta.core.Sort
+import lack.meta.core.obc.Obc
 
 import lack.meta.target.c.Cbmc
 import lack.meta.target.c.{Printer => Pr}
@@ -42,7 +43,7 @@ class P extends HedgehogSuite:
       // Print heap as C variable bindings
       binds   =
         for (k, v) <- heap
-        yield Pr.Type.sort(v.sort) <+> Pr.Ident.component(k.name) <+> pretty.equal <+> C.Term.val_(v) <> pretty.semi
+        yield Pr.Type.sort(v.sort) <+> Pr.Ident.component(k.name) <+> pretty.equal <+> Pr.Term.val_(v) <> pretty.semi
       // For each subexpression in the expression e, evaluate it separately
       // and add an assertion that the generated C code has the corresponding
       // value.
@@ -54,18 +55,9 @@ class P extends HedgehogSuite:
           assign =
             Pr.Type.sort(b.repr) <+> xi <+> pretty.equal <+>
               C.Term.exp(self, b.annotated) <> pretty.semi
-          expect =
-            s match
-              // Use approximate equality for floats. This only makes sense for
-              // continuous expressions but hopefully expressions with
-              // branching won't be too near the threshold.
-              case Sort.Real =>
-                Pr.Term.fun("lack_float_approx", List(xi, C.Term.val_(v)))
-              case _ =>
-                xi <+> pretty.text("==") <+> C.Term.val_(v)
         yield
           assign <@>
-            Pr.Term.fun("assert", List(expect)) <> pretty.semi
+            Pr.Stm.assertEquals(xi, Pr.Term.val_(v), s)
 
       code <- Property.ppr(pretty.vsep(
         binds.toList ++ List(pretty.emptyDoc) ++ asserts.toList
@@ -82,7 +74,7 @@ class P extends HedgehogSuite:
 
   def check(code: pretty.Doc) =
     val options =
-      C.Options(basename = "test", classes = SortedMap.empty)
+      C.Options(basename = "test", program = Obc.Program(List()))
     val doc =
       C.prelude(options) <@>
       code

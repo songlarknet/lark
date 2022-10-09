@@ -8,7 +8,7 @@ import lack.meta.core.Sort
 import lack.meta.core.term.Exp
 import lack.meta.core.term
 
-import lack.meta.core.obc.Obc.{Statement, Method, Class, Storage}
+import lack.meta.core.obc.Obc.{Statement, Method, Class, Program, Storage}
 
 import scala.collection.immutable.SortedMap
 
@@ -189,8 +189,8 @@ object Check:
         throw new NoSuchEntryException(typ, key, map))
 
   def program(
-    classes: names.immutable.RefMap[Class],
+    program: Program,
     options: Options
-  ): Unit = classes.foreach { case (k,c) =>
-    klass(classes, c, options)
+  ): Unit = program.classes.foreach { c =>
+    klass(program.classesMap, c, options)
   }
