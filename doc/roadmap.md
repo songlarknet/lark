@@ -10,7 +10,7 @@ Bare minimum features to be useful:
 * ~~surface language, maybe with syntax for simple automata;~~
 * ~~model checking with BMC and K-induction;~~
 * ~~basic counterexamples;~~
-* typechecking, ~~causality checking~~, etc;
+* ~~typechecking, causality checking, etc;~~
 * ~~compilation to C - simplest possible generation ok;~~
 * ~~decent property testing of interpreter, SMT semantics, and C semantics.~~
 

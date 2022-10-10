@@ -34,19 +34,20 @@ object Grind:
     val subnodes  = builder.nodeRef.subnodes.values
     val allnodes  = subnodes.flatMap(_.allNodes)
     val frozen    = allnodes.map(_.freeze)
+    val checked   = core.node.Check.program(frozen, core.node.Check.Options())
     val schedules = Compile.schedules(frozen)
     val program   = core.obc.FromNode.program(frozen, schedules)
     val cOptions  = target.C.Options(basename = "grind", program)
     val cCode     = target.C.headersource(cOptions)
 
     allnodes.foreach { sn =>
-      grindNode(sn, options, schedules, cOptions, cCode)
+      grindNode(sn, options, checked, schedules, cOptions, cCode)
     }
 
   /** Grind a node by generating input traces and testing them. */
-  def grindNode(node: core.node.Builder.Node, options: Options, schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
+  def grindNode(node: core.node.Builder.Node, options: Options, checked: names.immutable.RefMap[core.node.Check.Info], schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
     val nn = node.freeze
-    val info = core.node.Check.info(nn)
+    val info = checked(nn.name)
 
     val evalopt = Eval.Options(
       core.term.Eval.Options(checkRefinement = options.translate.checkRefinement),

@@ -147,6 +147,13 @@ object Check:
       case e: Exception =>
         throw new except.InClass(self, e)
 
+  def program(
+    program: Program,
+    options: Options
+  ): Unit = program.classes.foreach { c =>
+    klass(program.classesMap, c, options)
+  }
+
   object except:
     class CheckException(msg: String) extends Exception(msg)
 
@@ -187,10 +194,3 @@ object Check:
     ) =
       map.getOrElse(key,
         throw new NoSuchEntryException(typ, key, map))
-
-  def program(
-    program: Program,
-    options: Options
-  ): Unit = program.classes.foreach { c =>
-    klass(program.classesMap, c, options)
-  }

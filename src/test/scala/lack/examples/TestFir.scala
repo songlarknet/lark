@@ -14,7 +14,7 @@ class TestFIR extends munit.FunSuite:
   }
 
   class LemmaFIR(n: Int, invocation: Node.Invocation) extends Node(invocation):
-    val signal = local[Real]
+    val signal = forall[Real]
 
     val lpf = FIR(List(0.5, 0.03, 0.02, 0.01), signal)
     val bounded_input =

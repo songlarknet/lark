@@ -25,6 +25,7 @@ object Compile:
     builder.invoke(f)
     val subnodes = builder.nodeRef.allNodes.filter(_ != top)
     val frozen   = subnodes.map(_.freeze)
+    val checked  = core.node.Check.program(frozen, core.node.Check.Options())
     val scheds   = schedules(frozen)
     val program  = core.obc.FromNode.program(frozen, scheds)
 

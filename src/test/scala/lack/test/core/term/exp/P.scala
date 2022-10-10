@@ -137,9 +137,10 @@ class P extends HedgehogSuite:
       simp  <- Property.ppr(term.Compound.simp.descend(raw), "simp")
 
       // Discard any tests with invalid values like u8'-1.
+      heap  <- g.val_.heap(env).ppr("heap")
       _ <- Property.try_ {
-        Check.exp(env, simp, options = Check.Options(checkRefinement = true))
-      }.ppr("checkSort")
+        Eval.exp(heap, raw, Eval.Options(checkRefinement = true))
+      }.ppr("v")
     yield
       assertEquals(Bounded.bound(simp).repr, Bounded.bound(raw).repr)
   }

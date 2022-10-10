@@ -71,7 +71,7 @@ object Check:
   object except:
     class CheckException(msg: String) extends Exception(msg)
 
-    class NoSuchVariableException(e: Exp.Var, env: Env) extends CheckException(
+    class NoSuchVariableException(val e: Exp.Var, val env: Env) extends CheckException(
       s"""No such variable ${e.v.pprString} with sort ${e.sort.pprString}.
         |Environment: ${names.Namespace.fromMap(env).pprString}""".stripMargin)
 

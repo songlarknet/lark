@@ -7,6 +7,7 @@ import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
 import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 import lack.meta.smt
+import lack.meta.core
 
 /** Check that a program satisfies its properties. */
 object Check:
@@ -49,6 +50,11 @@ object Check:
       case List(s) => s
       case List() => assert(false, "No node to check")
       case ls => assert(false, "Too many nodes to check")
+
+    subnodes.foreach { n =>
+       core.node.Check.node(n.freeze, core.node.Check.Options())
+    }
+
     def solver() = smt.Solver.gimme(verbose = options.verbose)
     smt.Check.checkMany(subnode, options.steps, solver, options.translate)
 
