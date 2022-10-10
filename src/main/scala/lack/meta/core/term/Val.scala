@@ -58,3 +58,15 @@ object Val:
 
   /** Fake unit value */
   def unit = Val.Bool(false)
+
+  /** Approximate equality for floats. This might not be necessary if we switch
+   * Val.Real over to rationals.
+   */
+  def approx(v: Val, w: Val, eps: num.Real = 1e-20): Boolean = (v, w) match
+    case _ if v == w => true
+    case (Val.Real(i), Val.Real(j)) =>
+      val diff = (i - j).abs
+      val max  = i.abs.max(j.abs)
+      val diffx= if max == 0 then eps else diff / max
+      diffx.abs < eps || (i.abs < eps && j.abs < eps)
+    case _ => false

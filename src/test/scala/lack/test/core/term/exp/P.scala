@@ -129,12 +129,17 @@ class P extends HedgehogSuite:
       assertEquals(rawV, simpV)
   }
 
-  property("Compound.simp preserves boundedness") {
+  property("Compound.simp preserves boundedness (refines discarded)") {
     for
       env   <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")
       sort  <- g.sort.runtime.all.ppr("sort")
       raw   <- g.raw(env, sort).ppr("raw")
       simp  <- Property.ppr(term.Compound.simp.descend(raw), "simp")
+
+      // Discard any tests with invalid values like u8'-1.
+      _ <- Property.try_ {
+        Check.exp(env, simp, options = Check.Options(checkRefinement = true))
+      }.ppr("checkSort")
     yield
       assertEquals(Bounded.bound(simp).repr, Bounded.bound(raw).repr)
   }

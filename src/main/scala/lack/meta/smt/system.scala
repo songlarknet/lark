@@ -246,18 +246,18 @@ object system:
       yield ()
 
     /** Extract names.Ref variable from system value, introducing a new binding if necessary */
-    def letRow(sort: Sort, trm: Terms.Term)(supply: () => names.Ref): SystemV[names.Ref] = Term.take.ref(trm) match
+    def letRow(sort: Sort, trm: Terms.Term)(supply: () => names.Ref): SystemV[(names.Ref, Terms.Term)] = Term.take.ref(trm) match
       case Some(n)
         if n.prefix.startsWith(Prefix.row.prefix)
       =>
         val nn = n.copy(prefix = n.prefix.drop(Prefix.row.prefix.length))
-        SystemV.pure(nn)
+        SystemV.pure((nn, trm))
       case _ =>
         val ref = supply()
         for
           refT <- SystemV.row(ref, sort)
           _ <- SystemV.step(Term.compound.equal(refT, trm))
-        yield ref
+        yield (ref, refT)
 
   extension[T,U] (outer: SystemV[T => U])
     /** Applicative functor for valued systems. */

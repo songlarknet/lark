@@ -7,6 +7,7 @@ import lack.meta.core.node.Builder
 import lack.meta.core.node.Builder.Node
 import lack.meta.core.Prop.Judgment
 import lack.meta.core.{Prop, Sort}
+import lack.meta.core.term
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
 
 import lack.meta.smt.Solver
@@ -250,7 +251,7 @@ object Translate:
     case Exp.App(sort, prim, args : _*) =>
       for
         targs <- SystemV.conjoin(args.map(expr(context, _)))
-      yield compound.funapp(prim.pprString, targs : _*)
+      yield compound.funapp(nameOfPrim(prim, sort), targs : _*)
 
     case Exp.Cast(_, e)
       if !context.context.options.checkRefinement
@@ -269,9 +270,11 @@ object Translate:
 
       for
         eT     <- expr(context, e)
-        ref    <- SystemV.letRow(s.logical, eT) { () =>
+        let    <- SystemV.letRow(s.logical, eT) { () =>
           context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
         }
+        ref  = let._1
+        refT = let._2
 
         refV  = Exp.Var(s.logical, names.Prefix(context.node.path)(ref))
         relyT <- expr(context, s.refinesExp(refV))
@@ -280,7 +283,7 @@ object Translate:
         boxT   <- SystemV.row(boxR, s.logical)
 
         _  <- SystemV.step(compound.equal(relyTX, relyT))
-        _  <- SystemV.step(compound.implies(relyTX, compound.equal(eT, boxT)))
+        _  <- SystemV.step(compound.implies(relyTX, compound.equal(refT, boxT)))
 
         _  <- SystemV(System(guarantees = List(relyJ)), ())
       yield
@@ -293,14 +296,28 @@ object Translate:
       case refinement: Sort.Refinement =>
         for
           eT  <- expr(context, e)
-          ref <- SystemV.letRow(logical, eT) { () =>
+          let <- SystemV.letRow(logical, eT) { () =>
             context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
           }
+          ref  = let._1
+          refT = let._2
 
           refV  = Exp.Var(logical, names.Prefix(context.node.path)(ref))
           satT <- expr(context, refinement.refinesExp(refV))
           _    <- SystemV.step(satT)
-        yield eT
+        yield refT
 
       case _ =>
         assert(false, s"translate ${exp.pprString}: can't unbox sort ${logical.pprString} as it's not a refinement")
+
+
+  def nameOfPrim(prim: Prim, sort: Sort): String = (prim, sort) match
+    // Negate is printed as "-", but that conflicts with binary subtraction.
+    case (term.prim.Table.Negate, _) => "-"
+    // Use wrapper functions around division to make /0 safe.
+    case (term.prim.Table.Div, Sort.Real) => "lack_div_Real"
+    // SMT-PERF: when the numerator is nonnegative we could use lack_div_Nat
+    // which is slightly simpler. Maybe we want to do a bounds analysis one day.
+    case (term.prim.Table.Div, Sort.ArbitraryInteger) => "lack_div_Int"
+    case _ => prim.pprString
+

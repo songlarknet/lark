@@ -7,7 +7,10 @@ import smtlib.trees.Terms.SExpr
 
 import smtlib.interpreters.{CVC4Interpreter, Z3Interpreter}
 
-class Solver(interpreter: Interpreter, verbose: Boolean):
+class Solver(interpreter: Interpreter, verbose: Boolean, definePrelude: Boolean = true):
+  if (definePrelude)
+    Solver.preludeCommands.map(command(_))
+
   var fresh: Int = 0
 
   def command(cmd: SExpr): SExpr =
@@ -85,9 +88,10 @@ class Solver(interpreter: Interpreter, verbose: Boolean):
     */
   def pushed[T](cont: => T): T =
     command(Commands.Push(1))
-    val ret: T = cont
-    command(Commands.Pop(1))
-    ret
+    try
+      cont
+    finally
+      command(Commands.Pop(1))
 
   var freed = false
   def free() =
@@ -113,3 +117,59 @@ object Solver:
   class SolverException(response: SExpr, message: String = "SMT solver returned unexpected response") extends Exception(
     s"""${message}
       ${response}""")
+
+
+  /** Helper functions used by the translation.
+   * Division in SMTlib is total, but uses some undefined value-dependent
+   * result for division by zero. So (5 / 0) and (6 / 0) both have values,
+   * but they're not necessarily the same. This makes it pretty hard to show
+   * that the evaluator semantics agree with the SMT.  Isabelle defines
+   * division-by-zero to be equal to zero, so we wrap division to do that
+   * instead.
+   *
+   * SMTLib's integer division also has interesting rounding behaviour, so we
+   * wrap it to agree with the C and evaluator semantics. Maybe later, when we
+   * run into proof issues, we could expose the raw SMT division.
+   */
+  val preludeCommands: List[Commands.Command] =
+    import Term.compound._
+    val Int = Terms.Sort(compound.id("Int"))
+    val Real = Terms.Sort(compound.id("Real"))
+    val m = sym("m")
+    val n = sym("n")
+    val mm = qid("m")
+    val nn = qid("n")
+
+    // Safe division on natural numbers
+    val ndiv =
+      Commands.DefineFun(Commands.FunDef(sym("lack_div_Nat"),
+        List(Terms.SortedVar(m, Int), Terms.SortedVar(n, Int)),
+        Int,
+        ite(
+          equal(nn, int(0)),
+          int(0),
+          funapp("div", mm, nn))))
+
+    // Safe division on signed integers. Wrap SMTLib "div" to round to 0.
+    // https://smtlib.cs.uiowa.edu/theories-Ints.shtml:
+    //  * "Regardless of sign of m,
+    //  *   when n is positive, (div m n) is the floor of the rational number m/n;
+    //  *   when n is negative, (div m n) is the ceiling of m/n.
+    val idiv =
+      Commands.DefineFun(Commands.FunDef(sym("lack_div_Int"),
+        List(Terms.SortedVar(m, Int), Terms.SortedVar(n, Int)),
+        Int,
+        ite(
+          equal(nn, int(0)),
+          int(0),
+          ite(funapp(">", mm, int(0)),
+            funapp("div", mm, nn),
+            funapp("-", funapp("div", funapp("-", mm), nn))))))
+
+    val rdiv =
+      Commands.DefineFun(Commands.FunDef(sym("lack_div_Real"),
+        List(Terms.SortedVar(m, Real), Terms.SortedVar(n, Real)),
+        Real,
+        ite(equal(nn, real(0)), real(0), funapp("/", mm, nn))))
+
+    List(ndiv, idiv, rdiv)

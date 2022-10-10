@@ -23,6 +23,7 @@ import scala.collection.immutable.SortedMap
 class P extends HedgehogSuite:
   val g = lack.test.core.term.exp.G(lack.test.core.term.prim.G())
 
+  // TODO test for each prim and bitwidth too, similar to smt/translate/P
   property("expressions C matches eval, no overflow") {
     for
       env  <- g.sort.env(Range.linear(1, 10), lack.test.core.sort.G.runtime.all).ppr("env")

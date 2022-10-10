@@ -132,7 +132,7 @@ object Term:
       case (Some(true), _) => con
       case (Some(false), _) => bool(true)
       case (_, Some(true)) => bool(true)
-      case (_, Some(false)) => ante
+      case (_, Some(false)) => not(ante)
       case _ => funappNoSimp("=>", List(ante, con))
 
     def not(p: Terms.Term) = take.bool(p) match
@@ -152,7 +152,7 @@ object Term:
       if (f >= 0)
         Terms.SDecimal(f)
       else
-        funappNoSimp("-", List(Terms.SDecimal(f)))
+        funappNoSimp("-", List(Terms.SDecimal(- f)))
 
     def bool(b: Boolean) = qid(b.toString)
 
@@ -222,7 +222,7 @@ object Term:
     /** Parse Val as given sort */
     def value(t: Terms.Term, s: Sort): Option[Val] = (value(t), s) match
       case (Some(v), r: Sort.Refinement) =>
-        if r.refinesVal(v)
+        if v.sort == r.logical
         then Some(Val.Refined(r, v))
         else None
       case (Some(Val.Int(i)), Sort.Real) =>

@@ -200,6 +200,10 @@ package object names:
         values.map(v => names.Ref(prefix.prefix, v._1)) ++
         namespaces.flatMap(ns => ns._2.refs(Prefix(prefix.prefix :+ ns._1)))
 
+      def refValues(prefix: Prefix): Iterable[(names.Ref, V)] =
+        values.map(v => names.Ref(prefix.prefix, v._1) -> v._2) ++
+        namespaces.flatMap(ns => ns._2.refValues(Prefix(prefix.prefix :+ ns._1)))
+
   object Namespace:
     def fromRef[V <: pretty.Pretty](ref: names.Ref, value: V): Namespace[V] =
       ref.prefix match {
