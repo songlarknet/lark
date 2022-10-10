@@ -66,7 +66,7 @@ object Translate:
         case s: Sort.Refinement =>
           expr(ExpContext(context, node), Exp.Cast(Exp.Cast.Unbox(s), x)).system
         case _ =>
-          System.empty
+          expr(ExpContext(context, node), x).system
     }.toSeq)
 
     def prop(judgment: Judgment): SystemJudgment =
@@ -177,7 +177,7 @@ object Translate:
             notE   = compound.and(cond, compound.not(kE))
 
             subT   = nested(context, node, bnested)
-            _     <- subT.when(whenE)
+            _     <- subT.when(context.supply, whenE)
 
             _     <- go(notE, rest)
           yield ()

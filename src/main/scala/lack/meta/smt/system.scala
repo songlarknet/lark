@@ -109,7 +109,7 @@ object system:
     /** Slow the clock of a system, so it only steps when the boolean
      * expression `klock` is true.
      */
-    def when(klock: Terms.Term): System =
+    def when(supply: names.mutable.Supply, klock: Terms.Term): System =
       val allSame =
         for s <- state.refs(names.Prefix(List()))
         yield compound.equal(
@@ -117,14 +117,43 @@ object system:
           compound.qid(system.Prefix.stateX(s)))
       val stay = compound.and(allSame.toSeq : _*)
 
+      def impliesRef(r: names.Ref): SystemV[names.Ref] =
+        val rr = supply.freshRef(names.ComponentSymbol.PROP, forceIndex = true)
+        for
+          r0 <- SystemV.row(r, Sort.Bool)
+          rx <- SystemV.row(rr, Sort.Bool)
+          _ <- SystemV.step(compound.equal(rx, compound.implies(klock, r0)))
+        yield
+          rr
+
+      def judgment(j: SystemJudgment): SystemV[SystemJudgment] =
+        val hypsS = j.hypotheses.map(impliesRef(_))
+        val consequentS = impliesRef(j.consequent)
+        for
+          hyps <- SystemV.conjoin(hypsS)
+          consequent <- consequentS
+        yield
+          SystemJudgment(hyps.toList, consequent, j.judgment)
+
+      def judgments(j: List[SystemJudgment]): SystemV[List[SystemJudgment]] =
+        for
+          js <- SystemV.conjoin(j.map(judgment(_)))
+        yield
+          js.toList
+
+      val relies     = judgments(this.relies)
+      val guarantees = judgments(this.guarantees)
+      val sorries    = judgments(this.sorries)
+      val sysJ       = relies.system <> guarantees.system <> sorries.system
+
       System(
         state = this.state,
         row   = this.row,
         init  = this.init,
         step  = compound.ite(klock, this.step, stay),
-        relies     = this.relies,
-        guarantees = this.guarantees,
-        sorries    = this.sorries)
+        relies     = relies.value,
+        guarantees = guarantees.value,
+        sorries    = sorries.value) <> sysJ
 
     /** Reset a system whenever boolean expression `klock` is true.
      * Fresh is a fresh name such that row.fresh is not used.
@@ -206,8 +235,8 @@ object system:
     def map[U](f: T => U): SystemV[U] =
       flatMap(t => SystemV.pure(f(t)))
 
-    def when(klock: Terms.Term): SystemV[T] =
-      SystemV(this.system.when(klock), this.value)
+    def when(supply: names.mutable.Supply, klock: Terms.Term): SystemV[T] =
+      SystemV(this.system.when(supply, klock), this.value)
 
     def reset(fresh: names.Component, klock: Terms.Term): SystemV[T] =
       SystemV(this.system.reset(fresh, klock), this.value)
