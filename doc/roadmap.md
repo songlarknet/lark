@@ -7,12 +7,12 @@ The high-level goal is to have a model checker and compiler toolchain that's sca
 ## Milestones
 ### M1: bare minimum
 Bare minimum features to be useful:
-* surface language, maybe with syntax for simple automata;
-* model checking with BMC and K-induction;
-* basic counterexamples;
-* typechecking, causality checking, etc;
-* compilation to C - simplest possible generation ok;
-* decent property testing of interpreter, SMT semantics, and C semantics.
+* ~~surface language, maybe with syntax for simple automata;~~
+* ~~model checking with BMC and K-induction;~~
+* ~~basic counterexamples;~~
+* typechecking, ~~causality checking~~, etc;
+* ~~compilation to C - simplest possible generation ok;~~
+* ~~decent property testing of interpreter, SMT semantics, and C semantics.~~
 
 ### M2: scale
 Just these features might be OK, but with just plain old K-induction there's some risk that we could run into programs we can specify but can't prove.
@@ -26,13 +26,13 @@ To make it "more scalable" I want these features, but I think they can wait unti
 After we know that we can prove interesting things, we want to make sure anything we prove is actually true of the compiled code.
 This is not the case with machine integers which can overflow.
 To make it "more sound" I want these features in milestone three:
-* integer bounds checks;
+* ~~integer bounds checks;~~
 * float bounds and NaN checks.
 
 ### M4: better compilation
 At some point we probably want to generate nicer C code, and maybe also generate Scala code.
 Milestone four, maybe:
-* better compilation to C (modular, support separate compilation);
+* better compilation to C ~~(modular, support separate compilation)~~ *(modular compilation is done, but need to remove duplicates from node graph)*;
 * compilation to Scala or Java.
 
 ### M5: better debugging
