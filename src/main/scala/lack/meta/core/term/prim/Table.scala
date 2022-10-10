@@ -94,19 +94,42 @@ object Table:
     def real(i: Real, j: Real) = i * j
 
   /** "Safe" division where x / 0 = 0, which agrees with Isabelle and Z3 semantics
-   * for integers. However, SMTLib's bitvector semantics for division are that bvudiv
-   * returns a bitvector with all ones. For signed division with bvsdiv, the result
-   * is -1 or 1 depending on the sign of the left-hand-side.
-   * If we ever use bitvectors, we must be careful to wrap bv.div to keep the
-   * x/0=0 semantics.
-   * TODO: what about reals?
+   * for integers. SMTLib's division also has interesting rounding behaviour:
+   * "Regardless of sign of m,
+   *   when n is positive, (div m n) is the floor of the rational number m/n;
+   *   when n is negative, (div m n) is the ceiling of m/n.
+   * https://smtlib.cs.uiowa.edu/theories-Ints.shtml
+   *
+   * We implement the same rounding behaviour to match SMTLib. It would be
+   * possible to encode C-style division in SMT too, but I don't want to make
+   * the SMT solver's life any harder than necessary. Integer division is
+   * already hard enough.
+   *
+   * SMTLib's bitvector semantics for division are that bvudiv returns a
+   * bitvector with all ones. For signed division with bvsdiv, the result is -1
+   * or 1 depending on the sign of the left-hand-side. If we ever use
+   * bitvectors, we must be careful to wrap bv.div to keep the x/0=0 semantics.
    */
   case object Div extends Prim_nn_n:
     def ppr = pretty.text("/")
-    def int(i: Integer, j: Integer) =
-      if (j == 0) 0 else (i / j)
+    def int(m: Integer, n: Integer) =
+      if n == 0
+      then 0
+      else
+        val d = m / n
+        val r = m % n
+        if n > 0 && m >= 0
+        then d
+        else if n > 0 && m < 0
+        then d - (if r != 0 then 1 else 0)
+        else if n < 0 && m >= 0
+        then d
+        else d + (if r != 0 then 1 else 0)
+
     def real(i: Real, j: Real) =
-      if (j == 0) 0 else (i / j)
+      if j == 0
+      then 0
+      else i / j
 
   case object Le extends Prim_nn_b:
     def ppr = pretty.text("<=")
