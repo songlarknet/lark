@@ -8,12 +8,17 @@ import lack.meta.source.Node
 import lack.meta.source.Node.{Builder}
 import lack.meta.smt
 import lack.meta.core
+import scala.reflect.ClassTag
 
 /** Check that a program satisfies its properties. */
 object Check:
   /** Check a node and its subnodes.
    * Will exit with System.exit on failure. */
-  def success(options: Options = Options())(f: Node.Invocation => Node): smt.Check.Summary =
+  def success[T <: Node : ClassTag]
+    (options: Options = Options())
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : smt.Check.Summary =
     val res = checkResult(options)(f)
     println(res.pprString)
     if (!res.ok)
@@ -22,7 +27,11 @@ object Check:
 
   /** Check a node and its subnodes, expecting failure to prove some properties.
    * Will exit with System.exit on unexpected success. */
-  def failure(options: Options = Options())(f: Node.Invocation => Node): smt.Check.Summary =
+  def failure[T <: Node : ClassTag]
+    (options: Options = Options())
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : smt.Check.Summary =
     val res = checkResult(options)(f)
     println(res.pprString)
     if (res.ok)
@@ -31,7 +40,11 @@ object Check:
 
   /** Check a node and its subnodes, expecting some sort of type error.
    * Will exit with System.exit on unexpected success. */
-  def error(options: Options = Options())(f: Node.Invocation => Node): Unit =
+  def error[T <: Node : ClassTag]
+    (options: Options = Options())
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : Unit =
     try {
       val res = checkResult(options)(f)
       throw new Exception(s"succeeded but expected an error: ${res.pprString}")
@@ -42,7 +55,11 @@ object Check:
 
 
   /** Check a node and its subnodes, returning the summary. */
-  def checkResult(options: Options = Options())(f: Node.Invocation => Node): smt.Check.Summary =
+  def checkResult[T <: Node : ClassTag]
+    (options: Options = Options())
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : smt.Check.Summary =
     given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
     builder.invoke(f)
     val subnodes = builder.nodeRef.subnodes.values

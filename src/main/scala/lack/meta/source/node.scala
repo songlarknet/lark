@@ -1,7 +1,7 @@
 package lack.meta.source
 
 import lack.meta.base.num.Integer
-import lack.meta.base.names
+import lack.meta.base.{names, pretty}
 import lack.meta.core
 import lack.meta.source.Stream
 import lack.meta.source.Stream.SortRepr
@@ -11,6 +11,10 @@ import scala.reflect.ClassTag
 
 
 abstract class Node(invocation: Node.Invocation):
+
+  /** Some things need to wait until after the constructor has run, so when we
+   * create a new node, we call finish afterwards. */
+  def finish(): Unit = ()
 
   given builder: Node.Builder = invocation.builder
 
@@ -119,20 +123,32 @@ object Node:
      * keep a clear interface between the calling node and the called node.
      * ...
      */
-    def invokeWithName[T <: Node](name: String)(f: Invocation => T): T =
+    def invokeWithName[T <: Node](
+      name: String,
+      klass: Option[Class[_]] = None,
+      location: Option[lack.meta.macros.Location] = None
+    )(f: Invocation => T): T =
       val instance = nodeRef.freshSubnodeRef(names.ComponentSymbol.fromScalaSymbol(name))
       val subpath = instance.fullyQualifiedPath
       val subnodeRef = new core.node.Builder.Node(new names.mutable.Supply(subpath), subpath)
       val subbuilder = new Builder(subnodeRef)
       val inv = new Invocation(superbuilder = this, instance = instance, builder = subbuilder)
-      val node = f(inv)
-      nested.subnode(instance.name, subnodeRef, inv.arguments.toList)
-      node
+      try
+        val node = f(inv)
+        node.finish()
+        nested.subnode(instance.name, subnodeRef, inv.arguments.toList)
+        node
+      catch
+        case e: Exception =>
+          val typ = klass.fold(pretty.emptyDoc)(k => s" of type ${k.getTypeName()}")
+          val loc = location.fold(pretty.emptyDoc)(l => pretty.layout(l.ppr(" ")))
+          throw new Exception(
+            s"\n  Constructing node ${name}${typ}${loc}", e)
 
     def invoke[T <: Node : ClassTag](f: Invocation => T)(using location: lack.meta.macros.Location): T =
-      val name = location.enclosing.getOrElse(
-          summon[ClassTag[T]].runtimeClass.getSimpleName())
-      invokeWithName(name)(f)
+      val klass = summon[ClassTag[T]].runtimeClass
+      val name  = location.enclosing.getOrElse(klass.getSimpleName())
+      invokeWithName(name, Some(klass), Some(location))(f)
 
   class Invocation(val superbuilder: Builder, val instance: names.Ref, val builder: Builder):
     val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()

@@ -32,7 +32,6 @@ class TestAutomatonSugar extends munit.FunSuite:
     val speedo  = forall[UInt8]
     val accel   = forall[UInt8]
     val cruise  = Cruise(btn_on, cmd_set, speedo, accel)
-    cruise.finish()
 
   class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: Node.Invocation) extends Automaton(invocation):
     val accel_out = output[UInt8]

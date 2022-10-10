@@ -16,10 +16,15 @@ import lack.meta.source.Node.{Builder}
 
 import scala.collection.immutable.SortedMap
 import java.nio.file.{Path, Files, Paths}
+import scala.reflect.ClassTag
 
 /** Compile a program to executable code. */
 object Compile:
-  def compile(basename: String = "lack", output: Option[Path] = None)(f: Node.Invocation => Node): Unit =
+  def compile[T <: Node : ClassTag]
+    (basename: String = "lack", output: Option[Path] = None)
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : Unit =
     val top = lack.meta.core.node.Builder.Node.top()
     given builder: Builder = new Builder(top)
     builder.invoke(f)
@@ -51,7 +56,10 @@ object Compile:
         Files.writeString(c, pretty.layout(source))
 
 
-  def printSchedules()(f: Node.Invocation => Node): Unit =
+  def printSchedules[T <: Node : ClassTag]()
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : Unit =
     given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
     builder.invoke(f)
     val subnodes = builder.nodeRef.allNodes

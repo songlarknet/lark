@@ -172,8 +172,7 @@ object Check:
     /** Check if a variable is well-defined, which means that it is guarded
      * and has a definition. */
     def isWellDefined(name: names.Component): Boolean =
-      val v = variables(name)
-      !v.unguarded && toplevel(name)
+      variables.contains(name) && !variables(name).unguarded && toplevel(name)
 
 
   /** Information about a local variable.

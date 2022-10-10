@@ -20,6 +20,7 @@ import lack.meta.source.Node.{Builder}
 import lack.meta.target
 
 import scala.collection.immutable
+import scala.reflect.ClassTag
 
 /** Grind a program by generating input traces and checking that all of the
  * evaluation traces agree.
@@ -28,7 +29,11 @@ object Grind:
 
   /** Execute all nodes on arbitrary input traces and check that the SMT
    * solver, evaluator, and compiled code all agree. */
-  def grind(options: Options = Options())(f: Node.Invocation => Node): Unit =
+  def grind[T <: Node : ClassTag]
+    (options: Options = Options())
+    (f: Node.Invocation => T)
+    (using location: lack.meta.macros.Location)
+  : Unit =
     given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
     builder.invoke(f)
     val subnodes  = builder.nodeRef.subnodes.values

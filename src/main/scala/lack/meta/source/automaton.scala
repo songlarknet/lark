@@ -139,10 +139,7 @@ abstract class Automaton(invocation: Node.Invocation) extends Node(invocation):
         }
       }
 
-  /** TODO: this should be called automatically. Should source.node.Node have
-   * a finish function that finishes all subnodes?
-   */
-  def finish(): Unit =
+  override def finish(): Unit =
     require(initialState.nonEmpty, "No initial state specified. Specify the initial state with initial(S)")
     require(states.size > 0, "no states. add some states to your automaton")
 
