@@ -17,7 +17,7 @@ class TestCounterexample extends munit.FunSuite:
   }
 
 
-  class LemmaCounterexample(invocation: Node.Invocation) extends Node(invocation):
+  case class LemmaCounterexample(invocation: Node.Invocation) extends Node(invocation):
     val counter = output[Int32]
     val undef   = forall[Int32]
 

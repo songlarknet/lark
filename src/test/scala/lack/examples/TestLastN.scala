@@ -10,21 +10,21 @@ import lack.meta.driver.{Check, Grind}
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
-    Check.success() { new LemmaLastN(3, _) }
+    Check.success() { LemmaLastN(3) }
   }
 
   test("lastN compile") {
-    lack.meta.driver.Compile.compile() { new LemmaLastN(3, _) }
+    lack.meta.driver.Compile.compile() { LemmaLastN(3) }
   }
 
   test("Grind") {
-    Grind.grind() { new LemmaLastN(3, _) }
+    Grind.grind() { LemmaLastN(3) }
   }
 
-  class LemmaLastN(n: Integer, invocation: Node.Invocation) extends Node(invocation):
+  case class LemmaLastN(n: Integer)(invocation: Node.Invocation) extends Node(invocation):
     val e      = forall[Bool]
-    val lastN  = LastN(n,     e)
-    val lastSN = LastN(n + 1, e)
+    val lastN  = subnode(LastN(n,     e))
+    val lastSN = subnode(LastN(n + 1, e))
     check("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {
       lastN.count <= lastSN.count && lastSN.count <= lastN.count + 1
     }
@@ -32,7 +32,7 @@ class TestLastN extends munit.FunSuite:
       lastSN.out ==> lastN.out
     }
 
-  class LastN(n: Integer, e: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
+  case class LastN(n: Integer, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     require(n <= 255)
 
     val count     = output[UInt8]
@@ -54,9 +54,3 @@ class TestLastN extends munit.FunSuite:
     // check("count <= ${n - 1} (not true!)") {
     //   count <= (n - 1)
     // }
-
-  object LastN:
-    def apply(n: Integer, e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new LastN(invocation.arg("n", n), invocation.arg("e", e), invocation)
-      }

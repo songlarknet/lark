@@ -13,14 +13,14 @@ import lack.meta.smt.Translate
 class IntegerOverflow extends munit.FunSuite:
   test("pre: disable overflow check ok") {
     val opt = Check.Options.noRefinement
-    Check.success(opt) { new BugPre(_) }
+    Check.success(opt) { BugPre(_) }
   }
 
   test("pre: overflow check fails") {
-    Check.failure() { new BugPre(_) }
+    Check.failure() { BugPre(_) }
   }
 
-  class BugPre(invocation: Node.Invocation) extends Node(invocation):
+  case class BugPre(invocation: Node.Invocation) extends Node(invocation):
     val zeros    = local[Int32]
     val increment = local[Int32]
 
@@ -37,14 +37,14 @@ class IntegerOverflow extends munit.FunSuite:
     }
 
   test("saturating counter: 254 ok") {
-    Check.success() { new BugSaturatingCounter(254, _) }
+    Check.success() { BugSaturatingCounter(254) }
   }
 
   test("saturating counter: 255 fails") {
-    Check.failure() { new BugSaturatingCounter(255, _) }
+    Check.failure() { BugSaturatingCounter(255) }
   }
 
-  class BugSaturatingCounter(limit: Int, invocation: Node.Invocation) extends Node(invocation):
+  case class BugSaturatingCounter(limit: Int)(invocation: Node.Invocation) extends Node(invocation):
     val count = local[UInt8]
 
     val prec = fby(u8(0), count)

@@ -8,8 +8,8 @@ import lack.meta.core.Sort
 class Stream[T: Stream.SortRepr](val _exp: Exp):
   def sortRepr: Stream.SortRepr[T] = summon[Stream.SortRepr[T]]
   def sort: Sort = sortRepr.sort
-  def ==(o: Stream[T])(using eq: Compound.Eq[T], builder: Node.Builder, location: Location): Stream[Stream.Bool] = eq.eq(this, o)
-  def !=(o: Stream[T])(using eq: Compound.Eq[T], builder: Node.Builder, location: Location): Stream[Stream.Bool] = Compound.not(eq.eq(this, o))
+  def ==(o: Stream[T])(using eq: Compound.Eq[T], builder: node.Builder, location: Location): Stream[Stream.Bool] = eq.eq(this, o)
+  def !=(o: Stream[T])(using eq: Compound.Eq[T], builder: node.Builder, location: Location): Stream[Stream.Bool] = Compound.not(eq.eq(this, o))
 
   // Check that all constructed streams have a sort that agrees with the type-level sort.
   // PERF: is this overkill?

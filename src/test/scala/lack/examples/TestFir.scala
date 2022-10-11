@@ -10,13 +10,13 @@ import lack.meta.driver.Check
 /** Example of an FIR filter */
 class TestFIR extends munit.FunSuite:
   test("fir filter") {
-    Check.success() { new LemmaFIR(3, _) }
+    Check.success() { LemmaFIR(3) }
   }
 
-  class LemmaFIR(n: Int, invocation: Node.Invocation) extends Node(invocation):
+  case class LemmaFIR(n: Int)(invocation: Node.Invocation) extends Node(invocation):
     val signal = forall[Real]
 
-    val lpf = FIR(List(0.5, 0.03, 0.02, 0.01), signal)
+    val lpf = subnode(FIR(List(0.5, 0.03, 0.02, 0.01), signal))
     val bounded_input =
       real(0.0) <= signal && signal <= real(100.0)
     val bounded_output =
@@ -30,7 +30,7 @@ class TestFIR extends munit.FunSuite:
       bounded_output
     }
 
-  class FIR(coefficients: List[Double], signal: Stream[Real], invocation: Node.Invocation) extends Node(invocation):
+  case class FIR(coefficients: List[Double], signal: Stream[Real])(invocation: Node.Invocation) extends Node(invocation):
     val out = output[Real]
 
     /** Single-unit delay, initialised with zero */
@@ -44,9 +44,3 @@ class TestFIR extends munit.FunSuite:
           real(coefficient) * sig + fir(rest, z(sig))
 
     out := fir(coefficients, signal)
-
-  object FIR:
-    def apply(coefficients: List[Double], signal: Stream[Real])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new FIR(coefficients, invocation.arg("signal", signal), invocation)
-      }

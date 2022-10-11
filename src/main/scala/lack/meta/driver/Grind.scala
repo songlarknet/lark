@@ -14,8 +14,7 @@ import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lack.meta.source.Node
-import lack.meta.source.Node.{Builder}
+import lack.meta.source.node.{Base, Invocation}
 
 import lack.meta.target
 
@@ -29,14 +28,12 @@ object Grind:
 
   /** Execute all nodes on arbitrary input traces and check that the SMT
    * solver, evaluator, and compiled code all agree. */
-  def grind[T <: Node : ClassTag]
+  def grind[T <: Base: ClassTag]
     (options: Options = Options())
-    (f: Node.Invocation => T)
+    (body: Invocation => T)
     (using location: lack.meta.macros.Location)
   : Unit =
-    given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
-    builder.invoke(f)
-    val subnodes  = builder.nodeRef.subnodes.values
+    val subnodes  = Invoke.topnodes(body)
     val allnodes  = subnodes.flatMap(_.allNodes)
     val frozen    = allnodes.map(_.freeze)
     val checked   = core.node.Check.program(frozen, core.node.Check.Options())

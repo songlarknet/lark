@@ -9,10 +9,10 @@ import lack.meta.driver.Check
 
 class TestBounds extends munit.FunSuite:
   test("bounds") {
-    Check.success() { new LemmaBounds(3, _) }
+    Check.success() { LemmaBounds(3) }
   }
 
-  class LemmaBounds(n: Int, invocation: Node.Invocation) extends Node(invocation):
+  case class LemmaBounds(n: Int)(invocation: Node.Invocation) extends Node(invocation):
     // Use 32-bit arithmetic on 8-bit values
     val human           = forall[Int8]
     val OVERRIDE        = i32(100)

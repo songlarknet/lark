@@ -11,8 +11,7 @@ import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lack.meta.source.Node
-import lack.meta.source.Node.{Builder}
+import lack.meta.source.node.{Base, Invocation}
 
 import scala.collection.immutable.SortedMap
 import java.nio.file.{Path, Files, Paths}
@@ -20,15 +19,12 @@ import scala.reflect.ClassTag
 
 /** Compile a program to executable code. */
 object Compile:
-  def compile[T <: Node : ClassTag]
+  def compile[T <: Base: ClassTag]
     (basename: String = "lack", output: Option[Path] = None)
-    (f: Node.Invocation => T)
+    (body: Invocation => T)
     (using location: lack.meta.macros.Location)
   : Unit =
-    val top = lack.meta.core.node.Builder.Node.top()
-    given builder: Builder = new Builder(top)
-    builder.invoke(f)
-    val subnodes = builder.nodeRef.allNodes.filter(_ != top)
+    val subnodes = Invoke.allNodes(body)
     val frozen   = subnodes.map(_.freeze)
     val checked  = core.node.Check.program(frozen, core.node.Check.Options())
     val scheds   = schedules(frozen)
@@ -56,13 +52,11 @@ object Compile:
         Files.writeString(c, pretty.layout(source))
 
 
-  def printSchedules[T <: Node : ClassTag]()
-    (f: Node.Invocation => T)
+  def printSchedules[T <: Base: ClassTag]
+    (body: Invocation => Base)
     (using location: lack.meta.macros.Location)
   : Unit =
-    given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
-    builder.invoke(f)
-    val subnodes = builder.nodeRef.allNodes
+    val subnodes = Invoke.allNodes(body)
 
     subnodes.foreach { n =>
       val nn = n.freeze

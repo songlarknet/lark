@@ -4,7 +4,7 @@ import lack.meta.macros.Location
 import lack.meta.core.term.{Exp, Flow, Prim, Val}
 import lack.meta.core.term.{Compound => exp}
 import lack.meta.core.term.prim.Table
-import lack.meta.source.Node.Builder
+import lack.meta.source.node.Builder
 import lack.meta.source.Stream
 import lack.meta.source.Stream.SortRepr
 import lack.meta.base

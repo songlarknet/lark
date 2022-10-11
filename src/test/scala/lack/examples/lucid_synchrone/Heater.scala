@@ -16,17 +16,18 @@ import lack.meta.driver.{Check, Compile, Grind}
 class Heater extends munit.FunSuite:
 
   test("Check") {
-    Check.success() { new Top(_) }
+    Check.success() { Top(_) }
   }
 
   test("Compile") {
     Compile.compile(
       basename = "heater",
-      output = Some(java.nio.file.Paths.get("scratch/c/"))) { new Top(_) }
+      output = Some(java.nio.file.Paths.get("scratch/c/")))
+      { Top(_) }
   }
 
   test("Grind") {
-    Grind.grind() { new Top(_) }
+    Grind.grind() { Top(_) }
   }
 
 
@@ -44,7 +45,7 @@ class Heater extends munit.FunSuite:
     def delay_off: Integer = 100
 
   /** Count(d,t) returns true when t has been true d times. */
-  class Count(d: Integer, t: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
+  case class Count(d: Integer, t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val ok = output[Bool]
     val rem = local[Base.TIME]
     val pre_rem = fby(Base.time(0), rem)
@@ -60,29 +61,12 @@ class Heater extends munit.FunSuite:
       otherwise
         { pre_rem.as[Int32] }).as[Base.TIME]
 
-  object Count:
-    def apply(d: Integer, t: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Count(
-          invocation.arg("d", d),
-          invocation.arg("t", t),
-          invocation)
-      }.ok
-
   /** Rising edge: true when t transitions from false to true */
-  class Edge(t: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
+  case class Edge(t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val ok = output[Bool]
     ok := fby(False, !t) && t
 
-  object Edge:
-    def apply(t: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Edge(
-          invocation.arg("t", t),
-          invocation)
-      }.ok
-
-  class Heat(expected: Stream[Base.TEMP], actual: Stream[Base.TEMP], invocation: Node.Invocation) extends Automaton(invocation):
+  case class Heat(expected: Stream[Base.TEMP], actual: Stream[Base.TEMP])(invocation: Node.Invocation) extends Automaton(invocation):
     val on = output[Bool]
 
     // Integer overflow muck
@@ -103,42 +87,25 @@ class Heater extends munit.FunSuite:
       }
       on := True
 
-  object Heat:
-    def apply(expected: Stream[UInt8], actual: Stream[UInt8])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Heat(
-          invocation.arg("expected", expected),
-          invocation.arg("actual", actual),
-          invocation)
-      }
-
-  class Command(millisecond: Stream[Bool], invocation: Node.Invocation) extends Automaton(invocation):
+  case class Command(millisecond: Stream[Bool])(invocation: Node.Invocation) extends Automaton(invocation):
     val light = output[Bool]
     val gas   = output[Bool]
 
     initial(OPEN)
     object OPEN extends State:
       unless {
-        restart(Count(Base.delay_on, millisecond), SILENT)
+        restart(subnode(Count(Base.delay_on, millisecond)).ok, SILENT)
       }
       light := True
       gas   := True
     object SILENT extends State:
       unless {
-        restart(Count(Base.delay_off, millisecond), OPEN)
+        restart(subnode(Count(Base.delay_off, millisecond)).ok, OPEN)
       }
       light := False
       gas   := False
 
-  object Command:
-    def apply(millisecond: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Command(
-          invocation.arg("millisecond", millisecond),
-          invocation)
-      }
-
-  class Light(millisecond: Stream[Bool], heatOn: Stream[Bool], lightOn: Stream[Bool], invocation: Node.Invocation) extends Automaton(invocation):
+  case class Light(millisecond: Stream[Bool], heatOn: Stream[Bool], lightOn: Stream[Bool])(invocation: Node.Invocation) extends Automaton(invocation):
     val light = output[Bool]
     val gas   = output[Bool]
     val nok   = output[Bool]
@@ -161,9 +128,11 @@ class Heater extends munit.FunSuite:
     object TRY extends State:
       unless {
         restart(lightOn, LIGHT_ON)
-        restart(fby(False, Count(3, Edge(!light))), FAILURE)
+        val edge = subnode(Edge(!light)).ok
+        val count = subnode(Count(3, edge)).ok
+        restart(fby(False, count), FAILURE)
       }
-      val command = Command(millisecond)
+      val command = subnode(Command(millisecond))
       light := command.light
       gas   := command.gas
       nok   := False
@@ -172,61 +141,31 @@ class Heater extends munit.FunSuite:
       gas   := False
       nok   := True
 
-  object Light:
-    def apply(millisecond: Stream[Bool], heatOn: Stream[Bool], lightOn: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Light(
-          invocation.arg("millisecond", millisecond),
-          invocation.arg("heatOn", heatOn),
-          invocation.arg("lightOn", lightOn),
-          invocation)
-      }
-
-  class Main(
+  case class Main(
     millisecond: Stream[Bool],
     restart:     Stream[Bool],
     expected:    Stream[Base.TEMP],
     actual:      Stream[Base.TEMP],
-    lightOn:     Stream[Bool],
-    invocation: Node.Invocation
-  ) extends Node(invocation):
+    lightOn:     Stream[Bool]
+  )(invocation: Node.Invocation) extends Node(invocation):
     val light = output[Bool]
     val gas   = output[Bool]
     val ok    = output[Bool]
     val nok   = output[Bool]
 
-    val R = new Reset(restart):
-      val heat   = Heat(expected, actual)
-      val lightN = Light(millisecond, heat.on, lightOn)
+    new Reset(restart):
+      val heat   = subnode(Heat(expected, actual))
+      val lightN = subnode(Light(millisecond, heat.on, lightOn))
 
       light := lightN.light
       gas   := lightN.gas
       nok   := lightN.nok
       ok    := !lightN.nok
 
-
-  object Main:
-    def apply(
-      millisecond: Stream[Bool],
-      restart:     Stream[Bool],
-      expected:    Stream[Base.TEMP],
-      actual:      Stream[Base.TEMP],
-      lightOn:     Stream[Bool],
-    )(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Main(
-          invocation.arg("millisecond", millisecond),
-          invocation.arg("restart", restart),
-          invocation.arg("expected", expected),
-          invocation.arg("actual", actual),
-          invocation.arg("lightOn", lightOn),
-          invocation)
-      }
-
-  class Top(invocation: Node.Invocation) extends Node(invocation):
+  case class Top(invocation: Node.Invocation) extends Node(invocation):
     val millisecond = forall[Bool]
     val restart     = forall[Bool]
     val expected    = forall[Base.TEMP]
     val actual      = forall[Base.TEMP]
     val lightOn     = forall[Bool]
-    val main        = Main(millisecond, restart, expected, actual, lightOn)
+    subnode(Main(millisecond, restart, expected, actual, lightOn))

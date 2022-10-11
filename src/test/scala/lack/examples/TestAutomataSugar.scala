@@ -13,7 +13,7 @@ import lack.meta.driver.{Check, Compile, Grind}
 class TestAutomatonSugar extends munit.FunSuite:
 
   test("automaton sugar") {
-    Check.success() { new Top(_) }
+    Check.success() { Top(_) }
   }
 
   test("automaton sugar compile") {
@@ -23,17 +23,17 @@ class TestAutomatonSugar extends munit.FunSuite:
   }
 
   test("Grind") {
-    Grind.grind() { new Top(_) }
+    Grind.grind() { Top(_) }
   }
 
-  class Top(invocation: Node.Invocation) extends Node(invocation):
+  case class Top(invocation: Node.Invocation) extends Node(invocation):
     val btn_on  = forall[Bool]
     val cmd_set = forall[Bool]
     val speedo  = forall[UInt8]
     val accel   = forall[UInt8]
-    val cruise  = Cruise(btn_on, cmd_set, speedo, accel)
+    val cruise  = subnode(Cruise(btn_on, cmd_set, speedo, accel))
 
-  class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8], invocation: Node.Invocation) extends Automaton(invocation):
+  case class Cruise(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(invocation: Node.Invocation) extends Automaton(invocation):
     val accel_out = output[UInt8]
     val light_on  = output[Bool]
     val speed_out = output[UInt8]
@@ -79,14 +79,3 @@ class TestAutomatonSugar extends munit.FunSuite:
     check("no set, no change") {
       !cmd_set ==> (speed_out == u8(0) || speed_out == pre(speed_out))
     }
-
-  object Cruise:
-    def apply(btn_on: Stream[Bool], cmd_set: Stream[Bool], speedo: Stream[UInt8], accel: Stream[UInt8])(using builder: Node.Builder, location: lack.meta.macros.Location) =
-      builder.invoke { invocation =>
-        new Cruise(
-          invocation.arg("btn_on", btn_on),
-          invocation.arg("cmd_set", cmd_set),
-          invocation.arg("speedo", speedo),
-          invocation.arg("accel", accel),
-          invocation)
-      }

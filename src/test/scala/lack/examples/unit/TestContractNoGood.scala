@@ -3,21 +3,22 @@ package lack.examples.unit
 import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
 import lack.meta.source.Node
+import lack.meta.source.node.Invocation
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, Int32}
 import lack.meta.driver.Check
 
 class TestContractNoGood extends munit.FunSuite:
   test("contract no good") {
-    Check.failure() { new Lemma(_) }
+    Check.failure() { TestContractNoGood.Lemma(_) }
   }
 
-  class Lemma(invocation: Node.Invocation) extends Node(invocation):
+object TestContractNoGood:
+  case class Lemma(invocation: Invocation) extends Node(invocation):
     val undef   = forall[Int32]
+    subnode(Contract(undef))
 
-    builder.invoke(i => new Contract(i.arg("i", undef), i))
-
-  class Contract(i: Stream[Int32], invocation: Node.Invocation) extends Node(invocation):
+  case class Contract(i: Stream[Int32])(invocation: Invocation) extends Node(invocation):
     requires("input positive") {
       i > 0
     }

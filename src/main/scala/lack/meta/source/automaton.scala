@@ -42,7 +42,7 @@ import scala.collection.mutable
  * made Kind2's automata a bit slow, if reset contexts introduce extra copies
  * of the state there too.
  */
-abstract class Automaton(invocation: Node.Invocation) extends Node(invocation):
+abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
   /** The user must specify their initial state */
   def initial(state: State) =
     assert(initialState.isEmpty, s"Cannot set initial state multiple times. Have value ${initialState}, tried to set to ${state.info}")
@@ -139,7 +139,7 @@ abstract class Automaton(invocation: Node.Invocation) extends Node(invocation):
         }
       }
 
-  override def finish(): Unit =
+  private def finishAutomaton(): Unit =
     require(initialState.nonEmpty, "No initial state specified. Specify the initial state with initial(S)")
     require(states.size > 0, "no states. add some states to your automaton")
 
@@ -164,7 +164,11 @@ abstract class Automaton(invocation: Node.Invocation) extends Node(invocation):
     val initialStateSt = initialState.get.indexInt
     pre_state := fby(u8(initialStateSt), state)
 
-    bindProperty(core.Prop.Syntax.Generated.check, "finite states") {
+    base.bindProperty(core.Prop.Syntax.Generated.check, "finite states") {
       val assert_finite_states = u8(0) <= pre_state && pre_state < u8(stateCounter)
       assert_finite_states
     }
+
+  base.afterConstructor { () =>
+    finishAutomaton()
+  }

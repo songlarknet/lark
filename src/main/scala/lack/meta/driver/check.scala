@@ -4,8 +4,7 @@ import lack.meta.source.Compound.{given, _}
 import lack.meta.source.Compound.implicits._
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lack.meta.source.Node
-import lack.meta.source.Node.{Builder}
+import lack.meta.source.node.{Base, Invocation}
 import lack.meta.smt
 import lack.meta.core
 import scala.reflect.ClassTag
@@ -14,9 +13,9 @@ import scala.reflect.ClassTag
 object Check:
   /** Check a node and its subnodes.
    * Will exit with System.exit on failure. */
-  def success[T <: Node : ClassTag]
+  def success[T <: Base: ClassTag]
     (options: Options = Options())
-    (f: Node.Invocation => T)
+    (f: Invocation => T)
     (using location: lack.meta.macros.Location)
   : smt.Check.Summary =
     val res = checkResult(options)(f)
@@ -27,9 +26,9 @@ object Check:
 
   /** Check a node and its subnodes, expecting failure to prove some properties.
    * Will exit with System.exit on unexpected success. */
-  def failure[T <: Node : ClassTag]
+  def failure[T <: Base: ClassTag]
     (options: Options = Options())
-    (f: Node.Invocation => T)
+    (f: Invocation => T)
     (using location: lack.meta.macros.Location)
   : smt.Check.Summary =
     val res = checkResult(options)(f)
@@ -40,9 +39,9 @@ object Check:
 
   /** Check a node and its subnodes, expecting some sort of type error.
    * Will exit with System.exit on unexpected success. */
-  def error[T <: Node : ClassTag]
+  def error[T <: Base: ClassTag]
     (options: Options = Options())
-    (f: Node.Invocation => T)
+    (f: Invocation => T)
     (using location: lack.meta.macros.Location)
   : Unit =
     try {
@@ -55,18 +54,19 @@ object Check:
 
 
   /** Check a node and its subnodes, returning the summary. */
-  def checkResult[T <: Node : ClassTag]
+  def checkResult[T <: Base: ClassTag]
     (options: Options = Options())
-    (f: Node.Invocation => T)
+    (body: Invocation => T)
     (using location: lack.meta.macros.Location)
   : smt.Check.Summary =
-    given builder: Builder = new Builder(lack.meta.core.node.Builder.Node.top())
-    builder.invoke(f)
-    val subnodes = builder.nodeRef.subnodes.values
+    val subnodes = Invoke.topnodes(body)
     val subnode = subnodes.toList match
       case List(s) => s
       case List() => assert(false, "No node to check")
-      case ls => assert(false, "Too many nodes to check")
+      case ls =>
+        println(ls.mkString("\n"))
+        ls.foreach(x => println(x.pprString))
+        assert(false, "Too many nodes to check")
 
     subnodes.foreach { n =>
        core.node.Check.node(n.freeze, core.node.Check.Options())
