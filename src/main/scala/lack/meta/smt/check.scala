@@ -6,8 +6,20 @@ import lack.meta.core.node.Builder.Node
 
 import lack.meta.smt.Term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 object Check:
+
+  case class Options(
+    solver:                  () => Solver = { () => Solver.gimme(verbose = false) },
+    translate:               Translate.Options = Translate.Options(),
+    maximumInductiveSteps:   Int = 5,
+    requireFeasibilitySteps: Int = 5,
+  )
+
   sealed trait CheckFeasible extends pretty.Pretty
   object CheckFeasible:
     case class FeasibleUpTo(steps: Int) extends CheckFeasible:
@@ -81,6 +93,33 @@ object Check:
         pretty.text("Property false, found a counterexample.") <@>
         pretty.indent(details.ppr, 2)
 
+    def pprJudgments(summary: NodeSummary, judgments: List[system.SystemJudgment]): pretty.Doc =
+      val green = "\u001b[32m"
+      val red   = "\u001b[31m"
+      val yello = "\u001b[33m"
+      val reset = "\u001b[m"
+      val ok  = pretty.string(green + "✅")
+      val bad = pretty.string(red   + "❌")
+      val huh = pretty.string(yello + "❔")
+      val success = pretty.string("")
+      val unknown = pretty.string("[unknown]")
+      val failed  = pretty.string("[failed]")
+      pretty.vsep(judgments.map { j =>
+        val (status,details) = summary match
+          case _: OK => (ok, success)
+          case Counterexample(_, Bmc.CounterexampleAt(_, trace)) =>
+            if trace.propertyKnownFalse(j.consequent)
+            then (bad,
+              failed <>
+              pretty.line <> pretty.indent(j.consequent.ppr <> pretty.colon <+> j.judgment.term.ppr))
+            else (huh, unknown)
+          case _: BadInduction =>
+            (huh, unknown)
+          case _: Infeasible =>
+            (huh, unknown)
+        pretty.indent(status <+> j.judgment.pprObligationShort <+> details <> reset)
+      })
+
   def declareSystem(n: Node, solver: Solver, options: Translate.Options = Translate.Options()): system.Top =
     val sys = Translate.nodes(n.allNodes, options)
     sys.fundefs.foreach(solver.command)
@@ -119,58 +158,63 @@ object Check:
     val propsT = props.map(p => compound.not(judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
-  def checkMany(top: Node, count: Int, solver: () => Solver, options: Translate.Options = Translate.Options()): Summary =
-    println("Checking top-level node:")
-    println(top.pprString)
-    println("System translation:")
-    println(Translate.nodes(top.allNodes, options).pprString)
-
+  def checkMany(top: Node, options: Options)(using ExecutionContext): Summary =
     val res = top.allNodes.map { n =>
-      val s = solver()
-      val r = checkNode(n, count, s, options = options)
+      val r = checkNode(n, options)
       println(r.pprString)
       r
     }
     Summary(res.toList)
 
-  def checkNode(top: Node, count: Int, solver: Solver, skipTrivial: Boolean = true, options: Translate.Options = Translate.Options()): NodeSummary =
-    val sys  = declareSystem(top, solver, options)
+  def withSystemSolver[T](
+    top: system.Top,
+    options: Options
+  )(body: Solver => T)(using ExecutionContext): Future[T] =
+    Future {
+      val solver = options.solver()
+      top.fundefs.foreach(solver.command(_))
+      try
+        body(solver)
+      finally
+        solver.free()
+    }
+
+  def checkNode(top: Node, options: Options)(using ExecutionContext): NodeSummary =
+    val sys = Translate.nodes(top.allNodes, options.translate)
     val topS = sys.top
-    if (skipTrivial && topS.system.guarantees.isEmpty)
-      NodeSummary.Skip(top)
-    else
-      // LODO fix up pretty-printing
-      println(s"Node ${names.Prefix(top.path).pprString}:")
-      topS.system.relies.foreach { o =>
-        println(s"  Rely      ${o.judgment.pprString}")
-      }
-      topS.system.guarantees.foreach { o =>
-        println(s"  Guarantee ${o.judgment.pprString}")
-      }
-      topS.system.sorries.foreach { o =>
-        println(s"  Sorry     ${o.judgment.pprString}")
-      }
+    println(s"Checking '${names.Prefix(top.path).pprString}' with ${topS.system.guarantees.length} properties to check:")
 
-      // TODO: runner / strategy:
-      // * run different methods in parallel
-      // * when find counterexample, check if remaining props are true
-      val bmcR = solver.pushed { bmc(sys, topS, count, solver) }
-      bmcR match
-        case Bmc.SafeUpTo(_) =>
-          val indR = solver.pushed { kind(sys, topS, count, solver) }
-          indR match
-            case Kind.InvariantMaintainedAt(k) =>
-              val feaR = solver.pushed { feasible(sys, topS, count, solver) }
-              feaR match
-                case CheckFeasible.FeasibleUpTo(_) =>
-                  NodeSummary.OK(top, k)
-                case _ =>
-                  NodeSummary.Infeasible(top, feaR)
-            case _ =>
-              NodeSummary.BadInduction(top, indR)
+    val bmcF = withSystemSolver(sys, options) { solver =>
+      bmc(sys, topS, options.maximumInductiveSteps, solver)
+    }
+    val indF = withSystemSolver(sys, options) { solver =>
+      kind(sys, topS, options.maximumInductiveSteps, solver)
+    }
+    val feaF = withSystemSolver(sys, options) { solver =>
+      feasible(sys, topS, options.requireFeasibilitySteps, solver)
+    }
 
-        case _ =>
-          NodeSummary.Counterexample(top, bmcR)
+    val judgments = topS.system.guarantees
+    val bmcR = Await.result(bmcF, Duration.Inf)
+    val summary = bmcR match
+      case Bmc.SafeUpTo(_) =>
+        val indR = Await.result(indF, Duration.Inf)
+        indR match
+          case Kind.InvariantMaintainedAt(k) =>
+            val feaR = Await.result(feaF, Duration.Inf)
+            feaR match
+              case CheckFeasible.FeasibleUpTo(_) =>
+                NodeSummary.OK(top, k)
+              case _ =>
+                NodeSummary.Infeasible(top, feaR)
+          case _ =>
+            NodeSummary.BadInduction(top, indR)
+
+      case _ =>
+        NodeSummary.Counterexample(top, bmcR)
+
+    println(pretty.layout(pretty.indent(NodeSummary.pprJudgments(summary, judgments))))
+    summary
 
 
   def feasible(sys: system.Top, top: system.Node, count: Int, solver: Solver): CheckFeasible =

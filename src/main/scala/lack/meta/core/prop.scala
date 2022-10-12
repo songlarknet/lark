@@ -65,4 +65,15 @@ object Prop:
       pretty.colon <+>
       pretty.indent(term.ppr)
 
+    def pprObligationShort =
+      pretty.text("Property") <+>
+      pretty.text(name) <>
+      location.ppr(pretty.space) <+>
+      (syntax match
+        case Syntax.Generated(g) => pretty.text("(generated)")
+        case Syntax.Guarantee => pretty.text("(contract guarantee)")
+        case Syntax.Require => pretty.text("(subnode requires)")
+        case Syntax.Sorry => pretty.text("(sorry)")
+        case Syntax.Check => pretty.emptyDoc)
+
     def form: Form = syntax.form

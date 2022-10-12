@@ -9,6 +9,8 @@ import lack.meta.smt
 import lack.meta.core
 import scala.reflect.ClassTag
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 /** Check that a program satisfies its properties. */
 object Check:
   /** Check a node and its subnodes.
@@ -72,14 +74,12 @@ object Check:
        core.node.Check.node(n.freeze, core.node.Check.Options())
     }
 
-    def solver() = smt.Solver.gimme(verbose = options.verbose)
-    smt.Check.checkMany(subnode, options.steps, solver, options.translate)
+    smt.Check.checkMany(subnode, options.check)
 
   case class Options(
-    verbose: Boolean = false,
-    steps: Int = 5,
-    translate: smt.Translate.Options = smt.Translate.Options()
-  )
-
-  object Options:
-    val noRefinement = Options(translate = smt.Translate.Options(checkRefinement = false))
+    check: smt.Check.Options = smt.Check.Options()
+  ):
+    def disableRefinement: Options =
+      this.copy(check = check.copy(
+        translate = check.translate.copy(
+          checkRefinement = false)))

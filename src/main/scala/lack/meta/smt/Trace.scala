@@ -10,9 +10,19 @@ import smtlib.trees.Terms.SExpr
 
 case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
   def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
+
+  def propertyKnownFalse(prop: names.Ref): Boolean =
+    steps.exists { r =>
+      r.map(prop) match
+        case Val.Bool(b) => !b
+        case _ => false
+    }
+
 object Trace:
   case class Row(values: List[(names.Ref, Val)]) extends pretty.Pretty:
+    def map = values.toMap
     def ppr = pretty.braces(pretty.csep(values.map((k,v) => k.ppr <+> pretty.equal <+> v.ppr)))
+
   def fromModel(steps: Int, sexpr: SExpr): Trace =
     def allDefs(s: SExpr): Iterable[(names.Ref, Val)] = s match
       case CommandsResponses.GetModelResponseSuccess(m) =>
@@ -41,7 +51,7 @@ object Trace:
       val pfx = Check.rowPrefix(i).prefix
       val dsI = ds.filter((k,v) => k.prefix.startsWith(pfx))
       val dsK = dsI.map((k,v) => (k.copy(prefix = k.prefix.drop(pfx.length)), v))
-      val dsF = dsK.filter((k,v) => !names.ComponentSymbol.isInternal(k.name.symbol))
+      val dsF = dsK // dsK.filter((k,v) => !names.ComponentSymbol.isInternal(k.name.symbol))
       val dsS = dsF.toArray.sortBy(_._1).toList
       Row(dsS)
     }

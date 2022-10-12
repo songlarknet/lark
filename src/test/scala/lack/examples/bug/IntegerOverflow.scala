@@ -12,7 +12,7 @@ import lack.meta.smt.Translate
 // We get overflows in contexts where the value is never used.
 class IntegerOverflow extends munit.FunSuite:
   test("pre: disable overflow check ok") {
-    val opt = Check.Options.noRefinement
+    val opt = Check.Options().disableRefinement
     Check.success(opt) { BugPre(_) }
   }
 

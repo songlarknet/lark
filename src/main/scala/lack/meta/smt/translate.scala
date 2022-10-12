@@ -266,7 +266,7 @@ object Translate:
 
       val relyJ = SystemJudgment(
         List(), relyR,
-        Judgment("box.rely", s.refinesExp(e), Prop.Syntax.Generated.check, lack.meta.macros.Location.empty))
+        Judgment(s"${s.pprString} bounds", s.refinesExp(e), Prop.Syntax.Generated.check, lack.meta.macros.Location.empty))
 
       for
         eT     <- expr(context, e)

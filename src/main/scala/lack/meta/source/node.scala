@@ -13,7 +13,7 @@ import scala.reflect.ClassTag
  * The easiest way to declare a node it to define a case class that extends
  * this class, for example:
  *
- * > case class Always(e: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
+ * > case class SoFar(e: Stream[Bool], invocation: Node.Invocation) extends Node(invocation):
  * >   val result = output[Bool]
  * >   result := fby(False, result) && e
  *
