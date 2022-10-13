@@ -61,7 +61,7 @@ class TestBounds extends munit.FunSuite:
 
   //   def SteerSelector(human: Stream[Int32], machine: Stream[Int32]): Stream[Int32] =
   //     val human_filtered = MeanN(HISTORY, human)
-  //     cond(
+  //     select(
   //       when(human_filtered >= OVERRIDE) { human },
   //       otherwise { machine })
 

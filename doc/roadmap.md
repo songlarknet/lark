@@ -58,7 +58,7 @@ we get polymorphism "for free" by using Scala as the meta language.
 
 ```
   def abs[T: SortRepr: Num](x: Stream[T])(using builder: Builder): Stream[T] =
-    cond(
+    select(
       when(x >= int(0)) {  x },
       otherwise         { -x }
     )

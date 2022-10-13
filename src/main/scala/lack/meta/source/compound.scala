@@ -222,26 +222,43 @@ object Compound:
       def const(i: Integer): Stream[Stream.Real] =
         new Stream(exp.val_(Val.Real(Real(i))))
 
-  def cond[T: SortRepr](conds: Cond.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
+  /** Conditional selection, similar to a multi-armed if-then-else, except that
+   * all branches are always evaluated. For conditional activation of streaming
+   * operators, use local contexts with Node.Merge or inside an Automaton.
+   *
+   * We can't hijack Scala's if-then-else syntax, so we have to introduce our
+   * own. Usage looks something like:
+   *
+   * > select(
+   * >   when(condition1) { result1 },
+   * >   when(condition2) { result2 },
+   * >   otherwise        { result3 }
+   * > )
+   *
+   * The braces around the results are just meant to "evoke familiarity" with
+   * the usual if-then-else construct, but they can be replaced with
+   * parentheses.
+   */
+  def select[T: SortRepr](conds: Select.Case[T]*)(using builder: Builder, location: Location): Stream[T] =
     conds.toList match
-      case Cond.Otherwise(res) :: Nil => res
-      case Cond.When(p, t) :: rest => ifthenelse(p, t, cond(rest : _*))
-      case _ => throw new Exception(s"cond: conditions not supported ${conds}")
+      case Select.Otherwise(res) :: Nil => res
+      case Select.When(p, t) :: rest => ifthenelse(p, t, select(rest : _*))
+      case _ => throw new Exception(s"select: conditions not supported ${conds}")
 
   def when[T: SortRepr](pred: Stream[Stream.Bool])(res: Stream[T]) =
-    Cond.When(pred, res)
+    Select.When(pred, res)
 
   def otherwise[T: SortRepr](res: Stream[T]) =
-    Cond.Otherwise(res)
+    Select.Otherwise(res)
 
-  object Cond:
+  object Select:
     trait Case[T: SortRepr]
     case class When[T: SortRepr](pred: Stream[Stream.Bool], res: Stream[T]) extends Case[T]
     case class Otherwise[T: SortRepr](res: Stream[T]) extends Case[T]
 
 
   def abs[T: SortRepr: Num](x: Stream[T])(using builder: Builder, location: Location): Stream[T] =
-    cond(
+    select(
       when(x >= int(0)) {  x },
       otherwise         { -x }
     )

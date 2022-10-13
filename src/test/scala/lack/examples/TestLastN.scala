@@ -39,7 +39,7 @@ class TestLastN extends munit.FunSuite:
     val out       = output[Bool]
     val pre_count = u8(0) -> pre(count)
 
-    count := cond(
+    count := select(
       when(e && pre_count <  n) { pre_count + 1 },
       when(e && pre_count >= n) { n },
       otherwise                 { 0 }

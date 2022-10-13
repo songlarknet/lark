@@ -51,15 +51,20 @@ class Heater extends munit.FunSuite:
     val pre_rem = fby(Base.time(0), rem)
 
     ok  := rem == Base.time(0)
-    rem := cond(
+    rem := select(
       when(pre_rem == Base.time(0))
         { i32(0) },
-      // It's a bit silly, but because all conditions are always evaluated, we
-      // need to guard against overflow. When pre_rem == 0, pre_rem - 1 won't fit in a U16.
       when(t)
         { pre_rem.as[Int32] - i32(1) },
       otherwise
         { pre_rem.as[Int32] }).as[Base.TIME]
+    // It's a bit silly, but because all conditions are always evaluated, we
+    // need to guard against overflow. When pre_rem == 0, pre_rem - 1 won't
+    // fit in a U16.
+    // Pedantically: your average Lustre compiler such as Heptagon is going to
+    // compile all integers as (signed) int and silently underflow here,
+    // which is undefined behaviour according to the C spec. CompCert does
+    // define signed overflow though.
 
   /** Rising edge: true when t transitions from false to true */
   case class Edge(t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):

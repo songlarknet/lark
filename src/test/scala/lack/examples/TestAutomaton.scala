@@ -89,7 +89,7 @@ class TestAutomaton extends munit.FunSuite:
     val pre_state = S_OFF -> pre(state)
 
     // How to deal with weak/until transitions?
-    state := cond(
+    state := select(
       when(pre_state == S_OFF   && btn_on) { S_AWAIT },
       when(pre_state == S_AWAIT && !btn_on) { S_OFF },
       when(pre_state == S_AWAIT && cmd_set) { S_ON },
@@ -109,9 +109,9 @@ class TestAutomaton extends munit.FunSuite:
         speed_out := u8(0)
 
       val ON = new When(state == S_ON, reset = pre_state == S_AWAIT && cmd_set):
-        accel_out := cond(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
+        accel_out := select(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
         light_on  := True
-        speed_out := speedo -> cond(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
+        speed_out := speedo -> select(when(cmd_set) { speedo }, otherwise { pre(speed_out) });
 
     check("state inv") {
       state == S_OFF || state == S_AWAIT || state == S_ON

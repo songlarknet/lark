@@ -140,8 +140,8 @@ abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
       }
 
   private def finishAutomaton(): Unit =
-    require(initialState.nonEmpty, "No initial state specified. Specify the initial state with initial(S)")
     require(states.size > 0, "no states. add some states to your automaton")
+    require(initialState.nonEmpty, "No initial state specified. Specify the initial state with initial(S)")
 
     // Loop through all of the states, "finishing" them.
     // This forces each state to register its transitions.
