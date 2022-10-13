@@ -22,13 +22,24 @@ class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Bui
       nested = old
     }
 
+  def expOfStream[T](it: Stream[T])(using location: lack.meta.macros.Location): core.term.Exp =
+    if it == null then throw new NullPointerException(
+      s"""Null stream argument
+         |    A stream was null, which often means that a variable was referenced
+         |    before it has been defined. You may need to reorder bindings so that
+         |    variables are defined earlier.
+         |  Source location: ${location.pprString}
+         |""".stripMargin)
+    it._exp
+
+
   def memo1[T](it: Stream[T])(f: core.term.Exp => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
-    val e   = it._exp
+    val e   = expOfStream(it)
     val mem = nested.memo(f(e))
     new Stream(mem)(using it.sortRepr)
 
   def memo2[T](a: Stream[T], b: Stream[T])(f: (core.term.Exp, core.term.Exp) => core.term.Flow)(using location: lack.meta.macros.Location): Stream[T] =
-    val mem = nested.memo(f(a._exp, b._exp))
+    val mem = nested.memo(f(expOfStream(a), expOfStream(b)))
     new Stream(mem)(using a.sortRepr)
 
   def memo2x1[T, U, V: SortRepr]
@@ -36,7 +47,7 @@ class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Bui
     (f: (core.term.Exp, core.term.Exp) => core.term.Flow)
     (using location: lack.meta.macros.Location): Stream[V] =
     val sort = summon[SortRepr[V]].sort
-    val mem = nested.memo(f(a._exp, b._exp))
+    val mem = nested.memo(f(expOfStream(a), expOfStream(b)))
     new Stream(mem)
 
   def memo3x1[T, U, V, W: SortRepr]
@@ -44,7 +55,7 @@ class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Bui
     (f: (core.term.Exp, core.term.Exp, core.term.Exp) => core.term.Flow)
     (using location: lack.meta.macros.Location): Stream[W] =
     val sort = summon[SortRepr[W]].sort
-    val mem = nested.memo(f(a._exp, b._exp, c._exp))
+    val mem = nested.memo(f(expOfStream(a), expOfStream(b), expOfStream(c)))
     new Stream(mem)
 
   /** Call a subnode.

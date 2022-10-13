@@ -22,4 +22,5 @@ abstract class Node(invocation: Node.Invocation) extends node.Base(invocation) w
   val base = this
 
 object Node:
+  type Builder    = node.Builder
   type Invocation = node.Invocation
