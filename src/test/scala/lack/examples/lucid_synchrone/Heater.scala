@@ -26,69 +26,80 @@ class Heater extends munit.FunSuite:
       { Top(_) }
   }
 
-  test("Grind") {
-    Grind.grind() { Top(_) }
-  }
+  // test("Grind") {
+  //   Grind.grind() { Top(_) }
+  // }
 
+  /** Temperatures in degrees Celsius  */
+  type Temp = Stream.Int16
+  object Temp:
+    def apply(i: Integer): Stream[Temp] =
+      i16(i)
 
-  object Base:
-    type TEMP = UInt8
-    def temp(i: Integer): Stream[TEMP] =
-      u8(i)
-    def low:  Integer = 4
-    def high: Integer = 4
+    /** Assume temperatures are between -300 and 300 degrees Celsius. */
+    def min = Temp(-300)
+    def max = Temp(300)
+    def valid(i: Stream[Temp])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
+      min <= i && i <= max
 
-    type TIME = UInt16
-    def time(i: Integer): Stream[TIME] =
-      u16(i)
-    def delay_on: Integer  = 500
-    def delay_off: Integer = 100
+    /** Hysteresis for controller to reduce oscillation */
+    def lowOffset  = Temp(4)
+    def highOffset = Temp(4)
+
+  object Delay:
+    /** Delay between turning on gas and lighting.
+     * These are Integers rather than Stream[_] because Count wants a
+     * compile-time constant. We should have a Const[_] type for this.
+     */
+    def on: Integer  = 500
+    /** Delay after an unsuccessful light attempt */
+    def off: Integer = 100
 
   /** Count(d,t) returns true when t has been true d times. */
-  case class Count(d: Integer, t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
-    val ok = output[Bool]
-    val rem = local[Base.TIME]
-    val pre_rem = fby(Base.time(0), rem)
+  case class Count(limit: Integer, t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
+    val limit16 = u16(limit)
+    val ok      = output[Bool]
+    val rem     = local[UInt16]
+    val pre_rem = fby(limit16, rem)
 
-    ok  := rem == Base.time(0)
-    rem := select(
-      when(pre_rem == Base.time(0))
-        { i32(0) },
-      when(t)
-        { pre_rem.as[Int32] - i32(1) },
-      otherwise
-        { pre_rem.as[Int32] }).as[Base.TIME]
-    // It's a bit silly, but because all conditions are always evaluated, we
-    // need to guard against overflow. When pre_rem == 0, pre_rem - 1 won't
-    // fit in a U16.
-    // Pedantically: your average Lustre compiler such as Heptagon is going to
-    // compile all integers as (signed) int and silently underflow here,
-    // which is undefined behaviour according to the C spec. CompCert does
-    // define signed overflow though.
+    ok         := rem == limit16
+    rem        := min(limit16, pre_rem + (ifthenelse(t, 1, 0)))
+
+    // This intermediate invariant is required to prove that the addition above
+    // does not overflow. It could reasonably be inferred by a bounds analysis.
+    check("Bounds: rem") {
+      rem <= limit16
+    }
+
+    // It would be nice to embed examples next to the definitions something like
+    // this, and have them automatically checked:
+    // examples {
+    //   Count(2, Values(false, false, false)).ok ~> Values(false, false, false)
+    //   Count(2, Values(true,  true,  true)).ok  ~> Values(false,  true, true)
+    // }
 
   /** Rising edge: true when t transitions from false to true */
   case class Edge(t: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val ok = output[Bool]
     ok := fby(False, !t) && t
 
-  case class Heat(expected: Stream[Base.TEMP], actual: Stream[Base.TEMP])(invocation: Node.Invocation) extends Automaton(invocation):
+  /** Heater bang-bang controller with hysteresis */
+  case class Heat(expected: Stream[Temp], actual: Stream[Temp])(invocation: Node.Invocation) extends Automaton(invocation):
     val on = output[Bool]
 
-    // Integer overflow muck
-    val exp32 = expected.as[Int32]
-    val lo    = exp32 - i32(Base.low)
-    val hi    = exp32 + i32(Base.high)
-    val act32 = actual.as[Int32]
+    // The temperatures must be valid.
+    requires("Temp bounds: expected") { Temp.valid(expected) }
+    requires("Temp bounds: actual")   { Temp.valid(actual) }
 
     initial(OFF)
     object OFF extends State:
       unless {
-        restart(act32 <= lo, ON)
+        restart(actual <= expected - Temp.lowOffset, ON)
       }
       on := False
     object ON extends State:
       unless {
-        restart(act32 >= hi, OFF)
+        restart(actual >= expected + Temp.highOffset, OFF)
       }
       on := True
 
@@ -99,13 +110,13 @@ class Heater extends munit.FunSuite:
     initial(OPEN)
     object OPEN extends State:
       unless {
-        restart(subnode(Count(Base.delay_on, millisecond)).ok, SILENT)
+        restart(subnode(Count(Delay.on, millisecond)).ok, SILENT)
       }
       light := True
       gas   := True
     object SILENT extends State:
       unless {
-        restart(subnode(Count(Base.delay_off, millisecond)).ok, OPEN)
+        restart(subnode(Count(Delay.off, millisecond)).ok, OPEN)
       }
       light := False
       gas   := False
@@ -149,10 +160,13 @@ class Heater extends munit.FunSuite:
   case class Main(
     millisecond: Stream[Bool],
     restart:     Stream[Bool],
-    expected:    Stream[Base.TEMP],
-    actual:      Stream[Base.TEMP],
+    expected:    Stream[Temp],
+    actual:      Stream[Temp],
     lightOn:     Stream[Bool]
   )(invocation: Node.Invocation) extends Node(invocation):
+    requires("Temp bounds: expected") { Temp.valid(expected) }
+    requires("Temp bounds: actual")   { Temp.valid(actual) }
+
     val light = output[Bool]
     val gas   = output[Bool]
     val ok    = output[Bool]
@@ -170,7 +184,11 @@ class Heater extends munit.FunSuite:
   case class Top(invocation: Node.Invocation) extends Node(invocation):
     val millisecond = forall[Bool]
     val restart     = forall[Bool]
-    val expected    = forall[Base.TEMP]
-    val actual      = forall[Base.TEMP]
+    val expected    = forall[Temp]
+    val actual      = forall[Temp]
     val lightOn     = forall[Bool]
+
+    requires("Temp bounds: expected") { Temp.valid(expected) }
+    requires("Temp bounds: actual")   { Temp.valid(actual) }
+
     subnode(Main(millisecond, restart, expected, actual, lightOn))
