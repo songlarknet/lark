@@ -86,10 +86,7 @@ object Compound:
     implicit def implicit_integer[T: SortRepr: Num](i: Integer): Stream[T] = summon[Num[T]].const(i)
     implicit def implicit_int[T: SortRepr: Num](i: Int): Stream[T] = summon[Num[T]].const(i)
 
-  trait Eq[T]:
-    def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool]
-
-  trait Ord[T] extends Eq[T]:
+  trait Ord[T]:
     def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool]
     def le(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool]
     def gt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool]
@@ -176,9 +173,6 @@ object Compound:
 
       def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T] =
         builder.memo1(x) { appBxB(Table.Negate, _) }
-
-      def eq(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
-        builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Eq, _, _) }
 
       def lt(x: Stream[T], y: Stream[T])(using builder: Builder, location: Location): Stream[Stream.Bool] =
         builder.memo2x1(x, y) { appBxU(Sort.Bool, Table.Lt, _, _) }
