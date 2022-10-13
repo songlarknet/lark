@@ -95,6 +95,13 @@ case class G(primG: lack.test.core.term.prim.G):
 
   /** Generate a bounded primitive of given sort */
   def boundedPrim(env: Check.Env, s: Sort.BoundedInteger): Gen[Exp] =
+    def wrapPrim(p: term.Prim, argsV: List[Exp], argsVX: List[Exp]) = p match
+      case term.prim.Table.Ite =>
+        // Don't rewrap if-then-else for uhh reasons
+        Exp.App(s, p, argsV : _*)
+      case _ =>
+        Exp.Cast(Exp.Cast.Box(s), Exp.App(s.logical, p, argsVX : _*))
+
     for
       (p,argsT) <- primG.result(s.logical)
       argsTX = argsT.map { t =>
@@ -104,7 +111,7 @@ case class G(primG: lack.test.core.term.prim.G):
       argsVX = argsV.zip(argsT).map { case (e,t) =>
         if t == s.logical then Exp.Cast(Exp.Cast.Unbox(s.logical), e) else e
       }
-    yield Exp.Cast(Exp.Cast.Box(s), Exp.App(s.logical, p, argsVX : _*))
+    yield wrapPrim(p, argsV, argsVX)
 
   /** Generate unique-ish simple arguments for given sorts */
   def args(env: Check.Env, sorts: List[Sort]): Gen[List[Exp]] =
