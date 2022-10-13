@@ -12,7 +12,7 @@ sealed trait Val extends pretty.Pretty:
 object Val:
   /** Boolean values. */
   case class Bool(b: Boolean) extends Val:
-    def ppr = pretty.text(if (b) "#b'true" else "#b'false")
+    def ppr = pretty.text(if (b) "true" else "false")
     def sort = Sort.Bool
 
   /** Unbounded integer values.

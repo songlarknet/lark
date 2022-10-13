@@ -11,6 +11,13 @@ import smtlib.trees.Terms.SExpr
 case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
   def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
 
+  def pprTruncate(layers: Int = 2) = // (node: Node, trace: Trace) : pretty.Doc =
+    val stepsP = steps.zipWithIndex.map { case (step,i) =>
+      pretty.text("Step") <+> pretty.value(i) <> pretty.colon <@>
+      pretty.indent(step.pprTruncate(layers))
+    }
+    pretty.vsep(stepsP)
+
   def propertyKnownFalse(prop: names.Ref): Boolean =
     steps.exists { r =>
       r.map(prop) match
@@ -21,7 +28,22 @@ case class Trace(steps: List[Trace.Row]) extends pretty.Pretty:
 object Trace:
   case class Row(values: List[(names.Ref, Val)]) extends pretty.Pretty:
     def map = values.toMap
-    def ppr = pretty.braces(pretty.csep(values.map((k,v) => k.ppr <+> pretty.equal <+> v.ppr)))
+    /** Pretty-print all values in the trace */
+    def ppr = names.Namespace.fromSeq(values).ppr
+
+    /** Pretty-print just the top levels of a trace, omitting the deeply-nested
+     * values. */
+    def pprTruncate(layers: Int) =
+      val (internal, external) = values.partition { case (k,v) =>
+        val int = k.fullyQualifiedPath.exists { c =>
+          names.ComponentSymbol.isInternal(c.symbol)
+        }
+        val ganky = k.name.symbol.toString == ""
+        int || ganky
+      }
+      pretty.vsep(List(
+        names.Namespace.fromSeq(external).pprTruncate(layers),
+        pretty.Colour.Grey.of(names.Namespace.fromSeq(internal).pprTruncate(layers))))
 
   def fromModel(steps: Int, sexpr: SExpr): Trace =
     def allDefs(s: SExpr): Iterable[(names.Ref, Val)] = s match

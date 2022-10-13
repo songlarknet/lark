@@ -196,6 +196,21 @@ package object names:
         val vns = pretty.ssep((vs ++ ns).toSeq, pretty.semi <> pretty.space)
         pretty.braces(pretty.space <> vns <> pretty.space)
 
+      def pprTruncate(layers: Int): pretty.Doc =
+        if layers == 0
+        then pretty.text("…")
+        else
+          val linesep = if layers == 1 then pretty.space else pretty.line
+          val vs = values.map { (k,v) => k.ppr <> pretty.colon <+> v.ppr }
+          val ns = namespaces.map { (k,v) => k.ppr <> pretty.colon <+> v.pprTruncate(layers - 1) }
+          val vsp = pretty.ssep(vs.toSeq, pretty.semi <> pretty.space)
+          val vspns =
+            if vs.nonEmpty
+            then vsp +: ns.toSeq
+            else ns.toSeq
+          val vns = pretty.ssep(vspns, pretty.semi <> linesep)
+          pretty.braces(pretty.space <> pretty.nest(vns) <> pretty.space)
+
       def refs(prefix: Prefix): Iterable[names.Ref] =
         values.map(v => names.Ref(prefix.prefix, v._1)) ++
         namespaces.flatMap(ns => ns._2.refs(Prefix(prefix.prefix :+ ns._1)))
@@ -216,7 +231,10 @@ package object names:
       Namespace(namespaces = SortedMap(name -> value))
 
     def fromMap[V <: pretty.Pretty](mp: immutable.RefMap[V]): Namespace[V] =
-      mp.map((k,v) => fromRef(k, v)).fold(Namespace())(_ <> _)
+      fromSeq(mp.toSeq)
+
+    def fromSeq[V <: pretty.Pretty](seq: Seq[(names.Ref, V)]): Namespace[V] =
+      seq.map((k,v) => fromRef(k, v)).fold(Namespace())(_ <> _)
 
   object immutable:
     type RefMap[V] = scala.collection.immutable.SortedMap[names.Ref, V]

@@ -33,3 +33,18 @@ object pretty extends kiama.output.PrettyPrinter:
 
   /** Assignment syntax */
   val gets = colon <> equal
+
+  object Colour:
+    def escape(code: Code): Doc =
+      text("\u001b[" + code.string + "m")
+
+    case class Code(string: String):
+      def ppr = escape(this)
+      def of(doc: Doc): Doc =
+        escape(this) <> doc <> escape(Reset)
+
+    object Red extends Code("31")
+    object Green extends Code("32")
+    object Yellow extends Code("33")
+    object Grey extends Code("90")
+    object Reset extends Code("")

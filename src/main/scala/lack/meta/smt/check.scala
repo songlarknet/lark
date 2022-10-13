@@ -35,7 +35,7 @@ object Check:
     case class SafeUpTo(steps: Int) extends Bmc:
       def ppr = pretty.text(s"Safe for at least ${steps} steps")
     case class CounterexampleAt(steps: Int, trace: Trace) extends Bmc:
-      def ppr = pretty.text("Counterexample:") <> pretty.nest(pretty.line <> trace.ppr)
+      def ppr = pretty.text("Counterexample with") <+> pretty.value(steps + 1) <+> "steps" <> pretty.colon <> pretty.nest(pretty.line <> trace.pprTruncate())
     case class UnknownAt(steps: Int) extends Bmc:
       def ppr = pretty.text(s"Unknown (at step ${steps})")
 
@@ -47,12 +47,14 @@ object Check:
     case class NoGood(steps: Int, traces: List[Trace]) extends Kind:
       def ppr = pretty.text(s"Inductive step failed after trying up to ${steps} steps.") <>
         pretty.nest(traces match
+          // Print the 1-inductive counterexample-to-induction if possible, as
+          // it's the shortest that might hint to the user what's missing.
           case _ :: cti1 :: _ =>
-            // Print the 1-inductive counterexample-to-induction, as it's the shortest
-            // that might hint to the user what's missing
-            pretty.line <> pretty.text("1-inductive counterexample:") <@> cti1.ppr
+            pretty.line <> pretty.text("1-inductive counterexample:") <@> cti1.pprTruncate()
+          case cti0 :: _ =>
+            pretty.line <> pretty.text("0-inductive counterexample:") <@> cti0.pprTruncate()
           case _ =>
-            pretty.line <> pretty.text("no counterexample-to-induction"))
+            pretty.line <> pretty.text("(counterexample unavailable)"))
     case class UnknownAt(steps: Int) extends Kind:
       def ppr = pretty.text(s"Unknown (at step ${steps})")
 
@@ -94,16 +96,12 @@ object Check:
         pretty.indent(details.ppr, 2)
 
     def pprJudgments(summary: NodeSummary, judgments: List[system.SystemJudgment]): pretty.Doc =
-      val green = "\u001b[32m"
-      val red   = "\u001b[31m"
-      val yello = "\u001b[33m"
-      val reset = "\u001b[m"
-      val ok  = pretty.string(green + "✅")
-      val bad = pretty.string(red   + "❌")
-      val huh = pretty.string(yello + "❔")
+      val ok  = pretty.Colour.Green.ppr  <> pretty.string("✅")
+      val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
+      val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
       val success = pretty.string("")
-      val unknown = pretty.string("[unknown]")
-      val failed  = pretty.string("[failed]")
+      val unknown = pretty.string("unknown")
+      val failed  = pretty.string("failed")
       pretty.vsep(judgments.map { j =>
         val (status,details) = summary match
           case _: OK => (ok, success)
@@ -113,11 +111,9 @@ object Check:
               failed <>
               pretty.line <> pretty.indent(j.consequent.ppr <> pretty.colon <+> j.judgment.term.ppr))
             else (huh, unknown)
-          case _: BadInduction =>
+          case _ =>
             (huh, unknown)
-          case _: Infeasible =>
-            (huh, unknown)
-        pretty.indent(status <+> j.judgment.pprObligationShort <+> details <> reset)
+        pretty.indent(status <+> j.judgment.pprObligationShort <+> details <> pretty.Colour.Reset.ppr)
       })
 
   def declareSystem(n: Node, solver: Solver, options: Translate.Options = Translate.Options()): system.Top =
@@ -287,9 +283,7 @@ object Check:
       solver.declareConsts(state)
     }
 
-    var traces: List[Trace] = List()
-
-    for (step <- 0 until count) {
+    val traces = (0 until count).map { step =>
       val state  = top.paramsOfNamespace(statePrefix(step), top.system.state)
       val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.system.state)
       val row    = top.paramsOfNamespace(rowPrefix(step), top.system.row)
@@ -301,15 +295,17 @@ object Check:
       asserts(top.system.relies, step, solver)
       asserts(top.system.sorries, step, solver)
 
-      solver.checkSatAssumingX(disprove(top.system.guarantees, step)) { _.status match
-        case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
-        case CommandsResponses.SatStatus     =>
-          val model = solver.command(Commands.GetModel())
-          traces +:= Trace.fromModel(step, model)
-        case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
-      }
+      val trace = solver.checkSatAssumingX(disprove(top.system.guarantees, step)) {
+        _.status match
+          case CommandsResponses.UnknownStatus => return Kind.UnknownAt(step)
+          case CommandsResponses.SatStatus     =>
+            val model = solver.command(Commands.GetModel())
+            Trace.fromModel(step, model)
+          case CommandsResponses.UnsatStatus   => return Kind.InvariantMaintainedAt(step)
+        }
 
       asserts(top.system.guarantees, step, solver)
+      trace
     }
 
-    Kind.NoGood(count, traces)
+    Kind.NoGood(count, traces.toList)
