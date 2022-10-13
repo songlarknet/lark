@@ -73,8 +73,8 @@ abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
   case class Transition(trigger: Stream[Bool], target: Target)
   val states = mutable.Map[Int, State]()
 
-  val mergeTransition = new Merge() {}
-  val mergeStates = new Merge() {}
+  val mergeTransition = new Merge(pre_state) {}
+  val mergeStates = new Merge(state) {}
 
   trait Target:
     val s: StateInfo
@@ -84,7 +84,7 @@ abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
   case class Restart(s: StateInfo) extends Target:
     val isRestart = true
 
-  abstract class State(val info: StateInfo = freshStateInfo()) extends mergeStates.When(when = info.active, reset = info.reset):
+  abstract class State(val info: StateInfo = freshStateInfo()) extends mergeStates.When(target = info.st, reset = info.reset):
     states += (info.indexInt -> this)
 
     val transitions = mutable.ArrayBuffer[Transition]()

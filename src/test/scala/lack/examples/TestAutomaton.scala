@@ -97,18 +97,18 @@ class TestAutomaton extends munit.FunSuite:
       otherwise { pre_state }
     )
 
-    val A = new Merge:
-      val OFF = new When(state == S_OFF):
+    val A = new Merge(state):
+      val OFF = new When(S_OFF):
         accel_out := accel
         light_on  := False
         speed_out := u8(0)
 
-      val AWAIT = new When(state == S_AWAIT):
+      val AWAIT = new When(S_AWAIT):
         accel_out := accel
         light_on  := True
         speed_out := u8(0)
 
-      val ON = new When(state == S_ON, reset = pre_state == S_AWAIT && cmd_set):
+      val ON = new When(S_ON, reset = pre_state == S_AWAIT && cmd_set):
         accel_out := select(when(speedo < speed_out && accel < 100) { 100 }, otherwise { accel })
         light_on  := True
         speed_out := speedo -> select(when(cmd_set) { speedo }, otherwise { pre(speed_out) });

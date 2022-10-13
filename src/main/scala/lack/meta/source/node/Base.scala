@@ -73,13 +73,14 @@ class Base(invocation: Invocation):
   def bind[T](lhs: Lhs[T], rhs: Stream[T])(using builder: Builder) =
     builder.nested.equation(lhs.v, core.term.Flow.Pure(rhs._exp))
 
-  protected abstract class Merge(using builder: Builder) extends reflect.Selectable:
+  protected abstract class Merge[T: SortRepr](scrutinee: Stream[T])(using builder: Builder) extends reflect.Selectable:
     val merge = builder.nested.merge()
 
-    abstract class When(when: Stream[Stream.Bool], reset: Stream[Stream.Bool] = Compound.False) extends reflect.Selectable:
+    abstract class When(target: Stream[T], reset: Stream[Stream.Bool] = Compound.False) extends reflect.Selectable:
+      private val when = core.term.Compound.app(core.term.prim.Table.Eq, Merge.this.scrutinee._exp, target._exp)
       given builder: Builder = new Builder(
         Merge.this.builder.nodeRef,
-        Some(merge.when(when._exp).reset(reset._exp)))
+        Some(merge.when(when).reset(reset._exp)))
 
   protected abstract class Reset(reset: Stream[Stream.Bool])(using superbuilder: Builder) extends reflect.Selectable:
     given builder: Builder = new Builder(

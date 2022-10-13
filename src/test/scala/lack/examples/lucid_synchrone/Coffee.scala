@@ -91,11 +91,11 @@ object Coffee:
 
     remaining := v - spent
 
-    new Merge():
-      new When(v >= cost):
+    new Merge(v >= cost):
+      new When(True):
         emit  := drink
         spent := cost
-      new When(True):
+      new When(False):
         emit  := Drink.None
         spent := 0
 
@@ -117,31 +117,31 @@ object Coffee:
     val pre_currency = fby(Currency(0), currency)
     currency := pre_currency + income - refund - spent
 
-    new Merge():
+    new Merge(pre_currency + income > Currency.MAX):
       // The original has a (very unlikely) integer overflow - you can keep
       // inserting coins until the amount overflows. Here, if the amount would
       // go over $10.00 then we refund everything.
-      new When(pre_currency + income > Currency.MAX):
+      new When(True):
         emit     := Drink.None
         refund   := pre_currency + income
         spent    := 0
-      new When(True):
-        new Merge():
-          new When(button == Button.None):
+      new When(False):
+        new Merge(button):
+          new When(Button.None):
             refund   := 0
             spent    := 0
             emit     := Drink.None
-          new When(button == Button.Coffee):
+          new When(Button.Coffee):
             val vend  = subnode(Vend(Drink.Coffee, Currency(10), pre_currency))
             spent    := vend.spent
             emit     := vend.emit
             refund   := 0
-          new When(button == Button.Tea):
+          new When(Button.Tea):
             val vend  = subnode(Vend(Drink.Tea, Currency(5), pre_currency))
             spent    := vend.spent
             emit     := vend.emit
             refund   := 0
-          new When(button == Button.Cancel):
+          new When(Button.Cancel):
             spent    := 0
             emit     := Drink.None
             refund   := pre_currency + income
