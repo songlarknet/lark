@@ -10,25 +10,30 @@ import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32}
 import lack.meta.driver.{Check, Compile, Grind}
 
-/** Heater translated from Lucid-Synchrone manual:
- * https://www.di.ens.fr/~pouzet/lucid-synchrone/manual_html/manual019.html
- */
-class Heater extends munit.FunSuite:
-
+/** Fast tests */
+class Heater_Check extends munit.FunSuite:
   test("Check") {
-    Check.success() { Top(_) }
+    Check.success() { Heater.Top(_) }
   }
 
   test("Compile") {
     Compile.compile(
       basename = "heater",
       output = Some(java.nio.file.Paths.get("scratch/c/")))
-      { Top(_) }
+      { Heater.Top(_) }
   }
 
-  // test("Grind") {
-  //   Grind.grind() { Top(_) }
-  // }
+/** Slow tests */
+class Heater_Grind extends munit.FunSuite:
+  test("Grind") {
+    Grind.grind() { Heater.Top(_) }
+  }
+
+/** Heater translated from Lucid-Synchrone manual:
+ * https://www.di.ens.fr/~pouzet/lucid-synchrone/manual_html/manual019.html
+ */
+object Heater:
+
 
   /** Temperatures in degrees Celsius  */
   type Temp = Stream.Int16
