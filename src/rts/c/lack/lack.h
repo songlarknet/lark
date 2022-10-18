@@ -5,13 +5,13 @@
 
 /** Base types: give reals a scary name for now because of the logic gap
  * between reals and floats. */
-typedef float float32_unsound_t;
+typedef double float64_unsound_t;
 
-bool lack_float_approx(float32_unsound_t a, float32_unsound_t b) {
-  float32_unsound_t diff = fabs(a - b);
-  float32_unsound_t max = fmax(fabs(a), fabs(b));
-  float32_unsound_t eps = 1e-7f;
-  float32_unsound_t diffx = max == 0 ? eps : diff / max;
+bool lack_float_approx(float64_unsound_t a, float64_unsound_t b) {
+  float64_unsound_t diff = fabs(a - b);
+  float64_unsound_t max = fmax(fabs(a), fabs(b));
+  float64_unsound_t eps = 1e-10;
+  float64_unsound_t diffx = max == 0 ? eps : diff / max;
 
   return fabs(diffx) < eps || (fabs(a) < eps && fabs(b) < eps);
 }
@@ -39,4 +39,4 @@ LACK_DIV(int32_t)
 LACK_DIV(uint32_t)
 LACK_DIV(int64_t)
 LACK_DIV(uint64_t)
-LACK_DIV(float32_unsound_t)
+LACK_DIV(float64_unsound_t)

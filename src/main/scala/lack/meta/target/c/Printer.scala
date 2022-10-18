@@ -44,7 +44,7 @@ object Printer:
         b.width.toString + "_t")
       case Sort.Real =>
         // TODO UNSOUND: compiling reals to floats for now
-        pretty.text("float32_unsound_t")
+        pretty.text("float64_unsound_t")
       case Sort.ArbitraryInteger =>
         throw new except.BigNumberException("Sort", s.ppr)
 
@@ -87,7 +87,7 @@ object Printer:
           case (false, 32) => "ul"
           case (_,     _)  => ""
         pretty.value(i) <> suffix
-      case Val.Real(r) => pretty.value(r) <> "f"
+      case Val.Real(r) => pretty.value(r)
       case _ =>
         throw new except.BigNumberException("value", v.ppr)
 

@@ -7,6 +7,7 @@ import lack.meta.base.pretty
 import lack.meta.core
 import lack.meta.core.node.Schedule
 import lack.meta.core.node.Eval
+import lack.meta.core.term.Val
 
 import lack.meta.smt
 
@@ -102,7 +103,7 @@ object Grind:
 
       for (k,v) <- outs do
         val vv = heapX(k)
-        assert(v == vv,
+        assert(Val.approx(v, vv),
           s"""Evaluator mismatch in node ${nn.name.pprString}:
               |Output ${k.pprString} has value ${v.pprString} in evaluator and ${vv.pprString} in SMT.
               |Expected trace from SMT:
