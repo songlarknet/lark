@@ -85,3 +85,9 @@ class Invocation(val instance: names.Ref, val builder: Builder):
 
 object Invocation:
   class EmptyException(val base: Base, val invocation: Invocation, message: String) extends Exception(message)
+
+  // HACK: hack to allow user-defined compound types in args.
+  // This should be a typeclass and the magic stuff can be cleaned up when the source language is baked
+  // Also needs to deal with outputs/local variables
+  trait Freshen:
+    def freshen(name: String, invocation: Invocation): Freshen

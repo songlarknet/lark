@@ -42,6 +42,8 @@ object Magic:
         field.get(target) match
           case s: Stream[_] =>
             invocation.stream(name, s.asInstanceOf[Stream[Any]])
+          case f: Invocation.Freshen =>
+            f.freshen(name, invocation)
           case o: Object =>
             invocation.meta(name, o)
     }

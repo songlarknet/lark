@@ -83,3 +83,6 @@ object Check:
       this.copy(check = check.copy(
         translate = check.translate.copy(
           checkRefinement = false)))
+
+    def withMaximumInductiveSteps(k: Int): Options =
+      this.copy(check = check.copy(maximumInductiveSteps = k))

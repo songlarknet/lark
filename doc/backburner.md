@@ -62,3 +62,17 @@ check() {
   sneaky.node("LastN").variable[UInt32]("count") <= 5
 }
 ```
+
+
+### Attaching "lemmas" to nodes
+If we have a verification-only node that states some property, it won't get checked unless it's a subnode of some other node, or explicitly called at the top-level.
+Perhaps we need some way to define "lemma nodes" that are attached to some other node, and are automatically instantiated to be checked when their target node is instantiated.
+```
+def plus(x, y) = node ...
+
+plus.lemma {
+  val x = forall[UInt32]
+  val y = forall[UInt32]
+  check("commutative") { plus(x, y) == plus(y, x) }
+}
+```

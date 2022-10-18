@@ -96,6 +96,10 @@ object Heater:
     requires("Temp bounds: expected") { Temp.valid(expected) }
     requires("Temp bounds: actual")   { Temp.valid(actual) }
 
+    check("heating") {
+      (actual < expected - Temp.lowOffset) ==> on
+    }
+
     initial(OFF)
     object OFF extends State:
       unless {
