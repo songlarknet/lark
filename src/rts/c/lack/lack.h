@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -7,7 +8,7 @@
  * between reals and floats. */
 typedef double float64_unsound_t;
 
-bool lack_float_approx(float64_unsound_t a, float64_unsound_t b) {
+static bool lack_float_approx(float64_unsound_t a, float64_unsound_t b) {
   float64_unsound_t diff = fabs(a - b);
   float64_unsound_t max = fmax(fabs(a), fabs(b));
   float64_unsound_t eps = 1e-10;
