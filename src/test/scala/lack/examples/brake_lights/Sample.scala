@@ -33,6 +33,7 @@ object Sample:
     def apply(duration: scala.concurrent.duration.FiniteDuration): Ticks =
       Ticks(duration.toMillis / SAMPLE_PERIOD_MS)
 
+
   case class LastN(n: Ticks, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     require(n.ticks <= 65535)
 
@@ -54,3 +55,22 @@ object Sample:
 
   def lastN(n: Ticks, e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
     node.Sugar.subnode(builder)(LastN(n, e)).out
+
+
+  case class SoFar(e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
+    val out  = output[Bool]
+    out     := e && fby(True, out)
+
+  def sofar(e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
+    node.Sugar.subnode(builder)(SoFar(e)).out
+
+  case class Toggle(n: Ticks)(invocation: Node.Invocation) extends Node(invocation):
+    val out   = output[Bool]
+    val count = local[UInt16]
+    count   := fby(u16(0),
+      ifthenelse(count >= n.ticks, u16(0), count + u16(1)))
+    out     := fby(False,
+      ifthenelse(count == n.ticks, !out, out))
+
+  def toggle(n: Ticks)(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
+    node.Sugar.subnode(builder)(Toggle(n)).out

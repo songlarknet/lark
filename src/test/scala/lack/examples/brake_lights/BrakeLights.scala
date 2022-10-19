@@ -76,10 +76,10 @@ object BrakeLights:
     // For now, only allow one dropped packet for each received packet.
     valid   := imu.clock || fby(False, imu.clock)
 
-    guarantees("always ready means always current") {
+    guarantees("available means current") {
       imu.clock ==> (accel_x == imu.accel.x && accel_y == imu.accel.y && accel_z == imu.accel.z)
     }
-    guarantees("always ready means always fresh") {
+    guarantees("available means fresh") {
       imu.clock ==> valid
     }
 
@@ -103,6 +103,11 @@ object BrakeLights:
     // long. Consider the filter to be valid when we have ten seconds of good
     // values.
     valid   := Sample.lastN(RemoveGravity.decay, hold.valid)
+
+    // Sneaky mode would be useful here:
+    // guarantees("always zero means always zero") {
+    //   Sample.sofar(imu.accel.y == 0) ==> (accel.y == 0)
+    // }
 
   object RemoveGravity:
     /** High-pass filter with cut-off frequency of 0.1Hz, or period of 10s. */
@@ -138,7 +143,7 @@ object BrakeLights:
     /** Accelerometer measurement at which we are considered to be "braking".
      * This is 1m/s/s, chosen to sit somewhere between the observed engine braking
      * deceleration of ~1.4m/s/s and the coasting deceleration of ~0.5m/s/s. */
-    val braking: num.Real = 1000
+    val braking: num.Real = 1.0
     /** Turn light on when we are "braking" for 100ms or more. */
     val on    = Sample.Ticks(100.millis)
     /** Turn light off when we are not braking for 400ms.
@@ -162,8 +167,8 @@ object BrakeLights:
         restart(filter.valid, OK)
       }
       light     := False
-      ok        := False
-      nok_stuck := False
+      ok        := Sample.toggle(Sample.Ticks(10))
+      nok_stuck := !ok
     object OK extends State:
       unless {
         restart(!filter.valid, AWAIT)
@@ -181,7 +186,7 @@ object BrakeLights:
       ok        := False
       nok_stuck := True
 
-    // It would be nice to prove this property:
+    // It would be nice to prove a property like this:
 
     // check("not braking, no light") {
     //   Sample.lastN(Lights.off, filter.accel.y < real(Lights.braking)) ==> !light
