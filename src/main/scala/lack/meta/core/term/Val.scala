@@ -62,7 +62,7 @@ object Val:
   /** Approximate equality for floats. This might not be necessary if we switch
    * Val.Real over to rationals.
    */
-  def approx(v: Val, w: Val, eps: num.Real = 1e-10): Boolean = (v, w) match
+  def approx(v: Val, w: Val, eps: num.Real = 1e-5): Boolean = (v, w) match
     case _ if v == w => true
     case (Val.Real(i), Val.Real(j)) =>
       val diff = (i - j).abs

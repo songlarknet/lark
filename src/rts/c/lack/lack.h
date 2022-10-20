@@ -11,7 +11,7 @@ typedef double float64_unsound_t;
 static bool lack_float_approx(float64_unsound_t a, float64_unsound_t b) {
   float64_unsound_t diff = fabs(a - b);
   float64_unsound_t max = fmax(fabs(a), fabs(b));
-  float64_unsound_t eps = 1e-10;
+  float64_unsound_t eps = 1e-5;
   float64_unsound_t diffx = max == 0 ? eps : diff / max;
 
   return fabs(diffx) < eps || (fabs(a) < eps && fabs(b) < eps);
