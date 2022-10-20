@@ -11,6 +11,7 @@ import lack.meta.source.Node
 import lack.meta.source.Stream
 import lack.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32, Real}
 import lack.meta.driver.{Check, Compile, Grind}
+import lack.meta.source.Sneaky
 
 import Types.{V3, V4, AccelGyro}
 
@@ -104,11 +105,22 @@ object BrakeLights:
     // values.
     valid   := Sample.lastN(RemoveGravity.decay, hold.valid)
 
-    // Sneaky mode would be useful here:
-    // guarantees("always zero means always zero") {
-    //   Sample.sofar(imu.accel.y == 0) ==> (accel.y == 0)
-    // }
-
+    // CSE would be useful,
+    val always_zero =
+      Sample.sofar(imu.accel.x == real(0) && imu.accel.y == real(0) && imu.accel.z == real(0))
+    guarantees("always zero means always zero") {
+      always_zero ==> (accel.x == real(0) && accel.y == real(0) && accel.z == real(0))
+    }
+    guarantees("always zero means held zero") {
+      always_zero ==> (hold.accel.x == real(0) && hold.accel.y == real(0) && hold.accel.z == real(0))
+    }
+    check("sneaky invariant: always zero means all delays are zeros") {
+      val iir = Sneaky(this.builder).subnodes("IIR")
+      always_zero ==>
+      Sneaky.forall(iir) { i =>
+        Sneaky.forall(i.variables[Real]("z")) { z => z == 0 }
+      }
+    }
   object RemoveGravity:
     /** High-pass filter with cut-off frequency of 0.1Hz, or period of 10s. */
     val filter = Filter.Butterworth.hpf_order3_cutoff1em3
@@ -119,7 +131,7 @@ object BrakeLights:
   case class Lights(accel: V3)(invocation: Node.Invocation) extends Automaton(invocation):
     val light         = output[Bool]
 
-    val braking       = accel.y >= real(Lights.braking)
+    val braking       = accel.y <= real(Lights.braking)
     val trigger_on    = Sample.lastN(Lights.on,    braking)
     val trigger_off   = Sample.lastN(Lights.off,  !braking)
 
@@ -143,7 +155,7 @@ object BrakeLights:
     /** Accelerometer measurement at which we are considered to be "braking".
      * This is 1m/s/s, chosen to sit somewhere between the observed engine braking
      * deceleration of ~1.4m/s/s and the coasting deceleration of ~0.5m/s/s. */
-    val braking: num.Real = 1.0
+    val braking: num.Real = -1.0
     /** Turn light on when we are "braking" for 100ms or more. */
     val on    = Sample.Ticks(100.millis)
     /** Turn light off when we are not braking for 400ms.
@@ -167,7 +179,7 @@ object BrakeLights:
         restart(filter.valid, OK)
       }
       light     := False
-      ok        := Sample.toggle(Sample.Ticks(10))
+      ok        := Sample.toggle(Sample.Ticks(25))
       nok_stuck := !ok
     object OK extends State:
       unless {
@@ -186,25 +198,20 @@ object BrakeLights:
       ok        := False
       nok_stuck := True
 
-    // It would be nice to prove a property like this:
-
-    // check("not braking, no light") {
-    //   Sample.lastN(Lights.off, filter.accel.y < real(Lights.braking)) ==> !light
-    // }
-
-    // But it needs invariants that dig deep into subnodes.
-    // In sneaky mode I imagine they'd be something like:
-    // {
-    //   val lights   = sneaky.subnode[Lights](0)
-    //   val subcount = lights.sneaky.subnode[Sample.LastN](1).count
-    //   val count    = sneaky.subnodes[Sample.LastN].last.count
-    //   OK.active ==>
-    //     ifthenelse(
-    //       lights.ON.active,
-    //       subcount == count,
-    //       subcount <= count
-    //     )
-    // }
+    check("not braking, no light") {
+      Sample.lastN(Lights.off, filter.accel.y > real(Lights.braking)) ==> !light
+    }
+    check("invariant") {
+      val lights   = Sneaky(OK.builder).subnode("Lights")
+      val subcount = lights.subnodes("LastN").last.variable[UInt16]("count") + 0
+      val count    = Sneaky(this.builder).subnode("LastN").variable[UInt16]("count") + 0
+      OK.active ==>
+        ifthenelse(
+          light,
+          subcount == count,
+          subcount <= count
+        )
+    }
 
 
   object Brakes:
