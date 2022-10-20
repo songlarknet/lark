@@ -26,7 +26,7 @@ class Heater_Check extends munit.FunSuite:
 /** Slow tests */
 class Heater_Grind extends munit.FunSuite:
   test("Grind") {
-    Grind.grind() { Heater.Top(_) }
+    Grind.grind(Grind.Options(count = 10)) { Heater.Top(_) }
   }
 
 /** Heater translated from Lucid-Synchrone manual:

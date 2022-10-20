@@ -26,7 +26,7 @@ class Coffee_Check extends munit.FunSuite:
 /** Slow tests */
 class Coffee_Grind extends munit.FunSuite:
   test("Grind") {
-    Grind.grind() { Coffee.Top(_) }
+    Grind.grind(Grind.Options(count = 10)) { Coffee.Top(_) }
   }
 
 /** Coffee machine loosely translated from Lucid-Synchrone manual:
