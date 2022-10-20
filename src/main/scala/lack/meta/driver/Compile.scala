@@ -26,9 +26,10 @@ object Compile:
   : Unit =
     val subnodes = Invoke.allNodes(body)
     val frozen   = subnodes.map(_.freeze)
-    val checked  = core.node.Check.program(frozen, core.node.Check.Options())
-    val scheds   = schedules(frozen)
-    val program  = core.obc.FromNode.program(frozen, scheds)
+    val sliced   = core.node.Slice.program(frozen)
+    val checked  = core.node.Check.program(sliced, core.node.Check.Options())
+    val scheds   = schedules(sliced)
+    val program  = core.obc.FromNode.program(sliced, scheds)
 
     // obcs.foreach { case (k,v) =>
     //   println(s"Node ${k.pprString}")
@@ -60,17 +61,8 @@ object Compile:
 
     subnodes.foreach { n =>
       val nn = n.freeze
-      val graph = Schedule.Slurp(nn).graph()
-      println(pretty.layout(nn.pprWithSubnodes(List())))
-      println(s"Edges ${nn.name.pprString}:")
-      graph.edges.entries.foreach { case (k,v) =>
-        val pp = pretty.parens(k.ppr) <+> pretty.text(">") <+>
-          pretty.tupleP(v.toList)
-        println(pretty.layout(pretty.indent(pp)))
-      }
-
       println(s"Schedule ${nn.name.pprString}:")
-      Schedule.scheduleWithNode(nn, graph).entries.foreach { case k =>
+      Schedule.schedule(nn).entries.foreach { case k =>
         println(pretty.layout(pretty.indent(k.ppr)))
       }
 
@@ -78,8 +70,6 @@ object Compile:
 
   def schedules(nodes: Iterable[core.node.Node]): names.immutable.RefMap[Schedule] =
     val scheds = nodes.map { n =>
-      val graph = Schedule.Slurp(n).graph()
-      val sched = Schedule.scheduleWithNode(n, graph)
-      n.name -> sched
+      n.name -> Schedule.schedule(n)
     }
     SortedMap.from(scheds)

@@ -37,9 +37,10 @@ object Grind:
     val subnodes  = Invoke.topnodes(body)
     val allnodes  = subnodes.flatMap(_.allNodes)
     val frozen    = allnodes.map(_.freeze)
-    val checked   = core.node.Check.program(frozen, core.node.Check.Options())
-    val schedules = Compile.schedules(frozen)
-    val program   = core.obc.FromNode.program(frozen, schedules)
+    val sliced    = core.node.Slice.program(frozen)
+    val checked   = core.node.Check.program(sliced, core.node.Check.Options())
+    val schedules = Compile.schedules(sliced)
+    val program   = core.obc.FromNode.program(sliced, schedules)
     val cOptions  = target.C.Options(basename = "grind", program)
     val cCode     = target.C.headersource(cOptions)
 

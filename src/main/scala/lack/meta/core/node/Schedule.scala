@@ -17,6 +17,9 @@ import scala.math.Ordering.Implicits._
  * equivalent results. Sometimes we can't determine a static schedule, such as
  * when the node has two mutually-dependent equations with no delay. In this
  * case we cannot compile the node.
+ *
+ * @param entries
+ *  The scheduled order in which to compute all entries.
  */
 case class Schedule(entries: List[Schedule.Entry])
 
@@ -72,7 +75,8 @@ object Schedule:
       summon[Ordering[(String, List[names.Component], names.Component)]]
         .compare((x.kind.toString, x.path, x.name), (y.kind.toString, y.path, y.name))
 
-  def scheduleWithNode(node: Node, graph: Graph[Entry]): Schedule =
+  def schedule(node: Node): Schedule =
+    val graph = Slurp(node, includePreDependencies = false).graph()
     try
       Schedule(graph.topsort)
     catch
@@ -80,8 +84,23 @@ object Schedule:
         val cyc = graph.cycles(e.value).sortBy(_.length).head
         throw new except.CyclePrettyException(node.name, Cycle(node, graph, cyc))
 
-  /** "Slurp" the graph vertices and edges from the program. */
-  case class Slurp(node: Node):
+  /** "Slurp" the graph vertices and edges from the program.
+   *
+   * @param node
+   *  The node to slurp the dependencies from.
+   * @param includePreDependencies
+   *  If true, we include the dependencies in "pre" and "fby" expressions. When
+   *  this flag is true, the graph edges reflect a "refers-to" relation, where
+   *  one entry can depend on another across different time steps. When the
+   *  flag is false, the graph edges reflect the "compute-before" relation,
+   *  which is about dependencies in a single time step.
+   *
+   * XXX: the slurped graph does not contain dependencies on the parameters or
+   *  "forall" variables. This is not quite right. We probably want a separate
+   *  entry kind for parameter-style things that do not require any definition
+   *  or scheduling.
+   */
+  case class Slurp(node: Node, includePreDependencies: Boolean):
     def entries(
       path: List[names.Component],
       binding: Node.Binding
@@ -160,9 +179,13 @@ object Schedule:
       case Flow.Arrow(first, later) =>
         dependencies(entries, first) ++ dependencies(entries, later)
       case Flow.Pre(e) =>
-        SortedSet.empty
+        if includePreDependencies
+        then dependencies(entries, e)
+        else SortedSet.empty
       case Flow.Fby(_, e) =>
-        SortedSet.empty
+        if includePreDependencies
+        then dependencies(entries, e)
+        else SortedSet.empty
 
     def dependencies(
       mpEntries: MultiMapSet[names.Component, Entry],
