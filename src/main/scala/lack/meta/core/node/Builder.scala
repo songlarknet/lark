@@ -107,6 +107,7 @@ object Builder:
      */
     def memoForce(rhs: Flow)(using location: Location): Exp =
       val vv = Variable(rhs.sort, location, Variable.Generated)
+      // TODO: fromScalaSymbol(i) should fall back on failure, currently broken for operator names such as ==
       val name = location.enclosing.fold(names.ComponentSymbol.LOCAL)(i => names.ComponentSymbol.fromScalaSymbol(i))
       val v = node.fresh(name, vv, forceIndex = true)
       append(new Binding.Equation(v.v.name, rhs))

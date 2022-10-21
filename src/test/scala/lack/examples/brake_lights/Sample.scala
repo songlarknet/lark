@@ -24,7 +24,7 @@ object Sample:
   def hold[T: SortRepr](clock: Stream[Bool], value: Stream[T], default: Stream[T])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[T] =
     node.Sugar.subnode(builder)(Hold(clock, value, default)).out
 
-
+  /** Time duration in discrete steps */
   case class Ticks(ticks: num.Integer)
   object Ticks:
     val SAMPLE_RATE: num.Integer = 100
@@ -34,6 +34,7 @@ object Sample:
       Ticks(duration.toMillis / SAMPLE_PERIOD_MS)
 
 
+  /** True if the stream e has been true for n or more ticks. */
   case class LastN(n: Ticks, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     require(n.ticks <= 65535)
 
@@ -47,23 +48,30 @@ object Sample:
       otherwise                       { 0 }
     )
 
-    val chk = out   := count >= n.ticks
+    out   := count >= n.ticks
 
     check("0 <= count <= n") {
       u16(0) <= count && count <= n.ticks
     }
 
+  /** True if the stream e has been true for n or more ticks. */
   def lastN(n: Ticks, e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
     node.Sugar.subnode(builder)(LastN(n, e)).out
 
 
+  /** The stream has always been true "so far".
+   * We sometimes call this "always" but in strict temporal logic "always"
+   * would also refer to the future.
+   */
   case class SoFar(e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val out  = output[Bool]
     out     := e && fby(True, out)
 
+  /** The stream has always been true "so far". */
   def sofar(e: Stream[Bool])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
     node.Sugar.subnode(builder)(SoFar(e)).out
 
+  /** Toggle between on and off every n ticks. Initially false. */
   case class Toggle(n: Ticks)(invocation: Node.Invocation) extends Node(invocation):
     val out   = output[Bool]
     val count = local[UInt16]
@@ -72,5 +80,6 @@ object Sample:
     out     := fby(False,
       ifthenelse(count == n.ticks, !out, out))
 
+  /** Toggle between on and off every n ticks. Initially false. */
   def toggle(n: Ticks)(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Bool] =
     node.Sugar.subnode(builder)(Toggle(n)).out

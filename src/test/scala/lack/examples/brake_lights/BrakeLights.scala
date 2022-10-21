@@ -88,9 +88,9 @@ object BrakeLights:
 
     // If the input stream is always zero, then the result is always zero.
     val always_zero =
-      Sample.sofar(imu.accel.x == real(0) && imu.accel.y == real(0) && imu.accel.z == real(0))
+      Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means output zero") {
-      always_zero ==> (accel.x == real(0) && accel.y == real(0) && accel.z == real(0))
+      always_zero ==> (accel == V3.zero)
     }
 
   /** The accelerometer has gravity. Because gravity doesn't change too much,
@@ -115,9 +115,9 @@ object BrakeLights:
     valid   := Sample.lastN(RemoveGravity.decay, hold.valid)
 
     val always_zero =
-      Sample.sofar(imu.accel.x == real(0) && imu.accel.y == real(0) && imu.accel.z == real(0))
+      Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means always zero") {
-      always_zero ==> (accel.x == real(0) && accel.y == real(0) && accel.z == real(0))
+      always_zero ==> (accel == V3.zero)
     }
     // The above guarantee looks like a straightforward consequence from the
     // guarantees in the HoldImu and Filter.iir subnodes. However, it's not
