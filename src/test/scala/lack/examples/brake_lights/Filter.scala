@@ -6,7 +6,7 @@ import lack.meta.source.Compound.{given, _}
 import lack.meta.source.node
 import lack.meta.source.Node
 import lack.meta.source.Stream
-import lack.meta.source.Stream.Real
+import lack.meta.source.Stream.{Bool, Real}
 
 object Filter:
 
@@ -46,6 +46,11 @@ object Filter:
 
     val gained = real(config.gain) * signal
     out := conv(config.b, gained) - conv(config.a.drop(1), z(out))
+
+    // If the input signal is always zero, then the output should be zero:
+    guarantees("always zero") {
+      Sample.sofar(signal == zero) ==> (out == zero)
+    }
 
   /** Apply an IIR filter to a signal */
   def iir(config: Config, signal: Stream[Real])(using builder: Node.Builder, location: lack.meta.macros.Location): Stream[Real] =

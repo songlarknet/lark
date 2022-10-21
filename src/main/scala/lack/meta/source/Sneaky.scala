@@ -1,5 +1,6 @@
 package lack.meta.source
 
+import lack.meta.core.node.Variable
 import lack.meta.core.node.Builder.Nested
 import lack.meta.core.node.Builder.Binding.Merge
 import lack.meta.core.node.Builder.Binding.Equation
@@ -49,9 +50,20 @@ class Sneaky(nested: Nested):
     vars match
       case List(v) => v
       case _ :: _ =>
-        throw new Exception(s"Sneaky: ambiguous variable: ${vars.mkString(", ")} all have name $name")
+        throw new Exception(s"Sneaky: ambiguous variable: ${vars.map(_._exp.pprString).mkString(", ")} all have name $name")
       case Nil =>
         throw new Exception(s"Sneaky: no variable named $name")
+
+  def output[T: Stream.SortRepr]: Stream[T] =
+    val sort = summon[Stream.SortRepr[T]].sort
+    val outputs =
+      nested.node.vars.toList.filter { case (c,v) => v.mode == Variable.Output && v.sort == sort }
+    outputs match
+      case List((c, v)) => new Stream[T](nested.node.xvar(c))
+      case xs =>
+        throw new Exception(s"Sneaky: ambiguous output variable with type ${sort.pprString}: ${xs.mkString(", ")}")
+      case Nil =>
+        throw new Exception(s"Sneaky: no output variable of type ${sort.pprString}")
 
 object Sneaky:
   def apply(builder: node.Builder): Sneaky =
