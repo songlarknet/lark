@@ -69,7 +69,6 @@ object Grind:
 
     println(s"Grinding node ${node.klass.pprString}")
     val solver = smt.Solver.gimme()
-    // TODO smt should work on frozen node repr
     smt.Eval
       .generate(node, solver, options.translate)
       .take(options.count)

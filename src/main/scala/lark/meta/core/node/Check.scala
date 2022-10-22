@@ -51,7 +51,7 @@ object Check:
 
   /** Get environment of node */
   def envOfNode(prefix: names.Prefix, node: Node): term.Check.Env =
-    // TODO: include internal state in nested contexts
+    // TODO: include internal state in nested contexts for sneaky mode
 
     val scalars = node.vars.map { case (c,v) =>
       prefix(c) -> v.sort

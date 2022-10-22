@@ -36,7 +36,6 @@ class Invocation(val instance: names.Ref, val builder: Builder):
   val metas:    mutable.ArrayBuffer[core.node.Meta] = mutable.ArrayBuffer()
   val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()
 
-  // TODO keep track of meta-level arguments
   def sort[T: SortRepr](name: String): Unit =
     unsafeFill()
     metas += core.node.Meta(name, summon[SortRepr[T]].sort)

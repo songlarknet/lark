@@ -111,7 +111,7 @@ object Eval:
         args.fold(System.empty)(_ <> _) <> node(prefixx, subnode, options)
       case None =>
         // Don't need to do anything for nested contexts.
-        // TODO: bind INIT flag if it's useful.
+        // LODO: bind INIT flag so sneaky mode can access it
         System.empty
 
     val (_, ctxpath) = entry.nested(n)

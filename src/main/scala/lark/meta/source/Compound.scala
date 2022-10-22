@@ -106,7 +106,7 @@ object Compound:
     def negate(x: Stream[T])(using builder: Builder, location: Location): Stream[T]
     def const(i: Integer): Stream[T]
 
-    // TODO: each numeric type should have a statically known range
+    // LODO: each numeric type should have a statically known range
     // def range: lark.meta.base.Range
 
     extension (x: Stream[T])(using builder: Builder, location: Location)

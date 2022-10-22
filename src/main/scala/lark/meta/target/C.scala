@@ -89,7 +89,6 @@ object C:
       val (struct_decl, ret_ty, ret_args) = m.returns match
         case List() => (List(), P.Type.void, List())
         case rets =>
-          // TODO sneaky invariant mode declare nested fields here
           val fieldsP = rets.map { kv =>
             P.Decl.var_(kv.name, kv.sort)
           }

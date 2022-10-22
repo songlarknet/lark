@@ -134,7 +134,6 @@ object Check:
     options: Options
   ): Unit =
     try
-      // TODO initial heap should include substates too if sneaky invariants enabled
       val pfx = names.Prefix(List(names.Component(names.ComponentSymbol.fromScalaSymbol("self"))))
       val v0 = SortedMap.from(self.fields.map { kv =>
         pfx(kv.name) -> kv.sort

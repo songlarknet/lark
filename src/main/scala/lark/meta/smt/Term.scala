@@ -201,7 +201,7 @@ object Term:
           case Val.Real(i) => Some(Val.Real(- i))
           case _ => None
         }
-      // TODO use a proper rational representation
+      // LODO use a proper rational representation
       case Terms.FunctionApplication(neg, Seq(ti, tj))
        if neg.toString == "/" =>
         for

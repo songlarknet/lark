@@ -60,12 +60,12 @@ object Magic:
     }
 
 
-  def forceObjects[T <: Product](node_ : T): Unit =
-    // TODO Instantiate all objects
-    val klass = node_.getClass()
-    klass.getDeclaredMethods().foreach { f =>
-      println(s"Declared methods: $f, ${f.getName()}, ${f.isAccessible()}, ${f.getParameterCount()}")
-      if f.getParameterCount() == 0 then
-        println("Calling")
-        f.invoke(this)
-    }
+  // It might be reasonable to go through and force all of the lazily-initialised objects.
+  // def forceObjects[T <: Product](node_ : T): Unit =
+  //   val klass = node_.getClass()
+  //   klass.getDeclaredMethods().foreach { f =>
+  //     println(s"Declared methods: $f, ${f.getName()}, ${f.isAccessible()}, ${f.getParameterCount()}")
+  //     if f.getParameterCount() == 0 then
+  //       println("Calling")
+  //       f.invoke(this)
+  //   }

@@ -65,7 +65,7 @@ abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
   private def freshStateInfo(): StateInfo =
     val i = freshSC()
 
-    // TODO: thread through nice name
+    // LODO: thread through nice name
     val st = u8(i)
     val active = (state == st)
     StateInfo(st, i, active, reset_trigger)

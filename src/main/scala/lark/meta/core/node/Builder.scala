@@ -52,7 +52,6 @@ object Builder:
     def freeze(f: Freezer) = Immutable.Nested(context, children.map(_.freeze(f)).toList)
     def ppr = freeze(Freezer.ppr).ppr
 
-    // LODO do merging / cse on append?
     def append(b: Binding): Unit =
       children += b
 
@@ -82,8 +81,7 @@ object Builder:
         // Try to re-use binding if we already have one.
         //
         // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
-        // and const prop
-        // TODO: look in other bindings.
+        // and const prop, could also float upwards
         //
         // Maybe we want this to be as dumb as possible so that the
         // source translation is "obviously correct".

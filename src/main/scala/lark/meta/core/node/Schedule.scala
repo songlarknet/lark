@@ -254,7 +254,7 @@ object Schedule:
       pretty.indent(pprPath(path, None, None))
 
     /** Try to nicely print the cycle.
-     * TODO: Nodes and expressions should track source locations better, print these better once that's done */
+     * LODO: Nodes and expressions should track source locations better, print these better once that's done */
     def pprPath(
       path: List[Entry],
       lastLoc: Option[lark.meta.macros.Location],
