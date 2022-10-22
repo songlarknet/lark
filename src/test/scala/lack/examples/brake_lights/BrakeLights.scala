@@ -80,7 +80,7 @@ object BrakeLights:
     valid   := imu.clock || fby(False, imu.clock)
 
     guarantees("available means current") {
-      imu.clock ==> (accel_x == imu.accel.x && accel_y == imu.accel.y && accel_z == imu.accel.z)
+      imu.clock ==> (accel == imu.accel)
     }
     guarantees("available means fresh") {
       imu.clock ==> valid
@@ -184,10 +184,10 @@ object BrakeLights:
     backward := BACKWARD.active
   object Direction:
     // Time could probably be longer in practice, scaled down for demo board
-    val ticks   = Sample.Ticks(50.millis)
+    val ticks   = Sample.Ticks(100.millis)
     // Noise around 0.5m/s/s when moving
-    val stopped = real(0.25)
-    val moving  = real(0.5)
+    val stopped = real(0.5)
+    val moving  = real(1.0)
 
   /** Lights controller takes filtered accelerometer and returns true if lights are on */
   case class Lights(accel: V3)(invocation: Node.Invocation) extends Automaton(invocation):
