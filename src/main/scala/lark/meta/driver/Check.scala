@@ -70,10 +70,9 @@ object Check:
         ls.foreach(x => println(x.pprString))
         assert(false, "Too many nodes to check")
 
-    subnodes.foreach { n =>
-       core.node.Check.node(n.freeze, core.node.Check.Options())
-    }
-
+    // TODO: check the nodes with an extra "sneaky mode" in the typechecker,
+    // which should allow referring to local variables inside merges etc
+    // val checked  = core.node.Check.program(sliced, core.node.Check.Options().sneaky)
     smt.Check.checkMany(subnode, options.check)
 
   case class Options(

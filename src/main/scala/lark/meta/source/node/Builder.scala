@@ -63,7 +63,7 @@ class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Bui
    * keep a clear interface between the calling node and the called node.
    * ...
    */
-  def invoke[T <: Base](
+  def invoke[T <: Base: ClassTag](
     name: String,
     klass: Option[Class[_]] = None,
     location: Option[lark.meta.macros.Location] = None
@@ -76,16 +76,22 @@ class Builder(val nodeRef: core.node.Builder.Node, nestedO: Option[core.node.Bui
    * keep a clear interface between the calling node and the called node.
    * ...
    */
-  def invokeWithRef[T <: Base](
+  def invokeWithRef[T <: Base: ClassTag](
     instance: names.Ref,
     klass: Option[Class[_]] = None,
     location: Option[lark.meta.macros.Location] = None
   )(body: Invocation => T): T =
     val subpath = instance.fullyQualifiedPath
-    val subnodeRef = new core.node.Builder.Node(new names.mutable.Supply(subpath), subpath)
+    val klass      = summon[ClassTag[T]].runtimeClass
+    val klassName  = klass.getCanonicalName().split('.')
+    val components = klassName.map(names.ComponentSymbol.fromScalaSymbol(_)).map(names.Component(_)).toList
+    val klassRef   = names.Ref.fromPathUnsafe(components)
+
+    val subnodeRef = new core.node.Builder.Node(new names.mutable.Supply(subpath), subpath, klassRef)
     val subbuilder = new Builder(subnodeRef)
     val inv = new Invocation(instance = instance, builder = subbuilder)
     val node = body(inv)
     node.finish()
     nested.subnode(instance.name, subnodeRef, inv.arguments.toList)
+    subnodeRef.metas ++= inv.metas
     node

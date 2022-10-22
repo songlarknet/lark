@@ -82,7 +82,7 @@ object Schedule:
     catch
       case e: lark.meta.base.collection.except.CycleException[Entry] =>
         val cyc = graph.cycles(e.value).sortBy(_.length).head
-        throw new except.CyclePrettyException(node.name, Cycle(node, graph, cyc))
+        throw new except.CyclePrettyException(node.klass, Cycle(node, graph, cyc))
 
   /** "Slurp" the graph vertices and edges from the program.
    *
@@ -163,7 +163,7 @@ object Schedule:
             case Entry(Entry.Subnode, _, _) :: _ =>
               es
             case ess =>
-              throw new except.VariableNoBindingException(node.name, var_, ess)
+              throw new except.VariableNoBindingException(node.klass, var_, ess)
 
     def dependencies(entries: MultiMapSet[names.Component, Entry], exp: Exp): SortedSet[Entry] =
       val vs = term.Compound.take.vars(exp)

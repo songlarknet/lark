@@ -2,7 +2,7 @@ package lark.meta.smt
 
 import lark.meta.base.names
 import lark.meta.base.pretty
-import lark.meta.core.node.Builder.Node
+import lark.meta.core.node.Node
 
 import lark.meta.smt.Term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
@@ -73,9 +73,6 @@ object Check:
 
   sealed trait NodeSummary(node: Node, val ok: Boolean, val trivial: Boolean = true) extends pretty.Pretty
   object NodeSummary:
-    case class Skip(node: Node) extends NodeSummary(node, true):
-      def ppr = pretty.text("Skipping node") <+> names.Prefix(node.path).ppr <> ", nothing to prove"
-
     case class OK(node: Node, steps: Int) extends NodeSummary(node, ok = true, trivial = steps == 0):
       def ppr = pretty.text(s"OK! (requires ${steps} inductive steps)")
 
@@ -178,7 +175,7 @@ object Check:
   def checkNode(top: Node, options: Options)(using ExecutionContext): NodeSummary =
     val sys = Translate.nodes(top.allNodes, options.translate)
     val topS = sys.top
-    println(s"Checking '${names.Prefix(top.path).pprString}' with ${topS.system.guarantees.length} properties to check:")
+    println(s"Checking '${top.klass.pprString}' with ${topS.system.guarantees.length} properties to check:")
 
     val bmcF = withSystemSolver(sys, options) { solver =>
       bmc(sys, topS, options.maximumInductiveSteps, solver)

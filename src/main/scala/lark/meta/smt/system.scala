@@ -336,12 +336,12 @@ object system:
 
   /** A system for a node */
   case class Node(
-    path: List[names.Component],
+    klass: names.Ref,
     params: List[names.Ref],
     system: System
   ) extends pretty.Pretty:
     def ppr =
-      pretty.text("Node") <+> names.Prefix(path).ppr <>
+      pretty.text("Node") <+> klass.ppr <>
         pretty.parens(pretty.csep(params.map(_.ppr))) <>
         pretty.nest(pretty.line <> system.ppr)
 
@@ -352,7 +352,7 @@ object system:
       vs ++ nsX
 
     private def nm(i: String): names.Ref =
-      names.Ref(path, names.Component(names.ComponentSymbol.fromScalaSymbol(i), None))
+      names.Ref(klass.fullyQualifiedPath, names.Component(names.ComponentSymbol.fromScalaSymbol(i), None))
 
     /** Qualified identifier of init function. */
     val initI      = compound.qid(nm("init"))

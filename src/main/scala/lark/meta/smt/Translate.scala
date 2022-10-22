@@ -3,8 +3,7 @@ package lark.meta.smt
 import lark.meta.base.num.Integer
 import lark.meta.base.names
 import lark.meta.base.pretty
-import lark.meta.core.node.Builder
-import lark.meta.core.node.Builder.Node
+import lark.meta.core.node.Node
 import lark.meta.core.Prop.Judgment
 import lark.meta.core.{Prop, Sort}
 import lark.meta.core.term
@@ -26,7 +25,7 @@ object Translate:
   )
 
   class Context(
-    val nodes: Map[List[names.Component], system.Node],
+    val nodes: Map[names.Ref, system.Node],
     val supply: names.mutable.Supply,
     val options: Options)
 
@@ -34,25 +33,18 @@ object Translate:
     val context: Context,
     val node: Node):
 
-    // LODO move to frozen node representation. strip will be unnecessary then.
-    def stripRef(r: names.Ref): names.Ref =
-      lark.meta.core.node.Builder.Freezer(node.path).stripRef(r)
-
     def supply = context.supply
 
   def nodes(inodes: Iterable[Node], options: Options): system.Top =
-    var map = Map[List[names.Component], system.Node]()
+    var map = Map[names.Ref, system.Node]()
     val snodes = inodes.map { case inode =>
       val snode = node(new Context(map, new names.mutable.Supply(List()), options), inode)
-      map += (inode.path -> snode)
+      map += (inode.klass -> snode)
       snode
     }.toList
     system.Top(snodes, snodes.last)
 
   def node(context: Context, node: Node): system.Node =
-    def nm(i: names.ComponentSymbol): names.Ref =
-      names.Ref(node.path, names.Component(i, None))
-
     val sys        = nested(context, node, node.nested).system
     val params     = node.params.map { p => names.Ref.fromComponent(p) }.toList
 
@@ -75,7 +67,7 @@ object Translate:
         case Exp.Var(s, v) =>
           SystemJudgment(
             List(),
-            lark.meta.core.node.Builder.Freezer(node.path).stripRef(v),
+            v,
             judgment)
 
     val sysprops = System(
@@ -83,9 +75,9 @@ object Translate:
       guarantees = node.guarantees.map(prop).toList,
       sorries    = node.sorries.map(prop).toList)
 
-    system.Node(node.path, params, sys <> paramsS <> sysprops)
+    system.Node(node.klass, params, sys <> paramsS <> sysprops)
 
-  def nested(context: Context, node: Node, nested: Builder.Nested): SystemV[Unit] =
+  def nested(context: Context, node: Node, nested: Node.Nested): SystemV[Unit] =
     val contextPrefix = names.Prefix(List(nested.context))
     val initR         = contextPrefix(names.Component(names.ComponentSymbol.INIT))
     val children      = nested.children.map(binding(context, node, contextPrefix, _))
@@ -101,8 +93,8 @@ object Translate:
       _     <- SystemV.conjoin(children.toSeq)
     yield ()
 
-  def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Builder.Binding): SystemV[Unit] = binding match
-    case b: Builder.Binding.Equation =>
+  def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Node.Binding): SystemV[Unit] = binding match
+    case b: Node.Binding.Equation =>
       val ec    = ExpContext(context, node)
       val xref  = names.Ref.fromComponent(b.lhs)
       val tstep =
@@ -112,11 +104,11 @@ object Translate:
         yield compound.equal(erhs, x)
       SystemV.step(tstep)
 
-    case b: Builder.Binding.Subnode =>
+    case b: Node.Binding.Subnode =>
       val v = b.subnode
       val ec = ExpContext(context, node)
       val subnode = node.subnodes(v)
-      val subsystem = context.nodes(subnode.path)
+      val subsystem = context.nodes(subnode.klass)
 
       val argsT  = b.args.map(expr(ec, _))
       val argsEq: List[SystemV[Unit]] =
@@ -167,8 +159,8 @@ object Translate:
 
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
-    case b: Builder.Binding.Merge =>
-      def go(cond: Terms.Term, cases: List[(Exp, Builder.Nested)]): SystemV[Unit] = cases match
+    case b: Node.Binding.Merge =>
+      def go(cond: Terms.Term, cases: List[(Exp, Node.Nested)]): SystemV[Unit] = cases match
         case Nil => SystemV.pure(())
         case (when, bnested) :: rest =>
           for
@@ -184,7 +176,7 @@ object Translate:
 
       go(compound.bool(true), b.cases.toList)
 
-    case b: Builder.Binding.Reset =>
+    case b: Node.Binding.Reset =>
       val sub = nested(context, node, b.nested)
       for
         kE    <- expr(ExpContext(context, node), b.clock)
@@ -195,7 +187,7 @@ object Translate:
       yield ()
 
   /** Translate a streaming expression to a system. */
-  def flow(context: ExpContext, contextPrefix: names.Prefix, b: Builder.Binding.Equation): SystemV[Terms.Term] = b.rhs match
+  def flow(context: ExpContext, contextPrefix: names.Prefix, b: Node.Binding.Equation): SystemV[Terms.Term] = b.rhs match
     case Flow.Pure(e) =>
       expr(context, e)
 
@@ -236,9 +228,7 @@ object Translate:
     case Exp.Val(v) =>
       SystemV.pure(compound.value(v))
 
-    case Exp.Var(sort, v) =>
-      val ref = context.stripRef(v)
-
+    case Exp.Var(sort, ref) =>
       // HACK: if the variable refers to the special ^state namespace, then
       // look up that variable in the state instead of the row.
       val stateVariable = (ref.prefix.exists(_.symbol == names.ComponentSymbol.STATE))
@@ -276,7 +266,7 @@ object Translate:
         ref  = let._1
         refT = let._2
 
-        refV  = Exp.Var(s.logical, names.Prefix(context.node.path)(ref))
+        refV  = Exp.Var(s.logical, ref)
         relyT <- expr(context, s.refinesExp(refV))
 
         relyTX <- SystemV.row(relyR, Sort.Bool)
@@ -302,7 +292,7 @@ object Translate:
           ref  = let._1
           refT = let._2
 
-          refV  = Exp.Var(logical, names.Prefix(context.node.path)(ref))
+          refV  = Exp.Var(logical, ref)
           satT <- expr(context, refinement.refinesExp(refV))
           _    <- SystemV.step(satT)
         yield refT

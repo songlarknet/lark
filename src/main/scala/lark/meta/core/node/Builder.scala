@@ -123,9 +123,12 @@ object Builder:
       append(new Binding.Subnode(name, args))
 
   object Node:
-    def top(): Node = new Node(new names.mutable.Supply(List()), List())
+    def top(): Node = new Node(new names.mutable.Supply(List()), List(),
+      names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("<top>"))))
 
-  class Node(val supply: names.mutable.Supply, val path: List[names.Component]) extends pretty.Pretty:
+  class Node(val supply: names.mutable.Supply, val path: List[names.Component], val klass: names.Ref) extends pretty.Pretty:
+    /** Concrete meta-arguments that this node has been applied to. */
+    val metas:    mutable.ArrayBuffer[Meta]              = mutable.ArrayBuffer()
     val params:   mutable.ArrayBuffer[names.Component]   = mutable.ArrayBuffer()
     var vars:     mutable.Map[names.Component, Variable] = mutable.Map()
     // LODO subnodes need location information
@@ -134,18 +137,8 @@ object Builder:
 
     var nested: Nested = new Nested(supply.freshState(forceIndex = false).name, this)
 
-    def name: names.Ref = path match
-      case Nil => names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("<top>")))
-      case _ => names.Ref.fromPathUnsafe(path)
+    def freeze: Immutable = Freezer.node(this)
 
-    def freeze: Immutable =
-      val freezer = Freezer(this.path)
-      Immutable(
-        name, params.toList,
-        immutable.SortedMap.from(vars),
-        immutable.SortedMap.from(subnodes.mapValues(_.freeze)),
-        props.map(p => p.copy(term = freezer.freeze(p.term))).toList,
-        nested.freeze(freezer))
     def ppr = freeze.ppr
 
     def fresh(name: names.ComponentSymbol, variable: Variable, forceIndex: Boolean = false): Exp.Var =
@@ -175,20 +168,6 @@ object Builder:
 
     def prop(j: Judgment): Unit =
       props += j
-
-    // LODO move smt.translate to immutable then kill these
-    /** All dependent nodes in the system, including this node */
-    def allNodes: Iterable[Node] =
-      val subs = subnodes.values.flatMap(_.allNodes)
-      // TODO: filter out non-unique nodes
-      subs ++ Seq(this)
-
-    def relies: Iterable[Judgment] =
-      props.filter(_.form == Form.Rely)
-    def guarantees: Iterable[Judgment] =
-      props.filter(_.form == Form.Guarantee)
-    def sorries: Iterable[Judgment] =
-      props.filter(_.form == Form.Sorry)
 
   case class Freezer(path: List[names.Component]):
     def stripRef(r: names.Ref): names.Ref =
@@ -223,3 +202,56 @@ object Builder:
 
   object Freezer:
     def ppr = Freezer(List())
+
+    def node(n: Node): Immutable =
+      node(n, mutable.Map.empty)
+
+    /** The un-frozen representation can have klass name clashes when the same
+     * klass is instantiated with different meta-arguments.
+     * Freezing splits them out into separate klasses and checks that all
+     * instances of the same klass with the same meta-arguments are exactly
+     * equivalent. */
+    def node(n: Node, mpNodes: mutable.Map[names.Ref, mutable.Map[List[Meta], Immutable]]): Immutable =
+      val freezer   = Freezer(n.path)
+      val metasF    = n.metas.toList
+      val subnodesF = immutable.SortedMap.from(n.subnodes.mapValues(node(_, mpNodes)))
+      def frozen(klassF: names.Ref) = Immutable(
+          klassF, metasF, n.params.toList,
+          immutable.SortedMap.from(n.vars),
+          subnodesF,
+          n.props.map(p => p.copy(term = freezer.freeze(p.term))).toList,
+          n.nested.freeze(freezer))
+      def klassIx(i: Int): names.Ref =
+        n.klass.name.ix match
+          case None =>
+            names.Ref(n.klass.prefix, names.Component(n.klass.name.symbol, Some(i)))
+          case Some(value) =>
+            names.Ref(n.klass.fullyQualifiedPath, names.Component(names.ComponentSymbol.LOCAL, Some(i)))
+
+
+      val mpKlasses = mpNodes.getOrElse(n.klass, mutable.Map.empty)
+      mpNodes.put(n.klass, mpKlasses)
+      mpKlasses.get(metasF) match
+        case None =>
+          val k =
+            if metasF.isEmpty
+            then n.klass
+            else klassIx(mpKlasses.size)
+          val nF = frozen(k)
+          mpKlasses.put(metasF, nF)
+          nF
+        case Some(nF0) =>
+          val nF = frozen(nF0.klass)
+          assert(nF == nF0,
+            s"""Unstable node ${n.klass.pprString}.
+              | Node ${n.klass.pprString} with meta-arguments (${metasF.mkString(", ")}) is instantiated multiple
+              | times with the same meta-arguments, but the generated code is different.
+              | This may mean that there are some arguments that aren't being freshened properly.
+              | TODO: clean up freshening, explain fix
+              |
+              | Original node:
+              |  ${nF0.pprString}
+              | Second node:
+              |  ${nF.pprString}
+              |""".stripMargin)
+          nF0

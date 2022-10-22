@@ -7,8 +7,11 @@ import lark.meta.core.term
 import lark.meta.core.term.{Exp, Flow}
 import lark.meta.core.Prop.{Form, Judgment}
 
+import scala.collection.mutable
+
 case class Node(
-  name:     names.Ref,
+  klass:    names.Ref,
+  metas:    List[Meta],
   params:   List[names.Component],
   vars:     names.immutable.ComponentMap[Variable],
   // LODO subnodes need location information
@@ -17,12 +20,26 @@ case class Node(
   nested:   Node.Nested
 ) extends pretty.Pretty:
 
+  val prefix = names.Prefix(klass.fullyQualifiedPath)
+
   val allSubnesteds = Seq((nested, List())) ++ nested.allSubnesteds
 
   /** Map from context name to nested context. */
   val context: names.immutable.ComponentMap[(Node.Nested, Node.Path)] =
     val ns = allSubnesteds.map { n => n._1.context -> n }
     scala.collection.immutable.SortedMap.from(ns)
+
+  /** All dependent nodes in the system, including this node */
+  def allNodes: Iterable[Node] =
+    allNodesDistinct(mutable.Map.empty)
+
+  private def allNodesDistinct(mpSeen: mutable.Map[names.Ref, Node]): Iterable[Node] =
+    val subs = subnodes.values.flatMap(_.allNodesDistinct(mpSeen))
+    mpSeen.put(klass, this) match
+      case None =>
+        subs ++ Seq(this)
+      case Some(value) =>
+        subs
 
   def relies: Iterable[Judgment] =
     props.filter(_.form == Form.Rely)
@@ -41,7 +58,7 @@ case class Node(
   def ppr = pprWithSubnodes(subnodes.toList)
 
   def pprWithSubnodes(subnodes: List[(names.Component, Node)]) =
-    val nameP = name.ppr
+    val klassP = klass.ppr
     val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
     val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
     val bindingsH = pretty.text("Bindings @context(") <> nested.context.ppr <> pretty.text("):")
@@ -49,7 +66,7 @@ case class Node(
     val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
     val propsP = props.map(x => x.ppr)
 
-    pretty.text("Node") <+> pretty.nest(nameP <> pretty.tuple(paramsP.toSeq) <@>
+    pretty.text("Node") <+> pretty.nest(klassP <> pretty.tuple(paramsP.toSeq) <@>
       pretty.subgroup("Vars:", varsP.toSeq) <>
       pretty.subgroup(bindingsH, bindingsP.toSeq) <>
       pretty.subgroup("Subnodes:", subnodesP.toSeq) <>

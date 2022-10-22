@@ -36,7 +36,7 @@ object Check:
   def program(nodes: Iterable[Node], options: Options): names.immutable.RefMap[Info] =
     SortedMap.from(
       nodes.map { n =>
-        n.name -> node(n, options)
+        n.klass -> node(n, options)
       })
 
   def node(n: Node, options: Options): Info =
@@ -136,7 +136,7 @@ object Check:
               pretty.text("in definition at ") <> n.vars(lhs).location.ppr
             case b@ Node.Binding.Subnode(sn, _) =>
               val nn = n.subnodes(sn)
-              pretty.text("in invocation of subnode") <+> sn.ppr <+> pretty.parens(nn.name.ppr)
+              pretty.text("in invocation of subnode") <+> sn.ppr <+> pretty.parens(nn.klass.ppr)
             case b@ Node.Binding.Merge(_) =>
               pretty.text("in merge")
             case b@ Node.Binding.Reset(k, _) =>

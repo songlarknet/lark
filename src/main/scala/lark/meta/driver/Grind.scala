@@ -34,10 +34,8 @@ object Grind:
     (body: Invocation => T)
     (using location: lark.meta.macros.Location)
   : Unit =
-    val subnodes  = Invoke.topnodes(body)
-    val allnodes  = subnodes.flatMap(_.allNodes)
-    val frozen    = allnodes.map(_.freeze)
-    val sliced    = core.node.Slice.program(frozen)
+    val allnodes  = Invoke.allNodes(body)
+    val sliced    = core.node.Slice.program(allnodes)
     val checked   = core.node.Check.program(sliced, core.node.Check.Options())
     val schedules = Compile.schedules(sliced)
     val program   = core.obc.FromNode.program(sliced, schedules)
@@ -49,9 +47,8 @@ object Grind:
     }
 
   /** Grind a node by generating input traces and testing them. */
-  def grindNode(node: core.node.Builder.Node, options: Options, checked: names.immutable.RefMap[core.node.Check.Info], schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
-    val nn = node.freeze
-    val info = checked(nn.name)
+  def grindNode(node: core.node.Node, options: Options, checked: names.immutable.RefMap[core.node.Check.Info], schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
+    val info = checked(node.klass)
 
     val evalopt = Eval.Options(
       core.term.Eval.Options(checkRefinement = options.translate.checkRefinement),
@@ -64,13 +61,13 @@ object Grind:
         val args = node.vars.filter { case (k,v) => v.mode == core.node.Variable.Output }
         if args.isEmpty
         then
-          System.err.println(s"Grind: checkC: skipping node ${node.name.pprString} as node has no outputs.")
+          System.err.println(s"Grind: checkC: skipping node ${node.klass.pprString} as node has no outputs.")
           false
         else true
       else false
 
 
-    println(s"Grinding node ${nn.name.pprString}")
+    println(s"Grinding node ${node.klass.pprString}")
     val solver = smt.Solver.gimme()
     // TODO smt should work on frozen node repr
     smt.Eval
@@ -78,9 +75,9 @@ object Grind:
       .take(options.count)
       .foreach { trace =>
         if (options.checkEval)
-          checkEval(nn, info, trace, evalopt)
+          checkEval(node, info, trace, evalopt)
         if (optCheckC)
-          checkC(nn, info, trace, cOptions, cCode)
+          checkC(node, info, trace, cOptions, cCode)
     }
 
   def checkEval(
@@ -105,7 +102,7 @@ object Grind:
       for (k,v) <- outs do
         val vv = heapX(k)
         assert(Val.approx(v, vv),
-          s"""Evaluator mismatch in node ${nn.name.pprString}:
+          s"""Evaluator mismatch in node ${nn.klass.pprString}:
               |Output ${k.pprString} has value ${v.pprString} in evaluator and ${vv.pprString} in SMT.
               |Expected trace from SMT:
               |${pretty.layout(pretty.indent(traceP))}
@@ -124,7 +121,7 @@ object Grind:
     import target.C
     import target.c.{Printer => Pr}
 
-    val klass = cOptions.program.classesMap(nn.name)
+    val klass = cOptions.program.classesMap(nn.klass)
     val reset = klass.methodsMap(core.obc.Obc.Method.reset)
     val step  = klass.methodsMap(core.obc.Obc.Method.step)
 

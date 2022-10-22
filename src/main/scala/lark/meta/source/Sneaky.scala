@@ -60,8 +60,8 @@ class Sneaky(nested: Nested):
       nested.node.vars.toList.filter { case (c,v) => v.mode == Variable.Output && v.sort == sort }
     outputs match
       case List((c, v)) => new Stream[T](nested.node.xvar(c))
-      case xs =>
-        throw new Exception(s"Sneaky: ambiguous output variable with type ${sort.pprString}: ${xs.mkString(", ")}")
+      case _ :: _ =>
+        throw new Exception(s"Sneaky: ambiguous output variable with type ${sort.pprString}: ${outputs.mkString(", ")}")
       case Nil =>
         throw new Exception(s"Sneaky: no output variable of type ${sort.pprString}")
 

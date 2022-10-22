@@ -61,7 +61,7 @@ object FromNode:
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
-          Statement.Call(None, klass = subnode.name, method = Method.reset, instance = instance, args = List())
+          Statement.Call(None, klass = subnode.klass, method = Method.reset, instance = instance, args = List())
         case None =>
           val Some(st) = fields(entry, node)
           Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
@@ -83,7 +83,7 @@ object FromNode:
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
           val args     = sub.args
-          Statement.Call(Some(instance), klass = subnode.name, method = Method.step, instance = instance, args = args)
+          Statement.Call(Some(instance), klass = subnode.klass, method = Method.step, instance = instance, args = args)
         case None =>
           Statement.Skip
 
@@ -126,7 +126,7 @@ object FromNode:
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
-          List(Storage(instance, subnode.name, Method.step))
+          List(Storage(instance, subnode.klass, Method.step))
         case Some((Node.Binding.Equation(lhs, eq), ctx)) => List()
         case None => List()
 
@@ -188,13 +188,13 @@ object FromNode:
 
     val objects = for
       (k, e) <- n.subnodes.toList
-    yield (k -> e.name)
+    yield (k -> e.klass)
 
     val reset = Methods.reset(n, schedule)
     val step  = Methods.step(n, schedule)
 
     Class(
-      name    = n.name,
+      name    = n.klass,
       fields  = fields,
       objects = objects,
       methods = List(reset, step),
@@ -203,4 +203,4 @@ object FromNode:
 
   def program(nodes: Iterable[Node], schedules: names.immutable.RefMap[Schedule]): Program =
     Program(
-      nodes.map { n => klass(n, schedules(n.name)) }.toList)
+      nodes.map { n => klass(n, schedules(n.klass)) }.toList)

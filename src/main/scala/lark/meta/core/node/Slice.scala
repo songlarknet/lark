@@ -56,7 +56,7 @@ object Slice:
       }
     }
     val nested   = sliceNested(n.nested, only)
-    Node(n.name, n.params, vars, subnodes, props, nested)
+    Node(n.klass, n.metas, n.params, vars, subnodes, props, nested)
 
   def sliceNested(n: Node.Nested, only: names.immutable.ComponentSet): Node.Nested =
     val children = n.children.flatMap { sliceBinding(_, only) }

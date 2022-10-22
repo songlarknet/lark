@@ -1,7 +1,7 @@
 package lark.meta.smt
 
 import lark.meta.base.names
-import lark.meta.core.node.Builder.Node
+import lark.meta.core.node.Node
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 
 /** Get the SMT solver to evaluate a node. */
@@ -49,7 +49,7 @@ object Eval:
           Trace.fromModel(step, model)
         case _ =>
           throw new Exception(
-            s"""Can't generate trace for node ${names.Prefix(top.path).pprString}:
+            s"""Can't generate trace for node ${top.klass.pprString}:
                |  Response: ${sat}
                |  Step: ${step}""".stripMargin)
     }

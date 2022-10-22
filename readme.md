@@ -1,7 +1,6 @@
 # Lark
 
-Lark wants to be a Scala EDSL for writing real-time reactive control systems.
-(But it isn't yet.)
+Lark is a Scala EDSL for writing real-time reactive control systems.
 The plan is that the programmer will be able to specify _safety properties_ that all executions of the system should satisfy, and these properties are verified via model checking.
 The system will then be compiled to executable C code.
 

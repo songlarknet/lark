@@ -25,8 +25,7 @@ object Compile:
     (using location: lark.meta.macros.Location)
   : Unit =
     val subnodes = Invoke.allNodes(body)
-    val frozen   = subnodes.map(_.freeze)
-    val sliced   = core.node.Slice.program(frozen)
+    val sliced   = core.node.Slice.program(subnodes)
     val checked  = core.node.Check.program(sliced, core.node.Check.Options())
     val scheds   = schedules(sliced)
     val program  = core.obc.FromNode.program(sliced, scheds)
@@ -60,9 +59,8 @@ object Compile:
     val subnodes = Invoke.allNodes(body)
 
     subnodes.foreach { n =>
-      val nn = n.freeze
-      println(s"Schedule ${nn.name.pprString}:")
-      Schedule.schedule(nn).entries.foreach { case k =>
+      println(s"Schedule ${n.klass.pprString}:")
+      Schedule.schedule(n).entries.foreach { case k =>
         println(pretty.layout(pretty.indent(k.ppr)))
       }
 
@@ -70,6 +68,6 @@ object Compile:
 
   def schedules(nodes: Iterable[core.node.Node]): names.immutable.RefMap[Schedule] =
     val scheds = nodes.map { n =>
-      n.name -> Schedule.schedule(n)
+      n.klass -> Schedule.schedule(n)
     }
     SortedMap.from(scheds)

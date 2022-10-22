@@ -33,13 +33,16 @@ class Invocation(val instance: names.Ref, val builder: Builder):
     _empty = false
     this
 
+  val metas:    mutable.ArrayBuffer[core.node.Meta] = mutable.ArrayBuffer()
   val arguments: mutable.ArrayBuffer[core.term.Exp] = mutable.ArrayBuffer()
 
   // TODO keep track of meta-level arguments
   def sort[T: SortRepr](name: String): Unit =
     unsafeFill()
+    metas += core.node.Meta(name, summon[SortRepr[T]].sort)
   def meta[T](name: String, value: T)(using location: lark.meta.macros.Location): T =
     unsafeFill()
+    metas += core.node.Meta(name, value)
     value
 
   /** Mark an expression as an argument to a subnode.
@@ -75,11 +78,11 @@ class Invocation(val instance: names.Ref, val builder: Builder):
    * it should be relatively straightforward to have a macro generate these invocations
    * from the class constructor.
    */
-  def stream[T](name: String, argvalue: Stream[T])(using location: lark.meta.macros.Location): Stream[T] =
+  def stream[T](name: String, argvalue: Stream[T]): Stream[T] =
     unsafeFill()
     val v = builder.nodeRef.fresh(
       names.ComponentSymbol.fromScalaSymbol(name),
-      core.node.Variable(argvalue.sort, location, core.node.Variable.Argument))
+      core.node.Variable(argvalue.sort, lark.meta.macros.Location.empty, core.node.Variable.Argument))
     arguments += argvalue._exp
     new Stream[T](v)(using argvalue.sortRepr)
 

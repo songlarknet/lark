@@ -25,7 +25,6 @@ class BrakeLights extends munit.FunSuite:
   test("Compile") {
     Compile.compile(
       basename = "brake_lights",
-      // NOCOMMIT
       output = Some(java.nio.file.Paths.get("scratch/c"))) // "/Users/amos/proj/lark_brake_lights/src/larkc")))
       { BrakeLights.Top(_) }
   }

@@ -91,7 +91,7 @@ object Eval:
   )
 
   def node(prefix: names.Prefix, n: Node, options: Options): System =
-    val entries = options.schedules(n.name).entries.map {
+    val entries = options.schedules(n.klass).entries.map {
       this.entry(prefix, n, _, options)
     }
     entries.foldLeft(System.empty)(_ <> _)

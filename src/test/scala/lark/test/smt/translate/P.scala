@@ -31,7 +31,7 @@ class P extends HedgehogSuite:
   val solver = Solver.gimme()
   val supply = names.mutable.Supply(List())
   // Translation requires a dummy node. Refactor translation to remove this.
-  val dummy  = node.Builder.Node(supply, List())
+  val dummy  = node.Builder.Node(supply, List(), names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("dummy")))).freeze
 
   def declareConsts(solver: Solver, ns: names.Namespace[Sort], prefix: names.Prefix) =
       solver.declareConsts(
