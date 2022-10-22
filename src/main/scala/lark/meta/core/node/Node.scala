@@ -4,7 +4,7 @@ import lark.meta.macros.Location
 import lark.meta.base.{names, pretty}
 import lark.meta.base.names.given
 import lark.meta.core.term
-import lark.meta.core.term.{Exp, Flow}
+import lark.meta.core.term.{Exp, Flow, Val}
 import lark.meta.core.Prop.{Form, Judgment}
 
 import scala.collection.mutable
@@ -85,11 +85,12 @@ object Node:
     /** Non-compound bindings with no nesting */
     type Simple = Equation | Subnode
 
-    case class Merge(cases: List[(Exp, Nested)]) extends Binding:
+    case class Merge(scrutinee: Exp, cases: List[(Val, Nested)]) extends Binding:
       def ppr =
+        pretty.text("Merge") <> pretty.parens(scrutinee.ppr) <> pretty.colon <+>
         pretty.vsep(
-          cases.zipWithIndex.map { case ((clock, nest), ix) =>
-            pretty.text(if ix == 0 then "Merge When" else "Else When") <> pretty.parens(clock.ppr) <+> nest.ppr
+          cases.zipWithIndex.map { case ((value, nest), ix) =>
+            pretty.text("Match") <> pretty.parens(value.ppr) <+> nest.ppr
           }.toSeq)
 
     case class Reset(clock: Exp, nested: Nested) extends Binding:
@@ -120,11 +121,9 @@ object Node:
 
     /** Direct and indirect nested contexts inside this one. */
     def allSubnesteds: Iterable[(Nested, Path)] = children.flatMap { c => c match
-      case Binding.Merge(cases) =>
-        var preds = List[Exp]()
-        val paths = cases.map { case (e,n) =>
-          val path = Path.Entry.Merge(preds, e)
-          preds = preds ++ List(e)
+      case Binding.Merge(scrutinee, cases) =>
+        val paths = cases.map { case (v,n) =>
+          val path = Path.Entry.Merge(scrutinee, v)
           (n, path)
         }
         paths.flatMap { case (n,p) =>
@@ -151,10 +150,6 @@ object Node:
        * this arm. The arm is active when the conditions of the previous arms are
        * false and this one is true.
        */
-      case class Merge(not: List[Exp], yes: Exp) extends Entry:
+      case class Merge(scrutinee: Exp, value: Val) extends Entry:
         def clock: Exp =
-          val nots = not.map(term.Compound.app(term.prim.Table.Not, _))
-          val ands = nots ++ List(yes)
-          ands.reduce { (a,b) =>
-            term.Compound.app(term.prim.Table.And, a, b)
-          }
+          term.Compound.app(term.prim.Table.Eq, scrutinee, term.Compound.val_(value))

@@ -126,10 +126,9 @@ abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
     private[source]
     def finish(): Unit =
       builder.withNesting(Automaton.this.builder.nested) {
-        val when  = (pre_state == info.st)
         val reset = fby(False, reset_trigger)
         val nest  = mergeTransition.merge
-          .when(when._exp)
+          .when(info.st._exp.asInstanceOf[core.term.Exp.Val].v)
           .reset(reset._exp)
         builder.withNesting(nest) {
           transitionsDelay.removeAll().foreach(f => f())

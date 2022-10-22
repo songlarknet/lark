@@ -160,21 +160,15 @@ object Translate:
       SystemV(subnodeT, ()) <&& SystemV.conjoin(argsEq.toList)
 
     case b: Node.Binding.Merge =>
-      def go(cond: Terms.Term, cases: List[(Exp, Node.Nested)]): SystemV[Unit] = cases match
-        case Nil => SystemV.pure(())
-        case (when, bnested) :: rest =>
-          for
-            kE    <- expr(ExpContext(context, node), when)
-            whenE  = compound.and(cond, kE)
-            notE   = compound.and(cond, compound.not(kE))
-
-            subT   = nested(context, node, bnested)
-            _     <- subT.when(context.supply, whenE)
-
-            _     <- go(notE, rest)
-          yield ()
-
-      go(compound.bool(true), b.cases.toList)
+      def go(scrut: Terms.Term, case1: (Val, Node.Nested)): SystemV[Unit] =
+        val whenE  = compound.equal(scrut, compound.value(case1._1))
+        val subT   = nested(context, node, case1._2)
+        subT.when(context.supply, whenE)
+      for
+        s <- expr(ExpContext(context, node), b.scrutinee)
+        _ <- SystemV.conjoin(b.cases.map(go(s, _)))
+      yield
+        ()
 
     case b: Node.Binding.Reset =>
       val sub = nested(context, node, b.nested)

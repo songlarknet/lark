@@ -98,11 +98,12 @@ object Check:
           assert(k.sort == Sort.Bool,
             s"Reset clock should be a bool, got ${k.sort.pprString} for clock ${k.pprString}")
           nested(n, nest, visible, env, options)
-        case Node.Binding.Merge(cases) =>
-          val binds = cases.map { case (k,nest) =>
-            term.Check.exp(envX, k, options.exp)
-            assert(k.sort == Sort.Bool,
-              s"Merge clock should be a bool, got ${k.sort.pprString} for clock ${k.pprString}")
+        case Node.Binding.Merge(scrutinee, cases) =>
+          term.Check.exp(envX, scrutinee, options.exp)
+          val binds = cases.map { case (v,nest) =>
+            term.Check.val_(v, options.exp)
+            assert(v.sort == scrutinee.sort,
+              s"Merge case should match scrutinee sort ${scrutinee.sort}, got ${v.sort.pprString} for scrutinee ${scrutinee.pprString} and case ${v.pprString}")
             nested(n, nest, visible, env, options)
           }
           binds.fold(MultiMap.empty[names.Component, Node.Binding.Simple])(_ <> _)
@@ -137,8 +138,8 @@ object Check:
             case b@ Node.Binding.Subnode(sn, _) =>
               val nn = n.subnodes(sn)
               pretty.text("in invocation of subnode") <+> sn.ppr <+> pretty.parens(nn.klass.ppr)
-            case b@ Node.Binding.Merge(_) =>
-              pretty.text("in merge")
+            case b@ Node.Binding.Merge(e, _) =>
+              pretty.text("in merge with scrutinee") <+> e.ppr
             case b@ Node.Binding.Reset(k, _) =>
               pretty.text("in reset with clock") <+> k.ppr
         throw new Exception(pretty.layout(where), e)
@@ -147,7 +148,7 @@ object Check:
     case Node.Binding.Equation(lhs, _) => SortedSet(lhs)
     case Node.Binding.Subnode(lhs, _) => SortedSet(lhs)
     case Node.Binding.Reset(_, nested) => visibleOfNested(nested)
-    case Node.Binding.Merge(cases) =>
+    case Node.Binding.Merge(scrutinee, cases) =>
       val vis = cases.map { case (k,n) =>
         visibleOfNested(n)
       }

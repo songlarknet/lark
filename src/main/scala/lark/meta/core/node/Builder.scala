@@ -29,16 +29,17 @@ object Builder:
     class Subnode(val subnode: names.Component, val args: List[Exp]) extends Binding:
       def freeze(f: Freezer) = Immutable.Binding.Subnode(subnode, args.map(f.freeze(_)))
 
-    class Merge(val node: Node) extends Binding:
+    class Merge(val clock: Exp, val node: Node) extends Binding:
       def freeze(f: Freezer) = Immutable.Binding.Merge(
-        cases.map { case (k,n) => (f.freeze(k), n.freeze(f)) }.toList
+        f.freeze(clock),
+        cases.map { case (v,n) => (v, n.freeze(f)) }.toList
       )
-      val cases: mutable.ArrayBuffer[(Exp, Nested)] = mutable.ArrayBuffer()
+      val cases: mutable.ArrayBuffer[(Val, Nested)] = mutable.ArrayBuffer()
 
-      def when(clock: Exp): Nested =
+      def when(value: Val): Nested =
         val i = node.supply.freshState()
         val n = new Nested(i.name, node)
-        cases += ((clock, n))
+        cases += ((value, n))
         n
 
     class Reset(val clock: Exp, val nested: Nested) extends Binding:
@@ -55,8 +56,8 @@ object Builder:
     def append(b: Binding): Unit =
       children += b
 
-    def merge(): Binding.Merge =
-      val m = new Binding.Merge(node)
+    def merge(scrutinee: Exp): Binding.Merge =
+      val m = new Binding.Merge(scrutinee, node)
       append(m)
       m
 
@@ -228,7 +229,6 @@ object Builder:
 
 
       val mpKlasses = mpNodes.getOrElse(n.klass, mutable.Map.empty)
-      mpNodes.put(n.klass, mpKlasses)
       mpKlasses.get(metasF) match
         case None =>
           val k =
@@ -236,7 +236,10 @@ object Builder:
             then n.klass
             else klassIx(mpKlasses.size)
           val nF = frozen(k)
+          assert(!mpNodes.contains(k),
+            s"""Tried to generate a fresh class name ${k.pprString} based on original name ${n.klass.pprString} but already in use""")
           mpKlasses.put(metasF, nF)
+          mpNodes.put(n.klass, mpKlasses)
           nF
         case Some(nF0) =>
           val nF = frozen(nF0.klass)

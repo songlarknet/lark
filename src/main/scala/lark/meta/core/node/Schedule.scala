@@ -206,6 +206,7 @@ object Schedule:
           vs.exists(p => p.path.exists(contexts.contains(_)))
         }.keySet
 
+        val scrutineeD = dependencies(mpEntries, b.scrutinee)
         val depss = b.cases.map { case (clock, nested) =>
           // restrict mpEntries
           val mpEntriesX = MultiMapSet(mpEntries.entries.map { case (k,vs) =>
@@ -213,9 +214,8 @@ object Schedule:
             then k -> vs.filter(v => v.path.contains(nested.context))
             else k -> vs
           })
-          val clockD        = dependencies(mpEntriesX, clock)
           val (entry, deps) = dependencies(mpEntriesX, path, nested)
-          MultiMapSet(entry -> clockD) <> deps
+          MultiMapSet(entry -> scrutineeD) <> deps
         }
 
         MultiMapSet.concat(depss)

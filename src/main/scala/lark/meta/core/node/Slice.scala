@@ -68,10 +68,10 @@ object Slice:
         if only.contains(lhs) then Some(b) else None
       case Subnode(subnode, args) =>
         if only.contains(subnode) then Some(b) else None
-      case Merge(cases) =>
-        if cases.exists { case (k,n) => only.contains(n.context) }
+      case Merge(scrutinee, cases) =>
+        if cases.exists { case (v,n) => only.contains(n.context) }
         then
-          Some(Merge(cases.map { case (k,n) =>
+          Some(Merge(scrutinee, cases.map { case (k,n) =>
             (k, sliceNested(n, only))
           }))
         else
