@@ -9,7 +9,7 @@
 Probably each numeric prim should probably take a Num type specifying what precision it works on.
 
 #### Overflow checks occur for operations inside false conditionals
-See lack.examples.bug.IntegerOverflow.
+See lark.examples.bug.IntegerOverflow.
 
 An expression like `if x > 0 then x - 1 else 0` is obviously safe, but if you put streaming operators inside the conditions it gets a bit subtle.
 

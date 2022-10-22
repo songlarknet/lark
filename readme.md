@@ -1,6 +1,6 @@
-# Lack
+# Lark
 
-Lack wants to be a Scala EDSL for writing real-time reactive control systems.
+Lark wants to be a Scala EDSL for writing real-time reactive control systems.
 (But it isn't yet.)
 The plan is that the programmer will be able to specify _safety properties_ that all executions of the system should satisfy, and these properties are verified via model checking.
 The system will then be compiled to executable C code.
@@ -45,7 +45,7 @@ See [doc/roadmap.md]
 ## Other systems
 
 There are many systems trying to do similar things.
-None of them quite solve the same problems that Lack aims to solve.
+None of them quite solve the same problems that Lark aims to solve.
 
 See [doc/why.md].
 

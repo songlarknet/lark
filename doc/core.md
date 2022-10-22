@@ -1,11 +1,11 @@
 # core language
 
-Lack: a minimal core language for model-checked realtime control systems.
+Lark: a minimal core language for model-checked realtime control systems.
 
 The goal is to support only very basic clock operations that are useful for composing systems together without any clock checking.
-Lack Core supports conditional activation ("when") and modular reset ("reset every") for subcomputations but there is no static check that streams with subclocks are only used in correct contexts.
+Lark Core supports conditional activation ("when") and modular reset ("reset every") for subcomputations but there is no static check that streams with subclocks are only used in correct contexts.
 
-Lack Core also has deliberately relaxed scoping rules to make it easier to specify invariants that refer to internal variables.
+Lark Core also has deliberately relaxed scoping rules to make it easier to specify invariants that refer to internal variables.
 Each subnode invocation has an instance identifier, and you can access local variables declared inside subnodes by qualifying variables with the instance identifier.
 Variables inside nested subnodes can also be referred to this way.
 Each streaming context also defines a special variable that refers to the "initialised flag", which is true initially and whenever the context is reset, and becomes false when the stream is next evaluated.
@@ -138,7 +138,7 @@ let
 tel
 ```
 
-In Lack Core:
+In Lark Core:
 
 ```
 status_consistently_good(msg_ck: Bool; msg_payload: Payload) = node {

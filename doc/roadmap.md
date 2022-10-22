@@ -1,6 +1,6 @@
-# Lack: a Scala EDSL for Lustre
+# Lark: a Scala EDSL for Lustre
 
-This document describes the short-term and mid-term roadmap for lack.
+This document describes the short-term and mid-term roadmap for lark.
 For the first milestone I want to pare it down to the bare minimum to be "useful".
 The high-level goal is to have a model checker and compiler toolchain that's scalable, debuggable, executable, and sound.
 
