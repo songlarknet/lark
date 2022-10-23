@@ -26,9 +26,10 @@ object Compile:
   : Unit =
     val subnodes = Invoke.allNodes(body)
     val sliced   = core.node.transform.Slice.program(subnodes)
-    val checked  = core.node.Check.program(sliced, core.node.Check.Options())
-    val scheds   = schedules(sliced)
-    val program  = core.obc.FromNode.program(sliced, scheds)
+    val simped   = core.node.transform.InlineBindings.program(sliced)
+    val checked  = core.node.Check.program(simped, core.node.Check.Options())
+    val scheds   = schedules(simped)
+    val program  = core.obc.FromNode.program(simped, scheds)
 
     // obcs.foreach { case (k,v) =>
     //   println(s"Node ${k.pprString}")

@@ -41,9 +41,12 @@ object Trace:
         val ganky = k.name.symbol.toString == ""
         int || ganky
       }
+      val internalX = internal.filter { case (k,v) =>
+        k.name.symbol != names.ComponentSymbol.PROP
+      }
       pretty.vsep(List(
         names.Namespace.fromSeq(external).pprTruncate(layers),
-        pretty.Colour.Grey.of(names.Namespace.fromSeq(internal).pprTruncate(layers))))
+        pretty.Colour.Grey.of(names.Namespace.fromSeq(internalX).pprTruncate(layers))))
 
   def fromModel(steps: Int, sexpr: SExpr): Trace =
     def allDefs(s: SExpr): Iterable[(names.Ref, Val)] = s match

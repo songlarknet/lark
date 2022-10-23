@@ -36,19 +36,24 @@ object Grind:
   : Unit =
     val allnodes  = Invoke.allNodes(body)
     val sliced    = core.node.transform.Slice.program(allnodes)
-    val checked   = core.node.Check.program(sliced, core.node.Check.Options())
-    val schedules = Compile.schedules(sliced)
-    val program   = core.obc.FromNode.program(sliced, schedules)
+    val simped    = core.node.transform.InlineBindings.program(sliced)
+    val checked   = core.node.Check.program(simped, core.node.Check.Options())
+    val schedules = Compile.schedules(simped)
+    val program   = core.obc.FromNode.program(simped, schedules)
     val cOptions  = target.C.Options(basename = "grind", program)
     val cCode     = target.C.headersource(cOptions)
 
-    allnodes.foreach { sn =>
-      grindNode(sn, options, checked, schedules, cOptions, cCode)
+    allnodes.zip(simped).foreach { (original, simp) =>
+      grindNode(original, simp, options, checked, schedules, cOptions, cCode)
     }
 
-  /** Grind a node by generating input traces and testing them. */
-  def grindNode(node: core.node.Node, options: Options, checked: names.immutable.RefMap[core.node.Check.Info], schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
-    val info = checked(node.klass)
+  /** Grind a node by generating input traces and testing them.
+   * We take the raw, original node and the simplified node. We generate values
+   * based on the original node and evaluate the simplified to check that they
+   * line up.
+   */
+  def grindNode(original: core.node.Node, simp: core.node.Node, options: Options, checked: names.immutable.RefMap[core.node.Check.Info], schedules: names.immutable.RefMap[Schedule], cOptions: target.C.Options, cCode: pretty.Doc): Unit =
+    val info = checked(original.klass)
 
     val evalopt = Eval.Options(
       core.term.Eval.Options(checkRefinement = options.translate.checkRefinement),
@@ -58,25 +63,25 @@ object Grind:
     val optCheckC =
       if options.checkC
       then
-        val args = node.vars.filter { case (k,v) => v.mode == core.node.Variable.Output }
+        val args = original.vars.filter { case (k,v) => v.mode == core.node.Variable.Output }
         if args.isEmpty
         then
-          System.err.println(s"Grind: checkC: skipping node ${node.klass.pprString} as node has no outputs.")
+          System.err.println(s"Grind: checkC: skipping node ${original.klass.pprString} as node has no outputs.")
           false
         else true
       else false
 
 
-    println(s"Grinding node ${node.klass.pprString}")
+    println(s"Grinding node ${original.klass.pprString}")
     val solver = smt.Solver.gimme()
     smt.Eval
-      .generate(node, solver, options.translate)
+      .generate(original, solver, options.translate)
       .take(options.count)
       .foreach { trace =>
         if (options.checkEval)
-          checkEval(node, info, trace, evalopt)
+          checkEval(simp, info, trace, evalopt)
         if (optCheckC)
-          checkC(node, info, trace, cOptions, cCode)
+          checkC(simp, info, trace, cOptions, cCode)
     }
 
   def checkEval(
