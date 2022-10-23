@@ -87,11 +87,11 @@ object Node:
 
     case class Merge(scrutinee: Exp, cases: List[(Val, Nested)]) extends Binding:
       def ppr =
-        pretty.text("Merge") <> pretty.parens(scrutinee.ppr) <> pretty.colon <+>
+        pretty.text("Merge") <> pretty.parens(scrutinee.ppr) <> pretty.nest(pretty.colon <@>
         pretty.vsep(
           cases.zipWithIndex.map { case ((value, nest), ix) =>
             pretty.text("Match") <> pretty.parens(value.ppr) <+> nest.ppr
-          }.toSeq)
+          }.toSeq))
 
     case class Reset(clock: Exp, nested: Nested) extends Binding:
       def ppr = pretty.text("Reset") <> pretty.parens(clock.ppr) <+> nested.ppr

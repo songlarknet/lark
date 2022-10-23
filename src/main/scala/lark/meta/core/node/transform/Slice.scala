@@ -1,14 +1,12 @@
-package lark.meta.core.node
+package lark.meta.core.node.transform
 
 import lark.meta.base.names
 import lark.meta.base.names.given
 import lark.meta.base.collection.{Graph, MultiMap}
 
 import scala.collection.immutable
-import lark.meta.core.node.Node.Binding.Equation
-import lark.meta.core.node.Node.Binding.Subnode
-import lark.meta.core.node.Node.Binding.Merge
-import lark.meta.core.node.Node.Binding.Reset
+import lark.meta.core.node.{Node, Variable, Schedule}
+import lark.meta.core.node.Node.Binding
 
 object Slice:
   /** Slice nodes so that only the bindings directly relevant to return values
@@ -64,22 +62,22 @@ object Slice:
 
   def sliceBinding(b: Node.Binding, only: names.immutable.ComponentSet): Option[Node.Binding] =
     b match
-      case Equation(lhs, rhs) =>
+      case Binding.Equation(lhs, rhs) =>
         if only.contains(lhs) then Some(b) else None
-      case Subnode(subnode, args) =>
+      case Binding.Subnode(subnode, args) =>
         if only.contains(subnode) then Some(b) else None
-      case Merge(scrutinee, cases) =>
+      case Binding.Merge(scrutinee, cases) =>
         if cases.exists { case (v,n) => only.contains(n.context) }
         then
-          Some(Merge(scrutinee, cases.map { case (k,n) =>
+          Some(Binding.Merge(scrutinee, cases.map { case (k,n) =>
             (k, sliceNested(n, only))
           }))
         else
           None
-      case Reset(clock, nested) =>
+      case Binding.Reset(clock, nested) =>
         if only.contains(nested.context)
         then
-          Some(Reset(clock, sliceNested(nested, only)))
+          Some(Binding.Reset(clock, sliceNested(nested, only)))
         else
           None
 

@@ -57,6 +57,15 @@ package object collection:
         val (l1, e1) = topsortMany(emitted + entry, successors + entry, edges(entry).toList)
         (l1 :+ entry, e1)
 
+    def reverse: Graph[T] =
+      val edgesX =
+        edges.entries.toList.flatMap { (src,snks) =>
+          snks.map { snk =>
+            snk -> src
+          }
+        }
+      Graph(vertices,
+        MultiMapSet.concat(edgesX.map(MultiMapSet.just)))
 
   /** Map with duplicate keys, where duplicates are stored as a list. */
   case class MultiMap[K: scala.math.Ordering, V](entries: SortedMap[K, List[V]]):

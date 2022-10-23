@@ -151,8 +151,8 @@ object Check:
     val propsT = props.map(p => compound.not(judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
-  def checkMany(top: Node, options: Options)(using ExecutionContext): Summary =
-    val res = top.allNodes.map { n =>
+  def checkNodes(nodes: Iterable[Node], options: Options)(using ExecutionContext): Summary =
+    val res = nodes.map { n =>
       val r = checkNode(n, options)
       println(r.pprString)
       r

@@ -35,7 +35,7 @@ object Grind:
     (using location: lark.meta.macros.Location)
   : Unit =
     val allnodes  = Invoke.allNodes(body)
-    val sliced    = core.node.Slice.program(allnodes)
+    val sliced    = core.node.transform.Slice.program(allnodes)
     val checked   = core.node.Check.program(sliced, core.node.Check.Options())
     val schedules = Compile.schedules(sliced)
     val program   = core.obc.FromNode.program(sliced, schedules)

@@ -55,8 +55,11 @@ object Schedule:
         case Schedule.Entry.Nested =>
           None
 
+    def context: names.Component =
+      this.path.lastOption.getOrElse(this.name)
+
     def nested(node: Node): (Node.Nested, Node.Path) =
-      node.context(this.path.lastOption.getOrElse(this.name))
+      node.context(this.context)
 
   object Entry:
     trait Kind extends pretty.Pretty

@@ -25,7 +25,7 @@ object Compile:
     (using location: lark.meta.macros.Location)
   : Unit =
     val subnodes = Invoke.allNodes(body)
-    val sliced   = core.node.Slice.program(subnodes)
+    val sliced   = core.node.transform.Slice.program(subnodes)
     val checked  = core.node.Check.program(sliced, core.node.Check.Options())
     val scheds   = schedules(sliced)
     val program  = core.obc.FromNode.program(sliced, scheds)

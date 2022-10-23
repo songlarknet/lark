@@ -35,6 +35,12 @@ object Compound:
       simp.outer(Exp.Cast(op, subst(env, e)))
 
 
+  def subst(env: names.immutable.RefMap[Exp], flow: Flow): Flow = flow match
+    case Flow.Pure(e)     => Flow.Pure(subst(env, e))
+    case Flow.Pre(e)      => Flow.Pre(subst(env, e))
+    case Flow.Fby(v, e)   => Flow.Fby(v, subst(env, e))
+    case Flow.Arrow(f, l) => Flow.Arrow(subst(env, f), subst(env, l))
+
   object simp:
     /** Simplify outer-most layer of expression without descending into
      * the expression.

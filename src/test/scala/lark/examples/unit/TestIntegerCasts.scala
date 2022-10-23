@@ -11,10 +11,13 @@ class TestIntegerCasts extends munit.FunSuite:
   test("widening casts ok") {
     Check.success() {
       new Node(_):
-        val xu8 = forall[S.UInt8]
-        val xu16 = xu8.as[S.UInt16] + u16(0)
-        val xi16 = xu8.as[S.Int16] + i16(0)
-        val xu32 = xi16.as[S.UInt32] + u32(0)
+        val xu8  = forall[S.UInt8]
+        val xu16 = output[S.UInt16]
+        val xi16 = output[S.Int16]
+        val xu32 = output[S.UInt32]
+        xu16    := xu8.as[S.UInt16]  + u16(0)
+        xi16    := xu8.as[S.Int16]   + i16(0)
+        xu32    := xi16.as[S.UInt32] + u32(0)
     }
   }
 
@@ -22,7 +25,8 @@ class TestIntegerCasts extends munit.FunSuite:
     Check.failure() {
       new Node(_):
         val xu32 = forall[S.UInt32]
-        val xu8  = xu32.as[S.UInt8] + u8(0)
+        val xu8  = output[S.UInt8]
+        xu8     := xu32.as[S.UInt8] + u8(0)
     }
   }
 
@@ -40,7 +44,7 @@ class TestIntegerCasts extends munit.FunSuite:
   test("non-causal nok") {
     Check.failure() {
       new Node(_):
-        val xu32 = local[S.UInt32]
+        val xu32 = output[S.UInt32]
         xu32 := xu32 + u32(1)
     }
   }
@@ -48,7 +52,7 @@ class TestIntegerCasts extends munit.FunSuite:
   test("causal nok") {
     Check.failure() {
       new Node(_):
-        val xu32 = local[S.UInt32]
+        val xu32 = output[S.UInt32]
         xu32 := fby(u32(0), xu32) + u32(1)
     }
   }
@@ -56,7 +60,7 @@ class TestIntegerCasts extends munit.FunSuite:
   test("bad literal") {
     Check.error() {
       new Node(_):
-        val xu8 = local[S.UInt8]
+        val xu8 = output[S.UInt8]
         xu8 := u8(-5)
     }
   }
@@ -64,7 +68,7 @@ class TestIntegerCasts extends munit.FunSuite:
   test("bad const propagation") {
     Check.error() {
       new Node(_):
-        val xu8 = local[S.UInt8]
+        val xu8 = output[S.UInt8]
         xu8 := u8(100) + u8(200)
     }
   }

@@ -61,19 +61,13 @@ object Check:
     (body: Invocation => T)
     (using location: lark.meta.macros.Location)
   : smt.Check.Summary =
-    val subnodes = Invoke.topnodes(body)
-    val subnode = subnodes.toList match
-      case List(s) => s
-      case List() => assert(false, "No node to check")
-      case ls =>
-        println(ls.mkString("\n"))
-        ls.foreach(x => println(x.pprString))
-        assert(false, "Too many nodes to check")
+    val subnodes = Invoke.allNodes(body)
+    val simps    = core.node.transform.InlineBindings.program(subnodes)
 
     // TODO: check the nodes with an extra "sneaky mode" in the typechecker,
     // which should allow referring to local variables inside merges etc
     // val checked  = core.node.Check.program(sliced, core.node.Check.Options().sneaky)
-    smt.Check.checkMany(subnode, options.check)
+    smt.Check.checkNodes(simps, options.check)
 
   case class Options(
     check: smt.Check.Options = smt.Check.Options()
