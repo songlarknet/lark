@@ -50,7 +50,7 @@ object Schedule:
     def binding(node: Node): Option[(Node.Binding.Simple, Node.Nested)] =
       this.kind match
         case (Schedule.Entry.Equation | Schedule.Entry.Subnode) =>
-          val (ctx, _) = nested(node)
+          val (ctx, _) = parent(node)
           Some((ctx.bindings(this.name), ctx))
         case Schedule.Entry.Nested =>
           None
@@ -58,8 +58,17 @@ object Schedule:
     def context: names.Component =
       this.path.lastOption.getOrElse(this.name)
 
-    def nested(node: Node): (Node.Nested, Node.Path) =
+    /** Get parent context that binds this entry */
+    def parent(node: Node): (Node.Nested, Node.Path) =
       node.context(this.context)
+
+    /** For Entry.Nested entries, get the nested context; for others, get the
+     * enclosing parent context.  */
+    def nested(node: Node): (Node.Nested, Node.Path) = kind match
+      case Entry.Nested =>
+        node.context(this.name)
+      case _ =>
+        parent(node)
 
   object Entry:
     trait Kind extends pretty.Pretty
