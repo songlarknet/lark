@@ -17,9 +17,7 @@ class Heater_Check extends munit.FunSuite:
   }
 
   test("Compile") {
-    Compile.compile(
-      basename = "heater",
-      output = Some(java.nio.file.Paths.get("scratch/c/")))
+    Compile.compile(Compile.Options(basename = "heater"))
       { Heater.Top(_) }
   }
 

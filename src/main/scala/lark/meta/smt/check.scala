@@ -1,8 +1,8 @@
 package lark.meta.smt
 
-import lark.meta.base.names
-import lark.meta.base.pretty
+import lark.meta.base.{debug, names, pretty}
 import lark.meta.core.node.Node
+import lark.meta.driver.Dump
 
 import lark.meta.smt.Term.compound
 import smtlib.trees.{Commands, CommandsResponses, Terms}
@@ -14,7 +14,7 @@ import scala.concurrent.duration.Duration
 object Check:
 
   case class Options(
-    solver:                  () => Solver = { () => Solver.gimme(verbose = false) },
+    solver:                  debug.Sink => Solver = Solver.gimme,
     translate:               Translate.Options = Translate.Options(),
     maximumInductiveSteps:   Int = 5,
     requireFeasibilitySteps: Int = 5,
@@ -151,39 +151,38 @@ object Check:
     val propsT = props.map(p => compound.not(judgmentTerm(p, step)))
     compound.or(propsT : _*)
 
-  def checkNodes(nodes: Iterable[Node], options: Options)(using ExecutionContext): Summary =
-    val res = nodes.map { n =>
-      val r = checkNode(n, options)
-      println(r.pprString)
-      r
-    }
-    Summary(res.toList)
-
   def withSystemSolver[T](
     top: system.Top,
-    options: Options
+    options: Options,
+    dump: debug.Options,
+    stage: debug.Stage,
+    dumpKey: Option[String]
   )(body: Solver => T)(using ExecutionContext): Future[T] =
     Future {
-      val solver = options.solver()
-      top.fundefs.foreach(solver.command(_))
-      try
-        body(solver)
-      finally
-        solver.free()
+      dump.withTrace(stage, dumpKey) { sink =>
+        val solver = options.solver(sink)
+        top.fundefs.foreach(solver.command(_))
+        try
+          body(solver)
+        finally
+          solver.free()
+      }
     }
 
-  def checkNode(top: Node, options: Options)(using ExecutionContext): NodeSummary =
+  def checkNode(top: Node, options: Options, dump: debug.Options)(using ExecutionContext): NodeSummary =
     val sys = Translate.nodes(top.allNodes, options.translate)
     val topS = sys.top
     println(s"Checking '${top.klass.pprString}' with ${topS.system.guarantees.length} properties to check:")
+    val dumpKey = Some(top.klass.pprString)
+    dump.traceP(sys.top, Dump.Check.System, dumpKey)
 
-    val bmcF = withSystemSolver(sys, options) { solver =>
+    val bmcF = withSystemSolver(sys, options, dump, Dump.Check.Bmc, dumpKey) { solver =>
       bmc(sys, topS, options.maximumInductiveSteps, solver)
     }
-    val indF = withSystemSolver(sys, options) { solver =>
+    val indF = withSystemSolver(sys, options, dump, Dump.Check.Kind, dumpKey) { solver =>
       kind(sys, topS, options.maximumInductiveSteps, solver)
     }
-    val feaF = withSystemSolver(sys, options) { solver =>
+    val feaF = withSystemSolver(sys, options, dump, Dump.Check.Feas, dumpKey) { solver =>
       feasible(sys, topS, options.requireFeasibilitySteps, solver)
     }
 

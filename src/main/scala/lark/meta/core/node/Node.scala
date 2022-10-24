@@ -15,6 +15,7 @@ case class Node(
   params:   List[names.Component],
   vars:     names.immutable.ComponentMap[Variable],
   // LODO subnodes need location information
+  // LODO should subnodes be name references rather than objects? it makes transforms a bit tedious
   subnodes: names.immutable.ComponentMap[Node],
   props:    List[Judgment],
   nested:   Node.Nested
@@ -55,10 +56,12 @@ case class Node(
     val v = vars(name)
     Exp.Var(v.sort, names.Ref.fromComponent(name))
 
-  def ppr = pprWithSubnodes(subnodes.toList)
+  def ppr = pprWithSubnodes(List())
+  def pprSubnodes = pprWithSubnodes(subnodes.toList)
 
   def pprWithSubnodes(subnodes: List[(names.Component, Node)]) =
     val klassP = klass.ppr
+    val metasP = metas.map(p => pretty.text(p.name) <+> pretty.equal <+> pretty.value(p.any))
     val paramsP = params.map(p => p.ppr <+> pretty.colon <+> xvar(p).sort.ppr)
     val varsP = vars.map(x => pretty.value(x._2.mode) <+> x._1.ppr <+> pretty.colon <+> x._2.sort.ppr <+> x._2.location.ppr)
     val bindingsH = pretty.text("Bindings @context(") <> nested.context.ppr <> pretty.text("):")
@@ -66,7 +69,7 @@ case class Node(
     val subnodesP = subnodes.map(x => x._1.ppr <+> pretty.equal <+> x._2.ppr)
     val propsP = props.map(x => x.ppr)
 
-    pretty.text("Node") <+> pretty.nest(klassP <> pretty.tuple(paramsP.toSeq) <@>
+    pretty.text("Node") <+> pretty.nest(klassP <> pretty.tuple(metasP.toSeq ++ paramsP.toSeq) <@>
       pretty.subgroup("Vars:", varsP.toSeq) <>
       pretty.subgroup(bindingsH, bindingsP.toSeq) <>
       pretty.subgroup("Subnodes:", subnodesP.toSeq) <>

@@ -23,6 +23,7 @@ object C:
     basename: String,
     program:  Program,
     includes: List[String] = List("#include <lark/lark.h>"),
+    selfInclude: Boolean = true,
     version: String = "v0", // TODO hook version numbers up to git and ci
     check: obc.Check.Options = obc.Check.Options()
   )
@@ -33,18 +34,13 @@ object C:
     pretty.vsep(options.program.classes.map(Header.klass(_)).toSeq)
 
   /** Print source file with function definitions. */
-  def source(options: Options, selfInclude: Boolean = true): pretty.Doc =
+  def source(options: Options): pretty.Doc =
     val includes =
-      if selfInclude
+      if options.selfInclude
       then options.includes ++ List(s"#include \"${options.basename}.h\"")
       else options.includes
     prelude(options.copy(includes = includes)) <@>
     pretty.vsep(options.program.classes.map(Source.klass(_, options)).toSeq)
-
-  /** Print source file with both headers and function definitions. */
-  def headersource(options: Options): pretty.Doc =
-    header(options) <@>
-    source(options.copy(includes = List()), selfInclude = false)
 
   /** Prelude with information about generated file */
   def prelude(options: Options): pretty.Doc =

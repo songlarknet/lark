@@ -34,17 +34,19 @@ object Grind:
     (body: Invocation => T)
     (using location: lark.meta.macros.Location)
   : Unit =
-    val allnodes  = Invoke.allNodes(body)
-    val sliced    = core.node.transform.Slice.program(allnodes)
-    val simped    = core.node.transform.InlineBindings.program(sliced)
-    val checked   = core.node.Check.program(simped, core.node.Check.Options())
-    val schedules = Compile.schedules(simped)
-    val program   = core.obc.FromNode.program(simped, schedules)
-    val cOptions  = target.C.Options(basename = "grind", program)
-    val cCode     = target.C.headersource(cOptions)
+    val opts      = Compile.Options(
+      basename = "grind",
+      output   = None,
+      dump     = options.dump,
+      withCOptions = c => c.copy(selfInclude = false))
+    val compiled  = Compile.getCompiled(opts, body)
 
-    allnodes.zip(simped).foreach { (original, simp) =>
-      grindNode(original, simp, options, checked, schedules, cOptions, cCode)
+    val prepared  = compiled.prepared
+    val inputs = prepared.input.zip(prepared.simped)
+
+    inputs.foreach { (original, simp) =>
+      val cCode = compiled.headerC <@> compiled.sourceC
+      grindNode(original, simp, options, prepared.checks, compiled.schedules, compiled.optsC, cCode)
     }
 
   /** Grind a node by generating input traces and testing them.
@@ -77,18 +79,27 @@ object Grind:
     smt.Eval
       .generate(original, solver, options.translate)
       .take(options.count)
-      .foreach { trace =>
+      .zipWithIndex
+      .foreach { (trace, index) =>
+        val dumpKey = Some(original.klass.pprString + "_" + index)
+        options.dump.traceP(trace, Dump.Grind.Trace, dumpKey)
+
         if (options.checkEval)
-          checkEval(simp, info, trace, evalopt)
+          options.dump.withTrace(Dump.Grind.Eval, dumpKey) { sink =>
+            checkEval(simp, info, trace, evalopt, sink)
+          }
         if (optCheckC)
-          checkC(simp, info, trace, cOptions, cCode)
+          options.dump.withTrace(Dump.Grind.C, dumpKey) { sink =>
+            checkC(simp, info, trace, cOptions, cCode, sink)
+          }
     }
 
   def checkEval(
     nn: core.node.Node,
     info: core.node.Check.Info,
     trace: smt.Trace,
-    options: Eval.Options
+    options: Eval.Options,
+    sink: lark.meta.base.debug.Sink
   ): Unit =
     val steps = trace.steps.map(splitRowEval(_, nn, info))
     val sys = Eval.node(names.Prefix(List()), nn, options)
@@ -102,6 +113,14 @@ object Grind:
         pretty.text(":->") <+>
         names.Namespace.fromMap(o).ppr
       })
+
+      sink.write(
+        pretty.text(s"Step ${step}:") <@>
+          pretty.indent(
+            pretty.text("SMT:") <@>
+            pretty.indent(traceP) <@>
+            pretty.text("Eval:") <@>
+            pretty.indent(names.Namespace.fromMap(heapX).ppr)) <> pretty.line)
 
       for (k,v) <- outs do
         val vv = heapX(k)
@@ -120,7 +139,8 @@ object Grind:
     info: core.node.Check.Info,
     trace: smt.Trace,
     cOptions: target.C.Options,
-    cCode: pretty.Doc
+    cCode: pretty.Doc,
+    sink: lark.meta.base.debug.Sink
   ): Unit =
     import target.C
     import target.c.{Printer => Pr}
@@ -165,7 +185,11 @@ object Grind:
         pretty.vsep(stepsP)
       )
 
-    target.c.Cbmc.check(cCode <@> main, target.c.Cbmc.defaults)
+    val file = cCode <@> main
+
+    sink.write(file)
+
+    target.c.Cbmc.check(file, target.c.Cbmc.defaults)
 
   def castVal(v: core.term.Val, s: core.Sort): core.term.Val = s match
     case r: core.Sort.Refinement => core.term.Val.Refined(r, v)
@@ -203,5 +227,8 @@ object Grind:
     count:     Int                   = 100,
     translate: smt.Translate.Options = smt.Translate.Options(),
     checkEval: Boolean               = true,
-    checkC:    Boolean               = true
-  )
+    checkC:    Boolean               = true,
+    dump:      Dump                  = Dump.quiet
+  ):
+    def dump(dump: Dump): Options =
+      this.copy(dump = dump)

@@ -61,16 +61,18 @@ object Check:
     (body: Invocation => T)
     (using location: lark.meta.macros.Location)
   : smt.Check.Summary =
-    val subnodes = Invoke.allNodes(body)
-    val simped   = core.node.transform.InlineBindings.program(subnodes)
-
-    // TODO: check the nodes with an extra "sneaky mode" in the typechecker,
-    // which should allow referring to local variables inside merges etc
-    // val checked  = core.node.Check.program(sliced, core.node.Check.Options().sneaky)
-    smt.Check.checkNodes(simped, options.check)
+    val prepared = Prepare.prepareCheck(options.dump, body)
+    val results = prepared.map { node =>
+      val r = smt.Check.checkNode(node, options.check, options.dump)
+      println(r.pprString)
+      r
+      // XTK checknodes dump
+    }
+    smt.Check.Summary(results)
 
   case class Options(
-    check: smt.Check.Options = smt.Check.Options()
+    check: smt.Check.Options = smt.Check.Options(),
+    dump:  Dump              = Dump.quiet
   ):
     def disableRefinement: Options =
       this.copy(check = check.copy(
@@ -79,3 +81,6 @@ object Check:
 
     def withMaximumInductiveSteps(k: Int): Options =
       this.copy(check = check.copy(maximumInductiveSteps = k))
+
+    def dump(dump: Dump): Options =
+      this.copy(dump = dump)

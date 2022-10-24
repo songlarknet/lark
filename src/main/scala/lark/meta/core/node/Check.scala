@@ -41,22 +41,40 @@ object Check:
 
   def node(n: Node, options: Options): Info =
     val env  = envOfNode(names.Prefix(List()), n)
-    val top  = n.vars.filter { case (c,v) => v.isInput }.keySet
+    val top  = n.vars.filter { (c,v) => v.isInput }.keySet
     val visible =
       n.nested.children.map(visibleOfBinding(_))
       .fold(top)(_ ++ _)
     val bind = nested(n, n.nested, top, env, options)
     val vars = takeVariables(bind)
-    Info(bind, vars, visible)
+
+    val info = Info(n.klass, bind, vars, visible)
+
+    n.vars.foreach { (c,v) =>
+      if v.isOutput then
+        val vv = vars(c)
+        assert(!vv.unguarded,
+          s"""Output variable '${c.pprString}' in '${n.klass.pprString}' has non-deterministic value.
+             |  Variable ${c.pprString} ${v.location.pprString} refers to a previous time step
+             |  using the "pre" primitive, but it has no "guard" that specifies what to
+             |  do at the first time-step.
+             |  This means that the program has non-deterministic behaviour, which
+             |  is generally not desirable for compiled programs.
+             |  You can fix this by specifying an initial value with the arrow primitive
+             |  like `u32(0) -> pre(x)`, or using the initialised-delay "fby" primitive
+             |  something like `fby(u32(0), x)`.
+             |""".stripMargin)
+    }
+    info
 
   /** Get environment of node */
   def envOfNode(prefix: names.Prefix, node: Node): term.Check.Env =
     // TODO: include internal state in nested contexts for sneaky mode
 
-    val scalars = node.vars.map { case (c,v) =>
+    val scalars = node.vars.map { (c,v) =>
       prefix(c) -> v.sort
     }
-    val subnodes = node.subnodes.map { case (c,n) =>
+    val subnodes = node.subnodes.map { (c,n) =>
       envOfNode(prefix ++ names.Ref.fromComponent(c), n)
     }
     subnodes.fold(SortedMap.from(scalars))(_ ++ _)
@@ -74,7 +92,7 @@ object Check:
 
 
   def binding(n: Node, b: Node.Binding, visible: SortedSet[names.Component], env: term.Check.Env, options: Options): Bindings =
-    val envX = env.filter { case (v,s) =>
+    val envX = env.filter { (v,s) =>
         visible.contains(v.fullyQualifiedPath.head)
     }
     try
@@ -86,7 +104,7 @@ object Check:
           val subnode = n.subnodes(sn)
           assert(subnode.params.length == args.length,
             s"Wrong number of args for subnode ${sn.pprString}: got ${pretty.layout(pretty.tupleP(args))}, want ${pretty.layout(pretty.tupleP(subnode.params))}")
-          subnode.params.zip(args).foreach { case (param, arg) =>
+          subnode.params.zip(args).foreach { (param, arg) =>
             term.Check.exp(envX, arg, options.exp)
             val paramS = subnode.vars(param).sort
             assert(arg.sort == paramS,
@@ -100,7 +118,7 @@ object Check:
           nested(n, nest, visible, env, options)
         case Node.Binding.Merge(scrutinee, cases) =>
           term.Check.exp(envX, scrutinee, options.exp)
-          val binds = cases.map { case (v,nest) =>
+          val binds = cases.map { (v,nest) =>
             term.Check.val_(v, options.exp)
             assert(v.sort == scrutinee.sort,
               s"Merge case should match scrutinee sort ${scrutinee.sort}, got ${v.sort.pprString} for scrutinee ${scrutinee.pprString} and case ${v.pprString}")
@@ -149,7 +167,7 @@ object Check:
     case Node.Binding.Subnode(lhs, _) => SortedSet(lhs)
     case Node.Binding.Reset(_, nested) => visibleOfNested(nested)
     case Node.Binding.Merge(scrutinee, cases) =>
-      val vis = cases.map { case (k,n) =>
+      val vis = cases.map { (k,n) =>
         visibleOfNested(n)
       }
       vis match
@@ -161,10 +179,11 @@ object Check:
 
 
   case class Info(
+    klass: names.Ref,
     bindings: Bindings,
     variables: Variables,
     toplevel: names.immutable.ComponentSet
-  ):
+  ) extends pretty.Pretty:
     /** Check if a variable has no definition and so should be treated like
      * an input for evaluation */
     def isUnconstrained(name: names.Component): Boolean =
@@ -175,6 +194,23 @@ object Check:
     def isWellDefined(name: names.Component): Boolean =
       variables.contains(name) && !variables(name).unguarded && toplevel(name)
 
+    def ppr =
+      val bindingsP = bindings.entries.map { (k,vs) =>
+        k.ppr <> pretty.colon <+> pretty.tupleP(vs)
+      }.toSeq
+      val variablesP = variables.map { (k,v) =>
+        k.ppr <> pretty.colon <+> pretty.value(v)
+      }.toSeq
+
+      pretty.text("Info") <+> klass.ppr <> pretty.colon <@>
+      pretty.nest(
+        pretty.text("Bindings:") <+>
+          pretty.tuple(bindingsP) <@>
+        pretty.text("Variables:") <+>
+          pretty.tuple(variablesP) <@>
+        pretty.text("Toplevel:") <+>
+          pretty.tupleP(toplevel.toSeq)
+      )
 
   /** Information about a local variable.
    *

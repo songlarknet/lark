@@ -19,13 +19,11 @@ import scala.concurrent.duration.DurationInt
 
 class BrakeLights extends munit.FunSuite:
   test("Check") {
-    Check.success(Check.Options().withMaximumInductiveSteps(10)) { BrakeLights.Top(_) }
+    Check.success(Check.Options().withMaximumInductiveSteps(10).dump(lark.meta.driver.Dump.file())) { BrakeLights.Top(_) }
   }
 
   test("Compile") {
-    Compile.compile(
-      basename = "brake_lights",
-      output = Some(java.nio.file.Paths.get("/Users/amos/proj/songlark/examples/brake_lights/src/larkc")))
+    Compile.compile(Compile.Options(basename = "brake_lights"))
       { BrakeLights.Top(_) }
   }
 

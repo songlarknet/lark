@@ -1,5 +1,7 @@
 package lark.meta.smt
 
+import lark.meta.base.pretty
+import lark.meta.base.debug
 import lark.meta.smt.Term.compound
 import smtlib.Interpreter
 import smtlib.trees.{Commands, CommandsResponses, Terms}
@@ -7,7 +9,7 @@ import smtlib.trees.Terms.SExpr
 
 import smtlib.interpreters.{CVC4Interpreter, Z3Interpreter}
 
-class Solver(interpreter: Interpreter, verbose: Boolean, definePrelude: Boolean = true):
+class Solver(interpreter: Interpreter, sink: debug.Sink = debug.Quiet.sink, definePrelude: Boolean = true):
   if (definePrelude)
     Solver.preludeCommands.map(command(_))
 
@@ -22,14 +24,17 @@ class Solver(interpreter: Interpreter, verbose: Boolean, definePrelude: Boolean 
         r
 
   def commandUnchecked(cmd: SExpr): SExpr =
-    if (verbose)
-      System.err.print(s"[smt]< ${cmd}")
+    // LODO pretty-print the S-expressions with line breaks
+    sink.write(pretty.value(cmd))
     val got = clean(interpreter.eval(cmd))
 
-    if (verbose)
-      got match
-        case CommandsResponses.Success =>
-        case _ => System.err.print(s"[smt]> ${got}")
+    got match
+      case CommandsResponses.Success =>
+      case _ =>
+        sink.write({
+          val ss = got.toString().linesIterator.map("; " + _)
+          pretty.string(ss.mkString("\n"))
+        })
 
     got
 
@@ -103,7 +108,7 @@ class Solver(interpreter: Interpreter, verbose: Boolean, definePrelude: Boolean 
     free()
 
 object Solver:
-  def gimme(verbose: Boolean = false): Solver = new Solver(interpreters.z3(), verbose)
+  def gimme(sink: debug.Sink = debug.Quiet.sink): Solver = new Solver(interpreters.z3(), sink)
 
   object interpreters:
     def z3() = Z3Interpreter.buildDefault

@@ -17,9 +17,7 @@ class Coffee_Check extends munit.FunSuite:
   }
 
   test("Compile") {
-    Compile.compile(
-      basename = "coffee",
-      output = Some(java.nio.file.Paths.get("scratch/c/")))
+    Compile.compile(Compile.Options(basename = "coffee"))
       { Coffee.Top(_) }
   }
 

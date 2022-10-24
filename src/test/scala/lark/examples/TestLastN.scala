@@ -6,7 +6,7 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8}
 import lark.meta.source.Stream
 import lark.meta.source.Node
-import lark.meta.driver.{Check, Grind}
+import lark.meta.driver.{Check, Compile, Grind, Dump}
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
@@ -14,7 +14,7 @@ class TestLastN extends munit.FunSuite:
   }
 
   test("lastN compile") {
-    lark.meta.driver.Compile.compile() { LemmaLastN(3) }
+    Compile.compile() { LemmaLastN(3) }
   }
 
   test("Grind") {
