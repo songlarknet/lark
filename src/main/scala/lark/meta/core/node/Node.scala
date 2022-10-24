@@ -104,6 +104,11 @@ object Node:
     def ppr = pretty.nest(pretty.text("@context") <> pretty.parens(context.ppr) <> pretty.colon <@>
       pretty.vsep(children.map(_.ppr).toList))
 
+    def requiresInitFlag: Boolean =
+      children.exists(b => b match
+        case Binding.Equation(lhs, Flow.Arrow(_, _)) => true
+        case _ => false)
+
     // /** Each context defines an implicit 'INIT' variable which is true when the
     //  * context has been initialised. It's equivalent to init := false -> true.
     //  */

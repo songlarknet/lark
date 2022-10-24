@@ -125,7 +125,7 @@ object Check:
   def callSystemFun(fun: Terms.QualifiedIdentifier, argVars: List[Terms.SortedVar], solver: Solver): Unit =
     val argsV = argVars
     val argsT = argsV.map { v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)) }
-    val call = Terms.FunctionApplication(fun, argsT)
+    val call = compound.funappNoSimp(fun, argsT)
     solver.assert(call)
 
   /** Translate a judgment into an SMT-lib term at a given step. */

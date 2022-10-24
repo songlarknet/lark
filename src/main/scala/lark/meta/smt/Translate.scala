@@ -79,19 +79,23 @@ object Translate:
 
   def nested(context: Context, node: Node, nested: Node.Nested): SystemV[Unit] =
     val contextPrefix = names.Prefix(List(nested.context))
-    val initR         = contextPrefix(names.Component(names.ComponentSymbol.INIT))
     val children      = nested.children.map(binding(context, node, contextPrefix, _))
 
-    for
-      // init flag true initially
-      initE <- SystemV.state(initR, Sort.Bool)
-      _     <- SystemV.init(initE)
-      // init flag false after step
-      initX <- SystemV.stateX(initR, Sort.Bool)
-      _     <- SystemV.step(compound.not(initX))
-      // all children
-      _     <- SystemV.conjoin(children.toSeq)
-    yield ()
+    val initR         = contextPrefix(names.Component(names.ComponentSymbol.INIT))
+    val initS         =
+      if nested.requiresInitFlag
+      then
+        for
+          // init flag true initially
+          initE <- SystemV.state(initR, Sort.Bool)
+          _     <- SystemV.init(initE)
+          // init flag false after step
+          initX <- SystemV.stateX(initR, Sort.Bool)
+          _     <- SystemV.step(compound.not(initX))
+        yield ()
+      else SystemV.pure(())
+
+    initS <&& SystemV.conjoin(children.toSeq)
 
   def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Node.Binding): SystemV[Unit] = binding match
     case b: Node.Binding.Equation =>
@@ -101,7 +105,7 @@ object Translate:
         for
           erhs <- flow(ec, contextPrefix, b)
           x    <- SystemV.row(xref, b.rhs.sort)
-        yield compound.equal(erhs, x)
+        yield compound.equal(x, erhs)
       SystemV.step(tstep)
 
     case b: Node.Binding.Subnode =>
@@ -148,11 +152,11 @@ object Translate:
         init  =
           val argsV = subsystem.initP(pfx(system.Prefix.state))
               .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
-          Terms.FunctionApplication(subsystem.initI, argsV),
+          compound.funappNoSimp(subsystem.initI, argsV),
         step =
           val argsV = subsystem.stepP(pfx(system.Prefix.state), pfx(system.Prefix.row), pfx(system.Prefix.stateX))
               .map(v => Terms.QualifiedIdentifier(Terms.Identifier(v.name)))
-          Terms.FunctionApplication(subsystem.stepI, argsV),
+          compound.funappNoSimp(subsystem.stepI, argsV),
         relies     = List(),
         guarantees = guarantees,
         sorries    = sorries)

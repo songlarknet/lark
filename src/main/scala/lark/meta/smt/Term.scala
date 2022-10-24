@@ -93,7 +93,14 @@ object Term:
       case _ => funappNoSimp(f, args.toList)
 
     def funappNoSimp(f: String, args: List[Terms.Term]): Terms.Term =
-      Terms.FunctionApplication(qid(f), args)
+      funappNoSimp(qid(f), args)
+
+    def funappNoSimp(f: Terms.QualifiedIdentifier, args: List[Terms.Term]): Terms.Term =
+      // if the system has no state variable, then we can define 'functions' with no arguments.
+      args match
+        case head :: next => Terms.FunctionApplication(f, args)
+        case Nil =>
+          f
 
     def and(args: Terms.Term*) =
       def go(t: Terms.Term): Seq[Terms.Term] = t match

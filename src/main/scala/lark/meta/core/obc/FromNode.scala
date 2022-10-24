@@ -34,7 +34,9 @@ object FromNode:
           None
         case None =>
           val (ctx, _) = node.context(entry.name)
-          Some(Sort.Sorted(contextFlag(ctx), Sort.Bool))
+          if ctx.requiresInitFlag
+          then Some(Sort.Sorted(contextFlag(ctx), Sort.Bool))
+          else None
 
     def contextFlag(ctx: Node.Nested): names.Component =
       makeFieldName(ctx, "c", "init", names.Component(names.ComponentSymbol.LOCAL))
@@ -63,8 +65,10 @@ object FromNode:
           val subnode  = node.subnodes(instance)
           Statement.Call(None, klass = subnode.klass, method = Method.reset, instance = instance, args = List())
         case None =>
-          val Some(st) = fields(entry, node)
-          Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
+          fields(entry, node) match
+            case None => Statement.Skip
+            case Some(st) =>
+              Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
 
     def eval(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
@@ -101,8 +105,10 @@ object FromNode:
         case Some((sub: Node.Binding.Subnode, ctx)) =>
           Statement.Skip
         case None =>
-          val Some(st) = fields(entry, node)
-          Statement.AssignSelf(st.name, Compound.val_(Val.Bool(false)))
+          fields(entry, node) match
+            case None => Statement.Skip
+            case Some(st) =>
+              Statement.AssignSelf(st.name, Compound.val_(Val.Bool(false)))
 
     def path(entry: Schedule.Entry, node: Node, reset: Statement, statement: Statement): Statement =
       val (ctx, ctxpath) = entry.nested(node)
