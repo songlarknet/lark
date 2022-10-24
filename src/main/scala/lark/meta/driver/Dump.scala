@@ -46,7 +46,9 @@ object Dump:
 
   /** Write intermediate stages to file. */
   def file(stages: Stage*): Dump =
-    path("project/dump", stages*)
+    val now =
+      java.time.LocalDateTime.now.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+    path(s"project/dump/${now}", stages*)
 
   /** Write intermediate stages to file with given path. */
   def path(path: java.nio.file.Path, stages: Stage*): Dump =

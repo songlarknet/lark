@@ -84,12 +84,15 @@ package object debug:
 
     private var lastConfig: Option[Dump.Config] = None
     private def write(config: Dump.Config, value: pretty.Pretty) =
-      if lastConfig != Some(config)
-      then
-        println("")
-        println(pretty.layout(pretty.Colour.Grey.of(config.header)))
-      lastConfig = Some(config)
-      println(value.pprString)
+      synchronized {
+        if lastConfig != Some(config)
+        then
+          System.out.println("")
+          System.out.println(pretty.layout(pretty.Colour.Grey.of(config.header)))
+        lastConfig = Some(config)
+        System.out.println(value.pprString)
+        System.out.flush()
+      }
 
   case class File(path: java.nio.file.Path = java.nio.file.Paths.get("")) extends Dump:
     def sink(config: Dump.Config): Sink =
