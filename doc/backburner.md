@@ -14,11 +14,11 @@ See lark.examples.bug.IntegerOverflow.
 An expression like `if x > 0 then x - 1 else 0` is obviously safe, but if you put streaming operators inside the conditions it gets a bit subtle.
 
 ### SMT.Translate
-* SMT.Translate should use node.Node instead of node.Builder
+* ~~SMT.Translate should use node.Node instead of node.Builder~~
 * SMT.System should use term.Exp with a separate Exp->SMTLib step
 
 
-### Core language: merge => match
+### ~~Core language: merge => match~~
 Change the "merge" construct in nodes to match on small types.
 This will make it easier to bake the clocks later and simplify some of the codegen.
 
@@ -35,7 +35,7 @@ Maybe nested contexts should be able to declare local variables. Might simplify 
 Currently all top-level constants get substituted into the program.
 Core langauge should allow top-level definitions and source langauge could refer to them as `Const[T] extends Stream[T]`.
 
-### Sneaky invariants:
+### ~~Sneaky invariants:~~ (partially implemented)
 Add a check that a node only refers to explicit outputs of its subnodes.
 I want two "sneaky modes" that let you dig into the guts.
 One just disables the output-only check for that reference, the other allows a DOM-style tree search for references.

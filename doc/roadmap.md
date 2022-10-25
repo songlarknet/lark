@@ -20,7 +20,7 @@ To make it "more scalable" I want these features, but I think they can wait unti
 * contracts allows replacing complex implementations with simpler specs;
 * path compression makes K-induction stronger;
 * common subexpression elimination so that hopefully `x ==> x` is always trivial to prove;
-* sneaky invariants let the user specify invariants that refer to nested private state inside subnodes.
+* ~~sneaky invariants let the user specify invariants that refer to nested private state inside subnodes.~~
 
 ### M3: sound
 After we know that we can prove interesting things, we want to make sure anything we prove is actually true of the compiled code.
@@ -32,7 +32,7 @@ To make it "more sound" I want these features in milestone three:
 ### M4: better compilation
 At some point we probably want to generate nicer C code, and maybe also generate Scala code.
 Milestone four, maybe:
-* better compilation to C ~~(modular, support separate compilation)~~ *(modular compilation is done, but need to remove duplicates from node graph)*;
+* ~~better compilation to C;~~
 * compilation to Scala or Java.
 
 ### M5: better debugging

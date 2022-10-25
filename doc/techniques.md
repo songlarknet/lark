@@ -503,3 +503,60 @@ What does this mean?
 Kind2 talks about doing invariant generation for one-state vs two-state.
 One-state means generating invariants that only look at the current state, eg `state0.x <= state0.y`.
 Two-state means generating invariants that look at two consecutive states, eg `state0.x <= state1.x`.
+
+# Interactive theorem proving
+* Zhang. A dynamic logic for verification of synchronous models based on theorem proving. 2021.
+https://arxiv.org/pdf/2104.03681.pdf
+
+* W-Calculus: synchronous framework for the verified modeling of digital signal processing.
+http://cri.ensmp.fr/classement/doc/A-755.pdf
+
+See Akbarpour et al, Ricketts et al, Siddique et al, Smith III, refs 1, 2, 45, 52, 53, 56 for proofs about DSP.
+
+
+# Compiler validation
+
+## Testing
+* Garoche, Howar, Kahsai, Thirioux. Testing-based compiler validation for synchronous languages. 2014.
+https://hal.archives-ouvertes.fr/hal-02092914/document
+
+Generate mutants based on original program and then generate test cases.
+The mutants are "killed" when a test case can distinguish between them.
+Worth re-reading when revisiting grind test case generation.
+Would like more details - maybe ask for more details if present at Synchron22.
+
+## Translation validation
+* Pnueli, Shtrichman, Siegel. Translation validation for synchronous languages. 1998.
+http://nozdr.ru/data/media/biblio/kolxoz/Cs/CsLn/Automata,%20Languages%20and%20Programming,%2025%20conf.,%20ICALP'98(LNCS1443,%20Springer,%201998)(ISBN%203540647813)(928s).pdf#page=247
+
+* Ngo, Talpin, Gautier, Besnard, Le Guernic. Modular translation validation of a full-sized synchronous compiler using off-the-shelf verification tools (abstract). 2015.
+https://hal.inria.fr/hal-01148919/file/scopes15.pdf
+
+* Sampath, Rajeev, Ramesh. Translation Validation for Stateflow to C. 2014.
+https://sci-hub.se/https://dl.acm.org/doi/abs/10.1145/2593069.2593237
+
+Translation validation via CBMC.
+
+## Verification
+* Shi, Zhang, Shang, Wang, Dong, Yew. A formally verified transformation to unify multiple nested clocks for a Lustre-like language. 2019.
+http://scis.scichina.com/en/2019/012801.pdf
+
+* Harrison, Hathhorn, Allwein. A mechanized semantic metalanguage for high-level synthesis. 2021.
+https://www.researchgate.net/profile/William-Harrison-9/publication/353687947_A_Mechanized_Semantic_Metalanguage_for_High_Level_Synthesis/links/610a92651e95fe241aaca7dd/A-Mechanized-Semantic-Metalanguage-for-High-Level-Synthesis.pdf
+
+Metalanguage for hardware like Chisel embedded in Agda.
+
+
+## Other
+* Bourbouh, Garoche, Garion, Thirioux. From Lustre to Simulink: reverse compilation for verifying Embedded Systems Applications 2021.
+https://hal.archives-ouvertes.fr/hal-03323076/file/Bourbouh_28174.pdf
+
+# Lustre
+
+* Scade6 design
+https://hal.inria.fr/hal-01666470/document
+
+Scade6 has lots of good things.
+It has polymorphism with built-in type-classes.
+Causality and guardedness are treated as inferred types of nodes, so a local node can return non-initialised values.
+It looks nicer than what we evaluated a few years ago.
