@@ -21,26 +21,26 @@ object Eval:
    * distinct. Z3 supports soft assertions, but I don't think CVC5 does.
    */
   def generate(top: Node, solver: Solver, options: Translate.Options = Translate.Options()): Stream[Trace] =
-    val sys  = Check.declareSystem(top, solver, options)
+    val sys  = Prove.declareSystem(top, solver, options)
     val topS = sys.top
 
     {
-      val state = topS.paramsOfNamespace(Check.statePrefix(0), topS.system.state)
+      val state = topS.paramsOfNamespace(Prove.statePrefix(0), topS.system.state)
       solver.declareConsts(state)
-      Check.callSystemFun(topS.initI, state, solver)
+      Prove.callSystemFun(topS.initI, state, solver)
     }
 
     Stream.from(0).map { step =>
-      val state  = topS.paramsOfNamespace(Check.statePrefix(step), topS.system.state)
-      val stateS = topS.paramsOfNamespace(Check.statePrefix(step + 1), topS.system.state)
-      val row    = topS.paramsOfNamespace(Check.rowPrefix(step), topS.system.row)
+      val state  = topS.paramsOfNamespace(Prove.statePrefix(step), topS.system.state)
+      val stateS = topS.paramsOfNamespace(Prove.statePrefix(step + 1), topS.system.state)
+      val row    = topS.paramsOfNamespace(Prove.rowPrefix(step), topS.system.row)
 
       solver.declareConsts(row ++ stateS)
 
-      Check.callSystemFun(topS.stepI, state ++ row ++ stateS, solver)
+      Prove.callSystemFun(topS.stepI, state ++ row ++ stateS, solver)
 
-      Check.asserts(topS.system.relies, step, solver)
-      Check.asserts(topS.system.sorries, step, solver)
+      Prove.asserts(topS.system.relies, step, solver)
+      Prove.asserts(topS.system.sorries, step, solver)
 
       val sat = solver.checkSat()
       sat.status match

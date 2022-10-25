@@ -12,7 +12,7 @@ object Slice:
   /** Slice nodes so that only the bindings directly relevant to return values
    * and parameters remain. */
   def program(nodes: Iterable[Node]): Iterable[Node] =
-    nodes.map(node(_))
+    Transform.map(nodes)(node(_))
 
   /** Slice a node so that only the bindings directly relevant to return values
    * and parameters remain. */

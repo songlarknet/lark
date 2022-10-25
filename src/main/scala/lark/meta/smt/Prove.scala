@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-object Check:
+object Prove:
 
   case class Options(
     solver:                  debug.Sink => Solver = Solver.gimme,
@@ -174,15 +174,15 @@ object Check:
     val topS = sys.top
     println(s"Checking '${top.klass.pprString}' with ${topS.system.guarantees.length} properties to check:")
     val dumpKey = Some(top.klass.pprString)
-    dump.traceP(sys.top, Dump.Check.System, dumpKey)
+    dump.traceP(sys.top, Dump.Prove.System, dumpKey)
 
-    val bmcF = withSystemSolver(sys, options, dump, Dump.Check.Bmc, dumpKey) { solver =>
+    val bmcF = withSystemSolver(sys, options, dump, Dump.Prove.Bmc, dumpKey) { solver =>
       bmc(sys, topS, options.maximumInductiveSteps, solver)
     }
-    val indF = withSystemSolver(sys, options, dump, Dump.Check.Kind, dumpKey) { solver =>
+    val indF = withSystemSolver(sys, options, dump, Dump.Prove.Kind, dumpKey) { solver =>
       kind(sys, topS, options.maximumInductiveSteps, solver)
     }
-    val feaF = withSystemSolver(sys, options, dump, Dump.Check.Feas, dumpKey) { solver =>
+    val feaF = withSystemSolver(sys, options, dump, Dump.Prove.Feas, dumpKey) { solver =>
       feasible(sys, topS, options.requireFeasibilitySteps, solver)
     }
 

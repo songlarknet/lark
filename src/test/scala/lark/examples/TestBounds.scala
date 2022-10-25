@@ -5,11 +5,11 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, Int8, Int32}
-import lark.meta.driver.Check
+import lark.meta.driver.Prove
 
 class TestBounds extends munit.FunSuite:
   test("bounds") {
-    Check.success() { LemmaBounds(3) }
+    Prove.success() { LemmaBounds(3) }
   }
 
   case class LemmaBounds(n: Int)(invocation: Node.Invocation) extends Node(invocation):

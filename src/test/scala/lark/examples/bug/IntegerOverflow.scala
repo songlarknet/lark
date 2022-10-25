@@ -5,19 +5,19 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, Int32, UInt8}
-import lark.meta.driver.Check
+import lark.meta.driver.Prove
 import lark.meta.smt.Translate
 
 // Specification bug: surprising behaviour, but sound.
 // We get overflows in contexts where the value is never used.
 class IntegerOverflow extends munit.FunSuite:
   test("pre: disable overflow check ok") {
-    val opt = Check.Options().disableRefinement
-    Check.success(opt) { BugPre(_) }
+    val opt = Prove.Options().disableRefinement
+    Prove.success(opt) { BugPre(_) }
   }
 
   test("pre: overflow check fails") {
-    Check.failure() { BugPre(_) }
+    Prove.failure() { BugPre(_) }
   }
 
   case class BugPre(invocation: Node.Invocation) extends Node(invocation):
@@ -37,11 +37,11 @@ class IntegerOverflow extends munit.FunSuite:
     }
 
   test("saturating counter: 254 ok") {
-    Check.success() { BugSaturatingCounter(254) }
+    Prove.success() { BugSaturatingCounter(254) }
   }
 
   test("saturating counter: 255 fails") {
-    Check.failure() { BugSaturatingCounter(255) }
+    Prove.failure() { BugSaturatingCounter(255) }
   }
 
   case class BugSaturatingCounter(limit: Int)(invocation: Node.Invocation) extends Node(invocation):

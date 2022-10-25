@@ -6,11 +6,11 @@ import lark.meta.source.Node
 import lark.meta.source.node.Invocation
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, Int32}
-import lark.meta.driver.Check
+import lark.meta.driver.Prove
 
 class TestContractNoGood extends munit.FunSuite:
   test("contract no good") {
-    Check.failure() { TestContractNoGood.Lemma(_) }
+    Prove.failure() { TestContractNoGood.Lemma(_) }
   }
 
 object TestContractNoGood:

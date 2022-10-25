@@ -5,11 +5,11 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, Int32}
-import lark.meta.driver.{Check, Grind}
+import lark.meta.driver.{Prove, Grind}
 
 class TestCounterexample extends munit.FunSuite:
   test("counterexample") {
-    Check.failure() { new LemmaCounterexample(_) }
+    Prove.failure() { new LemmaCounterexample(_) }
   }
 
   test("Grind") {

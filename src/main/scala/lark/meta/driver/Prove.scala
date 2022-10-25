@@ -11,15 +11,15 @@ import scala.reflect.ClassTag
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-/** Check that a program satisfies its properties. */
-object Check:
+/** Prove that a program satisfies its properties. */
+object Prove:
   /** Check a node and its subnodes.
    * Will exit with System.exit on failure. */
   def success[T <: Base: ClassTag]
     (options: Options = Options())
     (f: Invocation => T)
     (using location: lark.meta.macros.Location)
-  : smt.Check.Summary =
+  : smt.Prove.Summary =
     val res = checkResult(options)(f)
     println(res.pprString)
     if (!res.ok)
@@ -32,7 +32,7 @@ object Check:
     (options: Options = Options())
     (f: Invocation => T)
     (using location: lark.meta.macros.Location)
-  : smt.Check.Summary =
+  : smt.Prove.Summary =
     val res = checkResult(options)(f)
     println(res.pprString)
     if (res.ok)
@@ -60,18 +60,18 @@ object Check:
     (options: Options = Options())
     (body: Invocation => T)
     (using location: lark.meta.macros.Location)
-  : smt.Check.Summary =
+  : smt.Prove.Summary =
     val prepared = Prepare.prepareCheck(options.dump, body)
     val results = prepared.map { node =>
-      val r = smt.Check.checkNode(node, options.check, options.dump)
+      val r = smt.Prove.checkNode(node, options.check, options.dump)
       println(r.pprString)
       r
       // XTK checknodes dump
     }
-    smt.Check.Summary(results)
+    smt.Prove.Summary(results)
 
   case class Options(
-    check: smt.Check.Options = smt.Check.Options(),
+    check: smt.Prove.Options = smt.Prove.Options(),
     dump:  Dump              = Dump.quiet
   ):
     def disableRefinement: Options =

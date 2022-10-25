@@ -5,12 +5,12 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, Int32, Real}
-import lark.meta.driver.Check
+import lark.meta.driver.Prove
 
 /** Example of an FIR filter */
 class TestFIR extends munit.FunSuite:
   test("fir filter") {
-    Check.success() { LemmaFIR(3) }
+    Prove.success() { LemmaFIR(3) }
   }
 
   case class LemmaFIR(n: Int)(invocation: Node.Invocation) extends Node(invocation):

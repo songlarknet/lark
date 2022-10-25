@@ -10,7 +10,7 @@ import lark.meta.source.node
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32, Real}
-import lark.meta.driver.{Check, Compile, Grind}
+import lark.meta.driver.{Prove, Compile, Grind}
 import lark.meta.source.Sneaky
 
 import Types.{V3, V4, AccelGyro}
@@ -18,8 +18,8 @@ import Types.{V3, V4, AccelGyro}
 import scala.concurrent.duration.DurationInt
 
 class BrakeLights extends munit.FunSuite:
-  test("Check") {
-    Check.success(Check.Options().withMaximumInductiveSteps(10).dump(lark.meta.driver.Dump.file())) { BrakeLights.Top(_) }
+  test("Prove") {
+    Prove.success(Prove.Options().withMaximumInductiveSteps(10).dump(lark.meta.driver.Dump.file())) { BrakeLights.Top(_) }
   }
 
   test("Compile") {

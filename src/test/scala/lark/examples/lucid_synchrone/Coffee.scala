@@ -8,12 +8,12 @@ import lark.meta.source.Automaton
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32}
-import lark.meta.driver.{Check, Compile, Grind}
+import lark.meta.driver.{Prove, Compile, Grind}
 
 /** Fast tests */
 class Coffee_Check extends munit.FunSuite:
   test("Check") {
-    Check.success() { Coffee.Top(_) }
+    Prove.success() { Coffee.Top(_) }
   }
 
   test("Compile") {

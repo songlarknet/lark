@@ -5,14 +5,14 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lark.meta.driver.{Check, Grind}
+import lark.meta.driver.{Prove, Grind}
 
 /** First attempt at automaton example.
  * Manual translation from Lustre syntax to nested nodes.
  */
 class TestAutomaton extends munit.FunSuite:
   test("automaton") {
-    Check.success() { Top(_) }
+    Prove.success() { Top(_) }
   }
 
   test("Grind.grind") {

@@ -10,7 +10,7 @@ import lark.meta.core.term.Exp
 import lark.meta.core.term.Val
 import lark.meta.core.Sort
 
-import lark.meta.smt.Check
+import lark.meta.smt.Prove
 import lark.meta.smt.Solver
 import lark.meta.smt.system
 import lark.meta.smt.Translate

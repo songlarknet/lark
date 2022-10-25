@@ -8,12 +8,12 @@ import lark.meta.source.Automaton
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32}
-import lark.meta.driver.{Check, Compile, Grind}
+import lark.meta.driver.{Prove, Compile, Grind}
 
 /** Fast tests */
 class Heater_Check extends munit.FunSuite:
-  test("Check") {
-    Check.success() { Heater.Top(_) }
+  test("Prove") {
+    Prove.success() { Heater.Top(_) }
   }
 
   test("Compile") {

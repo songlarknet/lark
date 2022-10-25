@@ -73,7 +73,7 @@ object Trace:
     val ds = allDefs(sexpr)
 
     val stepD = for (i <- 0 to steps) yield {
-      val pfx = Check.rowPrefix(i).prefix
+      val pfx = Prove.rowPrefix(i).prefix
       val dsI = ds.filter((k,v) => k.prefix.startsWith(pfx))
       val dsK = dsI.map((k,v) => (k.copy(prefix = k.prefix.drop(pfx.length)), v))
       val dsF = dsK // dsK.filter((k,v) => !names.ComponentSymbol.isInternal(k.name.symbol))

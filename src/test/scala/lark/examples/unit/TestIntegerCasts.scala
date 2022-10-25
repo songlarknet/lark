@@ -5,11 +5,11 @@ import lark.meta.source.Compound.implicits._
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.{Stream => S}
-import lark.meta.driver.Check
+import lark.meta.driver.Prove
 
 class TestIntegerCasts extends munit.FunSuite:
   test("widening casts ok") {
-    Check.success() {
+    Prove.success() {
       new Node(_):
         val xu8  = forall[S.UInt8]
         val xu16 = output[S.UInt16]
@@ -22,7 +22,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("narrowing casts nok") {
-    Check.failure() {
+    Prove.failure() {
       new Node(_):
         val xu32 = forall[S.UInt32]
         val xu8  = output[S.UInt8]
@@ -31,7 +31,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("narrowing casts with requires ok") {
-    Check.success() {
+    Prove.success() {
       new Node(_):
         val xu32 = forall[S.UInt32]
         val xu8  = xu32.as[S.UInt8] + u8(0)
@@ -42,7 +42,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("non-causal nok") {
-    Check.failure() {
+    Prove.failure() {
       new Node(_):
         val xu32 = output[S.UInt32]
         xu32 := xu32 + u32(1)
@@ -50,7 +50,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("causal nok") {
-    Check.failure() {
+    Prove.failure() {
       new Node(_):
         val xu32 = output[S.UInt32]
         xu32 := fby(u32(0), xu32) + u32(1)
@@ -58,7 +58,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("bad literal") {
-    Check.error() {
+    Prove.error() {
       new Node(_):
         val xu8 = output[S.UInt8]
         xu8 := u8(-5)
@@ -66,7 +66,7 @@ class TestIntegerCasts extends munit.FunSuite:
   }
 
   test("bad const propagation") {
-    Check.error() {
+    Prove.error() {
       new Node(_):
         val xu8 = output[S.UInt8]
         xu8 := u8(100) + u8(200)

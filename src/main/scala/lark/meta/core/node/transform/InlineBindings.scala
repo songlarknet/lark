@@ -13,15 +13,10 @@ import lark.meta.core.term.Compound
 object InlineBindings:
   /** Inline the local bindings in nodes. */
   def program(nodes: Iterable[Node]): Iterable[Node] =
-    val map = scala.collection.mutable.SortedMap[names.Ref, Node]()
-    nodes.map { n =>
-      val t = node(n, map)
-      map += (n.klass -> t)
-      t
-    }
+    Transform.map(nodes)(node(_))
 
   /** Inline the local bindings in a node. */
-  def node(n: Node, nodes: names.mutable.RefMap[Node]): Node =
+  def node(n: Node): Node =
     val blacklist =
       n.props.flatMap { p =>
         lark.meta.core.term.Compound.take.vars(p.term).map(_.v.name)
@@ -33,10 +28,7 @@ object InlineBindings:
     val graph =
       Schedule.Slurp(n, includePreDependencies = true).graph().reverse
 
-    val t = perform(n, plan(n.nested, graph, immutable.SortedSet.from(blacklist)))
-    t.copy(subnodes = t.subnodes.map { (k,v) =>
-      k -> nodes(v.klass)
-    })
+    perform(n, plan(n.nested, graph, immutable.SortedSet.from(blacklist)))
 
   case class Plan(
     subst:  names.immutable.RefMap[Exp]):

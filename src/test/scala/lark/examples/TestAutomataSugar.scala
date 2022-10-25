@@ -6,14 +6,14 @@ import lark.meta.source.Automaton
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8}
-import lark.meta.driver.{Check, Compile, Grind}
+import lark.meta.driver.{Prove, Compile, Grind}
 
 /** Full-sugar cruise control automaton
  */
 class TestAutomatonSugar extends munit.FunSuite:
 
   test("automaton sugar") {
-    Check.success() { Top(_) }
+    Prove.success() { Top(_) }
   }
 
   test("automaton sugar compile") {
