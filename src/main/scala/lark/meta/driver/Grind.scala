@@ -22,6 +22,10 @@ import lark.meta.target
 import scala.collection.immutable
 import scala.reflect.ClassTag
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
+
 /** Grind a program by generating input traces and checking that all of the
  * evaluation traces agree.
  */
@@ -44,9 +48,18 @@ object Grind:
     val prepared  = compiled.prepared
     val inputs = prepared.input.zip(prepared.simped)
 
-    inputs.foreach { (original, simp) =>
-      val cCode = compiled.headerC <@> compiled.sourceC
-      grindNode(original, simp, options, prepared.checks, compiled.schedules, compiled.optsC, cCode)
+    println(s"Grinding ${inputs.size} nodes: ${inputs.map(_._2.klass.pprString).mkString(", ")}")
+
+    val futures = inputs.map { (original, simp) =>
+      (original, Future {
+        val cCode = compiled.headerC <@> compiled.sourceC
+        grindNode(original, simp, options, prepared.checks, compiled.schedules, compiled.optsC, cCode)
+      })
+    }
+
+    futures.foreach { (node, future) =>
+      Await.result(future, Duration.Inf)
+      println(s"Grind: node ${node.klass.pprString} ok")
     }
 
   /** Grind a node by generating input traces and testing them.
@@ -74,7 +87,6 @@ object Grind:
       else false
 
 
-    println(s"Grinding node ${original.klass.pprString}")
     val solver = smt.Solver.gimme()
     smt.Eval
       .generate(original, solver, options.translate)

@@ -560,3 +560,10 @@ Scade6 has lots of good things.
 It has polymorphism with built-in type-classes.
 Causality and guardedness are treated as inferred types of nodes, so a local node can return non-initialised values.
 It looks nicer than what we evaluated a few years ago.
+
+# Properties of concrete systems
+
+* Gallois-Wong. Formalisation en Coq des algorithmes de filtre numérique calculés en précision finie. 2021.
+https://tel.archives-ouvertes.fr/tel-03202580/file/95780_GALLOIS-WONG_2021_archivage.pdf
+
+Dissertation.

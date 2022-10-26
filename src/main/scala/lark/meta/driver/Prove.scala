@@ -10,6 +10,8 @@ import lark.meta.core
 import scala.reflect.ClassTag
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
 
 /** Prove that a program satisfies its properties. */
 object Prove:
@@ -62,11 +64,17 @@ object Prove:
     (using location: lark.meta.macros.Location)
   : smt.Prove.Summary =
     val prepared = Prepare.prepareCheck(options.dump, body)
-    val results = prepared.map { node =>
-      val r = smt.Prove.checkNode(node, options.check, options.dump)
+    val futures = prepared.map { node =>
+      val sys = smt.Translate.nodes(node.allNodes, options.check.translate)
+      (node, sys, Future {
+        smt.Prove.checkNode(node, sys, options.check, options.dump)
+      })
+    }
+    val results = futures.map { (node, sys, future) =>
+      println(s"Checking '${node.klass.pprString}' with ${sys.top.system.guarantees.length} properties to check:")
+      val r = Await.result(future, Duration.Inf)
       println(r.pprString)
       r
-      // XTK checknodes dump
     }
     smt.Prove.Summary(results)
 

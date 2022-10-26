@@ -135,6 +135,10 @@ object Solver:
    * SMTLib's integer division also has interesting rounding behaviour, so we
    * wrap it to agree with the C and evaluator semantics. Maybe later, when we
    * run into proof issues, we could expose the raw SMT division.
+   *
+   * LODO would it make sense to initialise the random seed to a known value?
+   * > (set-option :random-seed 1)
+   * > (set-option :reproducible-resource-limit 100)
    */
   val preludeCommands: List[Commands.Command] =
     import Term.compound._
