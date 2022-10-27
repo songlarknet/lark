@@ -46,7 +46,7 @@ object Eval:
       sat.status match
         case CommandsResponses.SatStatus =>
           val model = solver.command(Commands.GetModel())
-          Trace.fromModel(step, model)
+          Trace.fromModel(step, model, List(), Trace.Counterexample)
         case _ =>
           throw new Exception(
             s"""Can't generate trace for node ${top.klass.pprString}:

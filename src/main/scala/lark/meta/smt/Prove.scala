@@ -31,7 +31,7 @@ object Prove:
       else
         pretty.text(s"NOK: ${nok}/${results.length} nodes failed")
 
-  sealed case class NodeSummary(node: Node, traces: List[(Trace, names.immutable.RefSet)], properties: Property.Map) extends pretty.Pretty:
+  sealed case class NodeSummary(node: Node, traces: List[Trace], properties: Property.Map) extends pretty.Pretty:
     def ok =
       properties.forall(_._2.ok)
 
@@ -40,9 +40,15 @@ object Prove:
       val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
       val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
       // TODO-HI slice traces
-      // TODO-HI traces should be tagged as either true counterexample or CtI.
-      // TODO-HI feasibility needs to move out of property map, as nodes with no properties can be infeasible
-      val tracesP = traces.map(_._1.pprTruncate())
+      // TODO feasibility needs to move out of property map, as nodes with no properties can be infeasible
+      val tracesP = traces match
+        case List() => List()
+        case List(head) =>
+          List(head.pprNode(node))
+        case head :: rest =>
+          List(head.pprNode(node),
+            pretty.text(s"...${rest.size} more counterexamples not shown."))
+
       val propsP  = properties.map { (ref, prop) =>
         val j = prop.judgment
         val statusP = prop.status match
@@ -167,7 +173,7 @@ object Prove:
   class Channel(val initialProperties: Property.Map)(
       abortRef: AtomicBoolean = new AtomicBoolean(false),
       propertiesRef: AtomicReference[Property.Map] = new AtomicReference(initialProperties),
-      tracesRef: java.util.concurrent.ConcurrentLinkedQueue[(Trace, names.immutable.RefSet)] = new java.util.concurrent.ConcurrentLinkedQueue()
+      tracesRef: java.util.concurrent.ConcurrentLinkedQueue[Trace] = new java.util.concurrent.ConcurrentLinkedQueue()
   ):
     def checkAbort(): Boolean = abortRef.get()
     def abort(): Unit = abortRef.set(true)
@@ -182,11 +188,11 @@ object Prove:
       val mpProps = Property.Map.from(props.map(p => (p.judgment.consequent, p)))
       update(mpProps)
 
-    def counterexample(trace: Trace, props: names.immutable.RefSet): Unit =
-      tracesRef.add((trace, props))
+    def counterexample(trace: Trace): Unit =
+      tracesRef.add(trace)
 
-    def traces(): List[(Trace, names.immutable.RefSet)] =
-      val mut = scala.collection.mutable.ArrayBuffer[(Trace, names.immutable.RefSet)]()
+    def traces(): List[Trace] =
+      val mut = scala.collection.mutable.ArrayBuffer[Trace]()
       tracesRef.forEach { t => mut.addOne(t) }
       mut.toList
 
@@ -252,13 +258,11 @@ object Prove:
             )
           case CommandsResponses.SatStatus     =>
             val model = solver.command(Commands.GetModel())
-            val trace = Trace.fromModel(step, model)
-            val bads  = unknowns.filter(p => trace.propertyKnownFalse(p.judgment.consequent))
-            val badsR = scala.collection.immutable.SortedSet.from(bads.map(_.judgment.consequent))
+            val trace = Trace.fromModel(step, model, unknowns, Trace.Counterexample)
             channel.update(
-              bads.map(_.withBmc(Property.Disprove(Property.Unsafe, step)))
+              trace.invalidates.map(_.withBmc(Property.Disprove(Property.Unsafe, step)))
             )
-            channel.counterexample(trace, badsR)
+            channel.counterexample(trace)
 
           case CommandsResponses.UnsatStatus   =>
             channel.update(
@@ -317,16 +321,14 @@ object Prove:
             )
           case CommandsResponses.SatStatus     =>
             val model = solver.command(Commands.GetModel())
-            val trace = Trace.fromModel(step, model)
-            val bads  = unknowns.filter(p => trace.propertyKnownFalse(p.judgment.consequent))
-            val badsR = scala.collection.immutable.SortedSet.from(bads.map(_.judgment.consequent))
+            val trace = Trace.fromModel(step, model, unknowns, Trace.Inductive)
             channel.update(
-              bads.map(_.withKind(Property.Prove(Property.Unsafe, step)))
+              trace.invalidates.map(_.withKind(Property.Prove(Property.Unsafe, step)))
             )
             // Only log traces at step 1 (normal induction) because these are
             // not too long but might contain enough information to be useful.
             if step == 1 then
-              channel.counterexample(trace, badsR)
+              channel.counterexample(trace)
 
           case CommandsResponses.UnsatStatus   =>
             channel.update(
