@@ -18,7 +18,14 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     // TODO slice should include input arguments that are mentioned, bug in Schedule.Graph
     val slice = Slice.node(node, invalidatesSet.map(_.name))
     pretty.text("Node") <+> node.klass.ppr <> pretty.colon <@>
-    pprNode(slice, names.Prefix(List()), depth = 1, steps.map(_ => true), List())
+    pprNode(slice, names.Prefix(List()), depth = 1, steps.map(_ => true), List()) <>
+    (source match
+      case Trace.Counterexample => pretty.emptyDoc
+      case Trace.Inductive => pretty.line <>
+        "The inductive proof failed without finding a concrete counterexample. " +
+        "The above counterexample-to-induction might hint at which invariants " +
+        "are missing, but it does not necessarily describe a real execution as " +
+        "the trace does not start from an initial state.")
 
   def pprNode(
     node:   Node,
@@ -106,8 +113,12 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
       if invalidates.exists(p => fv.exists(v => p.judgment.consequent == v.v))
       then pretty.Colour.Red
       else pretty.Colour.Yellow
+    val valuesP = values.zip(clock).map( (v,c) => if c then v.ppr else pretty.text("-"))
     val pre = pretty.text((" " * depth * 2) + " ~~>")
-    val ss = pre :: values.zip(clock).map( (v,c) => if c then v.ppr else pretty.text("-"))
+    val ss = pre ::
+      (source match
+        case Trace.Counterexample => valuesP
+        case Trace.Inductive      => pretty.text("...") :: valuesP)
     colour.of(pretty.hsep(ss.map(pretty.padto(24, _))))
 
 
