@@ -25,18 +25,19 @@ object FromNode:
      */
     def fields(entry: Schedule.Entry, node: Node): Option[Sort.Sorted] =
       entry.binding(node) match
-        case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
+        case Some(Schedule.Entry.Simple(Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case _ : (Flow.Pure | Flow.Arrow) =>
             None
           case _ : (Flow.Pre | Flow.Fby) =>
             Some(Sort.Sorted(makeFieldName(ctx, "c", "_", lhs), eq.sort))
-        case Some((sub: Node.Binding.Subnode, ctx)) =>
+        case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
           None
-        case None =>
-          val (ctx, _) = node.context(entry.name)
+        case Some(Schedule.Entry.Nested(ctx)) =>
           if ctx.requiresInitFlag
           then Some(Sort.Sorted(contextFlag(ctx), Sort.Bool))
           else None
+        case None =>
+          None
 
     def contextFlag(ctx: Node.Nested): names.Component =
       makeFieldName(ctx, "c", "init", names.Component(names.ComponentSymbol.LOCAL))
@@ -54,25 +55,27 @@ object FromNode:
 
     def reset(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
-        case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
+        case Some(Schedule.Entry.Simple(Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case _ : (Flow.Pure | Flow.Arrow | Flow.Pre) =>
             Statement.Skip
           case Flow.Fby(v, e) =>
             val Some(st) = fields(entry, node)
             Statement.AssignSelf(st.name, Compound.val_(v))
-        case Some((sub: Node.Binding.Subnode, ctx)) =>
+        case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
           Statement.Call(None, klass = subnode.klass, method = Method.reset, instance = instance, args = List())
-        case None =>
+        case Some(Schedule.Entry.Nested(_)) =>
           fields(entry, node) match
             case None => Statement.Skip
             case Some(st) =>
               Statement.AssignSelf(st.name, Compound.val_(Val.Bool(true)))
+        case None =>
+          Statement.Skip
 
     def eval(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
-        case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
+        case Some(Schedule.Entry.Simple(Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case Flow.Pure(e) =>
             Statement.Assign(lhs, e)
           case Flow.Arrow(first, later) =>
@@ -83,17 +86,17 @@ object FromNode:
           case _ : (Flow.Fby | Flow.Pre) =>
             val Some(st) = fields(entry, node)
             Statement.Assign(lhs, Compound.var_(st.sort, Class.self(st.name)))
-        case Some((sub: Node.Binding.Subnode, ctx)) =>
+        case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
           val args     = sub.args
           Statement.Call(Some(instance), klass = subnode.klass, method = Method.step, instance = instance, args = args)
-        case None =>
+        case _ =>
           Statement.Skip
 
     def update(entry: Schedule.Entry, node: Node): Statement =
       entry.binding(node) match
-        case Some((Node.Binding.Equation(lhs, eq), ctx)) => eq match
+        case Some(Schedule.Entry.Simple(Node.Binding.Equation(lhs, eq), ctx)) => eq match
           case _ : (Flow.Pure | Flow.Arrow) =>
             Statement.Skip
           case Flow.Fby(_, e) =>
@@ -102,13 +105,15 @@ object FromNode:
           case Flow.Pre(e) =>
             val Some(st) = fields(entry, node)
             Statement.AssignSelf(st.name, e)
-        case Some((sub: Node.Binding.Subnode, ctx)) =>
+        case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
           Statement.Skip
-        case None =>
+        case Some(Schedule.Entry.Nested(_)) =>
           fields(entry, node) match
             case None => Statement.Skip
             case Some(st) =>
               Statement.AssignSelf(st.name, Compound.val_(Val.Bool(false)))
+        case None =>
+          Statement.Skip
 
     def path(entry: Schedule.Entry, node: Node, reset: Statement, statement: Statement): Statement =
       val (ctx, ctxpath) = entry.nested(node)
@@ -129,12 +134,12 @@ object FromNode:
 
     def storage(entry: Schedule.Entry, node: Node): List[Storage] =
       entry.binding(node) match
-        case Some((sub: Node.Binding.Subnode, ctx)) =>
+        case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
           val instance = sub.subnode
           val subnode  = node.subnodes(instance)
           List(Storage(instance, subnode.klass, Method.step))
-        case Some((Node.Binding.Equation(lhs, eq), ctx)) => List()
-        case None => List()
+        case Some(Schedule.Entry.Simple(Node.Binding.Equation(lhs, eq), ctx)) => List()
+        case _ => List()
 
   object Methods:
     def reset(n: Node, schedule: Schedule): Method =

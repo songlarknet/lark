@@ -98,20 +98,22 @@ object Eval:
 
   def entry(prefix: names.Prefix, n: Node, entry: Schedule.Entry, options: Options): System =
     val sys = entry.binding(n) match
-      case Some((flo: Node.Binding.Equation, ctx)) =>
+      case Some(Schedule.Entry.Simple(flo: Node.Binding.Equation, ctx)) =>
         val st  = prefix(names.Ref(List(ctx.context), entry.name))
         val ref = prefix(names.Ref.fromComponent(entry.name))
         flow(prefix, st, ref, flo.rhs, options)
-      case Some((sub: Node.Binding.Subnode, ctx)) =>
+      case Some(Schedule.Entry.Simple(sub: Node.Binding.Subnode, ctx)) =>
         val subnode = n.subnodes(entry.name)
         val prefixx = names.Prefix(prefix.prefix ++ List(entry.name))
         val args    = subnode.params.zip(sub.args).map { case (p, e) =>
           expbind(prefix, prefixx(p), e, options)
         }
         args.fold(System.empty)(_ <> _) <> node(prefixx, subnode, options)
-      case None =>
+      case Some(Schedule.Entry.Nested(_)) =>
         // Don't need to do anything for nested contexts.
         // LODO: bind INIT flag so sneaky mode can access it
+        System.empty
+      case None =>
         System.empty
 
     val (_, ctxpath) = entry.nested(n)

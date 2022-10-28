@@ -44,15 +44,18 @@ object Schedule:
     /** Find the binding that corresponds to this entry in the node.
      * For equation and subnode entries, returns the equation or subnode
      * binding as well as the context that encloses the binding.
-     * For nested entries, returns None: not all nested contexts have bindings
-     * (ie the top context), and merge bindings can have many nesteds.
+     * For nested entries, returns the nested context itself.
+     * For parameters and variables with no binding returns None.
      */
-    def binding(node: Node): Option[(Node.Binding.Simple, Node.Nested)] =
+    def binding(node: Node): Option[Entry.Binding] =
       this.kind match
         case (Schedule.Entry.Equation | Schedule.Entry.Subnode) =>
           val (ctx, _) = parent(node)
-          Some((ctx.bindings(this.name), ctx))
+          Some(Entry.Simple(ctx.bindings(this.name), ctx))
         case Schedule.Entry.Nested =>
+          val (ctx, _) = node.context(this.name)
+          Some(Entry.Nested(ctx))
+        case Schedule.Entry.Input =>
           None
 
     def context: names.Component =
@@ -71,7 +74,7 @@ object Schedule:
         parent(node)
 
   object Entry:
-    trait Kind extends pretty.Pretty
+    sealed trait Kind extends pretty.Pretty
     /** Streaming equation including pure expressions and followed-by. */
     case object Equation extends Kind:
       def ppr = "equation"
@@ -81,6 +84,16 @@ object Schedule:
     /** Book-keeping for nested contexts. */
     case object Nested extends Kind:
       def ppr = "nested"
+    /** Argument or non-deterministic forall variable without a definition.
+     * These don't strictly need to be scheduled, but it's useful to have them
+     * in the dependency graph.
+     */
+    case object Input extends Kind:
+      def ppr = "input"
+
+    sealed trait Binding
+    case class Simple(binding: Node.Binding.Simple, nested: Node.Nested) extends Binding
+    case class Nested(nested: Node.Nested) extends Binding
 
   given Ordering_Entry: scala.math.Ordering[Entry] with
     def compare(x: Entry, y: Entry): Int =
@@ -138,7 +151,11 @@ object Schedule:
       entry :: children
 
     def entries(): List[Entry] =
-      entries(List(), node.nested)
+      node.vars.flatMap { (c,v) =>
+        if v.isInput
+        then List(Entry(Entry.Input, List(node.nested.context), c))
+        else List()
+      }.toList ++ entries(List(), node.nested)
 
     /** Get entries that this variable depends on. */
     def dependencies(mpEntries: MultiMapSet[names.Component, Entry], var_ : Exp.Var): SortedSet[Entry] =
