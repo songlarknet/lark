@@ -101,3 +101,12 @@ object Compound:
       case _: Exp.Val => Seq()
       case Exp.App(s, p, args : _*) => args.flatMap(vars(_))
       case Exp.Cast(op, e) => vars(e)
+
+    /** Take variables that occur in expression.
+     * The term language doesn't include any binding forms, so the variables
+     * returned are all free variables. */
+    def vars(flow: Flow): Seq[Exp.Var] = flow match
+      case Flow.Arrow(a, b) => vars(a) ++ vars(b)
+      case Flow.Fby(_, e) => vars(e)
+      case Flow.Pure(e) => vars(e)
+      case Flow.Pre(e) => vars(e)

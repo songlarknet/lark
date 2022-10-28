@@ -19,7 +19,10 @@ import scala.concurrent.duration.DurationInt
 
 class BrakeLights extends munit.FunSuite:
   test("Prove") {
-    Prove.success(Prove.Options().withMaximumInductiveSteps(10).dump(lark.meta.driver.Dump.file())) { BrakeLights.Top(_) }
+    Prove.success(
+      Prove.Options().withMaximumInductiveSteps(10)
+        .dump(lark.meta.driver.Dump.file()))
+      { BrakeLights.Top(_) }
   }
 
   test("Compile") {

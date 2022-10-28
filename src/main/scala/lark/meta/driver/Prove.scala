@@ -1,5 +1,7 @@
 package lark.meta.driver
 
+import lark.meta.base.pretty
+
 import lark.meta.source.Compound.{given, _}
 import lark.meta.source.Compound.implicits._
 import lark.meta.source.Stream
@@ -73,13 +75,14 @@ object Prove:
     val results = futures.map { (node, sys, future) =>
       println(s"Checking '${node.klass.pprString}' with ${sys.top.system.guarantees.length} properties to check:")
       val r = Await.result(future, Duration.Inf)
-      println(r.pprString)
+      println(pretty.layout(r.pprWith(options.trace)))
       r
     }
     smt.Prove.Summary(results)
 
   case class Options(
     check: smt.Prove.Options = smt.Prove.Options(),
+    trace: smt.Trace.Options = smt.Trace.Options(),
     dump:  Dump              = Dump.quiet
   ):
     def disableRefinement: Options =
@@ -92,3 +95,49 @@ object Prove:
 
     def dump(dump: Dump): Options =
       this.copy(dump = dump)
+
+    /** When printing a counterexample, specify what to "focus" on by hiding
+     * some bindings. The default behaviour is to print only bindings that the
+     * failing property transitively refers to. If you find you want a little
+     * bit more information, try `focusAllProperties`. If you want a lot more
+     * information, then try `focusEverything` or even `everything`.
+     */
+    def focus(focus: smt.Trace.Options.Focus): Options =
+      this.copy(trace = trace.copy(focus = focus))
+
+    /** When printing a counterexample, "focus" on the failing property by only
+     * printing the bindings that the failing property actually depends upon.
+     * This is the default behaviour.
+     */
+    def focusFailingProperty: Options =
+      focus(smt.Trace.Options.FocusFailingProperty)
+
+    /** When printing a counterexample, "focus" on the properties by only
+     * printing the bindings that the properties actually depend upon. This
+     * filters out some implementation details but can print stuff that's not
+     * directly relevant to the failure.
+     */
+    def focusAllProperties: Options =
+      focus(smt.Trace.Options.FocusAllProperties)
+
+    /** When printing a counterexample, show all of the subnodes without
+     * filtering any out. Local bindings inside subnodes can still be hidden
+     * by the `hideSubnodeBindings` setting; see `everything` to really trace
+     * everything.
+     */
+    def focusEverything: Options =
+      focus(smt.Trace.Options.FocusEverything)
+
+    /** When displaying subnodes in a trace, hide the local bindings at the
+     * given depth or deeper.
+     */
+    def hideSubnodeBindings(hideSubnodeBindingsAtDepth: Int = 1): Options =
+      this.copy(trace = trace.copy(
+        hideSubnodeBindingsAtDepth = hideSubnodeBindingsAtDepth))
+
+    /** When printing a counterexample, show all of the local variables and
+     * subnodes without filtering any out.
+     * and show all of the bindings.
+     */
+    def everything: Options =
+      focus(smt.Trace.Options.FocusEverything).hideSubnodeBindings(Int.MaxValue)

@@ -31,21 +31,29 @@ object Prove:
       else
         pretty.text(s"NOK: ${nok}/${results.length} nodes failed")
 
-  sealed case class NodeSummary(node: Node, traces: List[Trace], properties: Property.Map) extends pretty.Pretty:
+  sealed case class NodeSummary(node: Node, sys: system.Top, traces: List[Trace], properties: Property.Map) extends pretty.Pretty:
     def ok =
       properties.forall(_._2.ok)
 
-    def ppr =
+    def ppr = pprWith(Trace.Options())
+    def pprWith(options: Trace.Options) =
       val ok  = pretty.Colour.Green.ppr  <> pretty.string("✅")
       val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
       val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
       // TODO feasibility needs to move out of property map, as nodes with no properties can be infeasible
+      val judgments =
+        sys.top.system.sorries ++
+        sys.top.system.relies ++
+        sys.top.system.guarantees
+      val judgmentsS =
+        scala.collection.immutable.SortedSet.from(judgments.map(_.consequent))
+
       val tracesP = traces match
         case List() => List()
         case List(head) =>
-          List(head.pprNode(node))
+          List(head.pprNode(node, options, judgmentsS))
         case head :: rest =>
-          List(head.pprNode(node),
+          List(head.pprNode(node, options, judgmentsS),
             pretty.text(s"...${rest.size} more counterexamples not shown."))
 
       val propsP  = properties.map { (ref, prop) =>
@@ -148,13 +156,13 @@ object Prove:
       case List() =>
         Await.result(indF, Duration.Inf)
         Await.result(feaF, Duration.Inf)
-        val summa = NodeSummary(node, List(), bmcC.properties())
+        val summa = NodeSummary(node, sys, List(), bmcC.properties())
         if summa.ok
         then summa
         else summa.copy(traces = indC.traces())
       case traces =>
         bmcC.abort()
-        val summa = NodeSummary(node, traces, bmcC.properties())
+        val summa = NodeSummary(node, sys, traces, bmcC.properties())
         assert(!summa.ok)
         summa
 

@@ -40,7 +40,7 @@ object Sample:
 
     val count     = output[UInt16]
     val out       = output[Bool]
-    val pre_count = u16(0) -> pre(count)
+    val pre_count = fby(u16(0), count)
 
     count := select(
       when(e && pre_count <  n.ticks) { pre_count + 1 },

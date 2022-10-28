@@ -10,18 +10,23 @@ import lark.meta.core.node.Node.Binding
 
 object Slice:
   /** Slice nodes so that only the bindings directly relevant to return values
-   * and parameters remain. */
+   * and parameters remain.
+   * This performs slicing in a modular way where each node is sliced
+   * separately and retains all of its outputs.
+   */
   def program(nodes: Iterable[Node]): Iterable[Node] =
     Transform.map(nodes)(node(_))
 
   /** Slice a node so that only the bindings directly relevant to return values
-   * and parameters remain. */
+   * and parameters remain. This transform does not recurse into the subnodes. */
   def node(n: Node): Node =
     val vars = n.vars.filter { case (k,v) =>
       v.mode == Variable.Argument || v.mode == Variable.Forall || v.mode == Variable.Output
     }
     node(n, vars.keySet)
 
+  /** Slice a node so that only the bindings directly relevant to the seed set
+   * remain. This transform does not recurse into the subnodes. */
   def node(n: Node, seed: names.immutable.ComponentSet): Node =
     val graph = Schedule.Slurp(n, includePreDependencies = true).graph()
     val deps = dependencies(graph, seed)

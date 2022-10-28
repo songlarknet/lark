@@ -301,7 +301,7 @@ object Schedule:
               case Entry.Subnode =>
                 val s = pretty.text(s"the node invocation '${p.name.symbol}'")
                 s <> pretty.text(", whose arguments depend on") <@> pprPath(path, lastLoc, firstName.orElse(Some(s)))
-              case Entry.Equation =>
+              case (Entry.Equation | Entry.Input) =>
                 val s = pretty.text(s"the variable '${p.name.symbol}'")
                 s <> pretty.text(", which depends on") <@> pprPath(path, lastLoc, firstName.orElse(Some(s)))
           case Some(vvar) =>
