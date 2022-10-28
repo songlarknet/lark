@@ -39,7 +39,6 @@ object Prove:
       val ok  = pretty.Colour.Green.ppr  <> pretty.string("✅")
       val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
       val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
-      // TODO-HI slice traces
       // TODO feasibility needs to move out of property map, as nodes with no properties can be infeasible
       val tracesP = traces match
         case List() => List()

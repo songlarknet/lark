@@ -104,16 +104,26 @@ object Node:
     def ppr = pretty.nest(pretty.text("@context") <> pretty.parens(context.ppr) <> pretty.colon <@>
       pretty.vsep(children.map(_.ppr).toList))
 
+    /** True if this context binds an "INIT" flag, which is true at the initial
+     * step and false afterwards.
+     * Arrow expressions (x -> y) need an initial flag to choose which input
+     * stream to take from. Pre expressions don't strictly need one because it
+     * just has a non-deterministic value initially, but it's useful for
+     * printing traces.
+     */
     def requiresInitFlag: Boolean =
       children.exists(b => b match
         case Binding.Equation(lhs, Flow.Arrow(_, _)) => true
+        case Binding.Equation(lhs, Flow.Pre(_)) => true
         case _ => false)
 
-    // /** Each context defines an implicit 'INIT' variable which is true when the
-    //  * context has been initialised. It's equivalent to init := false -> true.
-    //  */
-    // val INIT = names.Ref(List(context),
-    //   names.Component(names.ComponentSymbol.INIT))
+    /** Each context defines an implicit 'INIT' variable which is true when the
+     * context has been initialised. It's equivalent to init := false -> true.
+     */
+    val INIT =
+      if requiresInitFlag
+      then Some(names.Ref(List(context), names.Component(names.ComponentSymbol.INIT)))
+      else None
 
     /** Map of named equation and subnode bindings in this context. */
     val bindings: names.immutable.ComponentMap[Binding.Simple] =

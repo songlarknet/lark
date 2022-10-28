@@ -70,3 +70,10 @@ object Val:
       val diffx= if max == 0 then eps else diff / max
       diffx.abs < eps || (i.abs < eps && j.abs < eps)
     case _ => false
+
+  /** Remove any refinements */
+  def unwrap(v: Val): Val = v match
+    case Val.Refined(_, vv) => unwrap(vv)
+    case Val.Bool(_)        => v
+    case Val.Int(_)         => v
+    case Val.Real(_)        => v
