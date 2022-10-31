@@ -26,7 +26,7 @@ To make it "more scalable" I want these features, but I think they can wait unti
 After we know that we can prove interesting things, we want to make sure anything we prove is actually true of the compiled code.
 This is not the case with machine integers which can overflow.
 To make it "more sound" I want these features in milestone three:
-* ~~integer bounds checks;~~
+* ~~integer bounds checks;~~ (sort of. this can be pretty confusing though)
 * float bounds and NaN checks.
 
 ### M4: better compilation
@@ -37,8 +37,8 @@ Milestone four, maybe:
 
 ### M5: better debugging
 Debuggable:
-* better counterexamples;
-* determine safe/invalid/unknown for each property. At the moment it just prints invalid/unknown if any properties are bad.
+* ~~better counterexamples;~~
+* ~~determine safe/invalid/unknown for each property. At the moment it just prints invalid/unknown if any properties are bad.~~
 
 ## design / features
 
