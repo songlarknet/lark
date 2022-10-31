@@ -79,26 +79,11 @@ object Builder:
       case Flow.Pure(e: Exp.Var) => e
       case Flow.Pure(e: Exp.Val) => e
       case _ =>
-        // Try to re-use binding if we already have one.
-        //
-        // TODO: apply some local rewrites, eg "v -> pre e = Fby(v, e)"
-        // and const prop, could also float upwards
-        //
-        // Maybe we want this to be as dumb as possible so that the
-        // source translation is "obviously correct".
-        // Then we can do better CSE in later stages.
-        children.flatMap {
-          case b: Binding.Equation if rhs == b.rhs =>
-            val v = node.vars(b.lhs)
-            assert(v.sort == rhs.sort,
-              s"""When trying to reuse existing binding
-                ${b.lhs} : ${v.sort} = ${b.rhs}
-              for requested expression ${rhs} : ${rhs.sort} at location ${location},
-              the two sorts don't match.
-              """)
-            Seq(node.xvar(b.lhs))
-          case _ => Seq.empty
-        }.headOption.getOrElse(memoForce(rhs))
+        // This originally tried to re-use bindings, but it made the programs
+        // a bit uglier. I think we want to do a more meaningful CSE at a later
+        // stage.
+        memoForce(rhs)
+
 
     /** Create a new binding for the given expression, even for simple expressions.
      * This creates bindings for simple expressions such as variables and values;

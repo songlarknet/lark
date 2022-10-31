@@ -189,34 +189,7 @@ object C:
 
   /** Printing terms */
   object Term:
-    /** Operator precedence */
-    object Ops:
-      def binop(prim: term.Prim): (String, Int) =
-        import term.prim.Table._
-        prim match
-          case Or  => ("||", 12)
-          case And => ("&&", 11)
-          case Lt  => ("<",  6)
-          case Le  => ("<=", 6)
-          case Gt  => (">",  6)
-          case Ge  => (">=", 6)
-          case Eq  => ("==", 6)
-          case Add => ("+",  4)
-          case Sub => ("-",  4)
-          case Mul => ("*",  3)
-          case Div => ("/",  3)
-      val UNARY_PREC   = 2
-      val TERNARY_PREC = 13
-      val COMMA_PREC   = 15
-      val PARENS_PREC  = 16
-
-    /** Nest expression, inserting parentheses if precedence of enclosing
-     * operator is lower than or equal to the precedence of inner operator.
-     */
-    def nest(enclosing: Int, inner: Int, doc: pretty.Doc) =
-      if enclosing < inner
-      then pretty.parens(doc)
-      else doc
+    import term.prim.Table.{Precedence => Prec}
 
     /** Print an expression at given precedence level.
      *
@@ -243,35 +216,35 @@ object C:
           P.Term.fields(r.prefix, r.name)
 
       case BEX.ReboundCast(_, s, b) =>
-        pretty.parens(P.Type.sort(s)) <> pretty.parens(bounded(self, b, Ops.PARENS_PREC))
+        pretty.parens(P.Type.sort(s)) <> pretty.parens(bounded(self, b, Prec.PARENS_PREC))
 
       // Unary operators
       case BEX.TakeApp(term.prim.Table.Negate, List(a)) =>
-        nest(p, Ops.UNARY_PREC, pretty.text("-") <+> bounded(self, a, Ops.UNARY_PREC - 1))
+        pretty.precedence(p, Prec.UNARY_PREC, pretty.text("-") <+> bounded(self, a, Prec.UNARY_PREC - 1))
       case BEX.TakeApp(term.prim.Table.Not, List(a)) =>
-        nest(p, Ops.UNARY_PREC, pretty.text("!") <> bounded(self, a, Ops.UNARY_PREC))
+        pretty.precedence(p, Prec.UNARY_PREC, pretty.text("!") <> bounded(self, a, Prec.UNARY_PREC))
 
       // Special-case binary operators
       case BEX.TakeApp(term.prim.Table.Implies, List(a, b)) =>
-        P.Term.fun("lark_implies", List(bounded(self, a, Ops.COMMA_PREC), bounded(self, b, Ops.COMMA_PREC)))
+        P.Term.fun("lark_implies", List(bounded(self, a, Prec.COMMA_PREC), bounded(self, b, Prec.COMMA_PREC)))
       case BEX.TakeApp(term.prim.Table.Div, List(a, b)) =>
         val div  = pretty.text("lark_div_") <> P.Type.sort(b.repr)
-        P.Term.fun(div, List(bounded(self, a, Ops.COMMA_PREC), bounded(self, b, Ops.COMMA_PREC)))
+        P.Term.fun(div, List(bounded(self, a, Prec.COMMA_PREC), bounded(self, b, Prec.COMMA_PREC)))
 
-      case BEX.TakeApp(op, List(a, b)) =>
-        val (o, pp) = Ops.binop(op)
-        nest(p, pp, bounded(self, a, pp) <+> o <+> bounded(self, b, pp - 1))
+      case BEX.TakeApp(op, List(a, b)) if Prec.binop(op).isDefined =>
+        val (o, pp) = Prec.binop(op).get
+        pretty.precedence(p, pp, bounded(self, a, pp) <+> o <+> bounded(self, b, pp - 1))
 
       // Ternary
       case BEX.TakeApp(term.prim.Table.Ite, List(pred, t, f)) =>
-        nest(p, Ops.TERNARY_PREC,
-          bounded(self, pred, Ops.TERNARY_PREC - 1) <+> "?" <+>
-          bounded(self, t,    Ops.TERNARY_PREC - 1) <+> ":" <+>
-          bounded(self, f,    Ops.TERNARY_PREC - 1))
+        pretty.precedence(p, Prec.TERNARY_PREC,
+          bounded(self, pred, Prec.TERNARY_PREC - 1) <+> "?" <+>
+          bounded(self, t,    Prec.TERNARY_PREC - 1) <+> ":" <+>
+          bounded(self, f,    Prec.TERNARY_PREC - 1))
 
       case _ : (BEX.App | BEX.ReboundApp) =>
         throw new Exception(s"prim not supported: ${b.original.pprString}")
 
     def exp(self: pretty.Doc, e: Exp): pretty.Doc =
       val b = Bounded.bound(e)
-      bounded(self, b, Ops.PARENS_PREC)
+      bounded(self, b, Prec.PARENS_PREC)

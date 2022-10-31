@@ -52,10 +52,10 @@ object Prove:
       val tracesP = traces match
         case List() => List()
         case List(head) =>
-          List(head.pprNode(node, options, assumptionsS, obligationsS))
+          List(head.pprNode(node, options, assumptionsS, obligationsS) <> pretty.line)
         case head :: rest =>
           List(head.pprNode(node, options, assumptionsS, obligationsS),
-            pretty.text(s"...${rest.size} more counterexamples not shown."))
+            pretty.text(s"...${rest.size} more counterexamples not shown.") <> pretty.line)
 
       val propsP  = properties.map { (ref, prop) =>
         val j = prop.judgment

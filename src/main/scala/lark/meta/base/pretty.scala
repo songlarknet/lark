@@ -76,6 +76,14 @@ object pretty extends kiama.output.PrettyPrinter:
     else
       emptyDoc
 
+  /** Nest expression, inserting parentheses if precedence of enclosing
+   * operator is lower than or equal to the precedence of inner operator.
+   */
+  def precedence(enclosing: Int, inner: Int, doc: Doc) =
+    if enclosing < inner
+    then parens(doc)
+    else doc
+
   /** Assignment syntax */
   val gets = colon <> equal
 

@@ -26,6 +26,15 @@ object Compound:
   def ite(p: Exp, t: Exp, f: Exp) =
     app(prim.Table.Ite, p, t, f)
 
+  /** Perform variable-variable substitution */
+  def substVV(subst: names.Ref => names.Ref, exp: Exp): Exp = exp match
+    case Exp.Val(_) => exp
+    case Exp.Var(s, v) => Exp.Var(s, subst(v))
+    case Exp.App(s, p, args : _*) =>
+      Exp.App(s, p, args.map(substVV(subst, _)) : _*)
+    case Exp.Cast(op, e) =>
+      Exp.Cast(op, substVV(subst, e))
+
   def subst(env: names.immutable.RefMap[Exp], exp: Exp): Exp = exp match
     case Exp.Val(_) => exp
     case Exp.Var(_, v) => env.getOrElse(v, exp)

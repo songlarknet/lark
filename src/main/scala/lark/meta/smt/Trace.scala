@@ -89,14 +89,8 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
       else Seq(pprNested(node, node.nested, prefix, indentDepth, subnodeDepth, clock, options)) ++ propsP
     pretty.vsep(paramsP.toSeq ++ nested)
 
-  def pprX(e: Exp, prefix: names.Prefix): pretty.Doc = e match
-    case Exp.Cast(_, e) => pprX(e, prefix)
-    case Exp.App(_, prim, args*) =>
-      pretty.parens(pretty.hsep(prim.ppr +: args.map(pprX(_, prefix))))
-    case Exp.Val(v) =>
-      Val.unwrap(v).ppr
-    case Exp.Var(_, v) =>
-      prefix(v).ppr
+  def pprX(e: Exp, prefix: names.Prefix): pretty.Doc =
+    Compound.substVV(prefix(_), e).pprWith(showBoundedArith = false)
   def pprX(e: Flow, prefix: names.Prefix): pretty.Doc = e match
     case Flow.Arrow(a, b) =>
       pretty.text("arrow") <> pretty.tuple(List(pprX(a, prefix), pprX(b, prefix)))

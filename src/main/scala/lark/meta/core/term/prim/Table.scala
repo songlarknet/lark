@@ -27,6 +27,39 @@ object Table:
     Le, Lt, Ge, Gt, Eq
   )
 
+  /** Operator precedence based on C and Scala */
+  object Precedence:
+    def unop(prim: Prim): Option[(String, Int)] =
+      prim match
+        case Negate => Some(("-", UNARY_PREC))
+        case Not    => Some(("!", UNARY_PREC))
+        case _      => None
+
+    def binop(prim: Prim): Option[(String, Int)] =
+      prim match
+        // Scala treats ==> as same level as ==, but using the textual operator
+        // "implies" has a good precedence.
+        case Implies
+                 => Some(("implies", 125))
+        case Or  => Some(("||",  120))
+        case And => Some(("&&",  110))
+        case Lt  => Some(("<",    60))
+        case Le  => Some(("<=",   60))
+        case Gt  => Some((">",    60))
+        case Ge  => Some((">=",   60))
+        case Eq  => Some(("==",   60))
+        case Add => Some(("+",    40))
+        case Sub => Some(("-",    40))
+        case Mul => Some(("*",    30))
+        case Div => Some(("/",    30))
+        case _   => None
+
+    val UNARY_PREC   =  20
+    val TERNARY_PREC = 130
+    val COMMA_PREC   = 150
+    val PARENS_PREC  = 160
+
+
   case object And extends Simple("and", List(Sort.Bool, Sort.Bool), Sort.Bool):
     def evalX(args: List[Val]): Val = args match
       case List(Val.Bool(a), Val.Bool(b)) => Val.Bool(a && b)
