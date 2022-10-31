@@ -139,6 +139,8 @@ object Table:
         throw CheckException.exactSame(this, args)
 
     def eval(args: List[Val]): Val = args match
-      case List(i, j) => Val.Bool(i == j)
+      // TODO-BOUNDED-ARITH: unwrap values so we don't compare logical integers
+      // with bounded integers. kill this once we bake the bounded integers.
+      case List(i, j) => Val.Bool(Val.unwrap(i) == Val.unwrap(j))
       case _ =>
         throw new EvalException(this, args, "")

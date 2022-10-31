@@ -14,7 +14,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
   def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
 
   def pprNode(node: Node, options: Trace.Options, assumptionsSet: names.immutable.RefSet, obligationsSet: names.immutable.RefSet): pretty.Doc =
-    // TODO: disable slicing for the generated integer-overflow checks. Because
+    // TODO-BOUNDED-ARITH: disable slicing for the generated integer-overflow checks. Because
     // these only exist in the system representation, we can't easily slice the
     // original node to see what they refer to. This is a bit dumb. The integer
     // overflow stuff is a bit shonky. It also has issues with overflows in
