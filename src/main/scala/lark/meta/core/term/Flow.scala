@@ -17,14 +17,14 @@ object Flow:
   /** x -> y, or "first x then y". */
   case class Arrow(a: Exp, b: Exp) extends Flow:
     def sort = a.sort
-    def ppr = pretty.sexpr(List("->", a.ppr, b.ppr))
+    def ppr = pretty.text("arrow") <> pretty.tupleP(List(a, b))
 
   /** Followed by, or initialised delay.
    * Fby(v, e) or in Lustre syntax "v fby e" is equivalent to
    * "v -> pre e". */
   case class Fby(v: Val, e: Exp) extends Flow:
     def sort = e.sort
-    def ppr  = pretty.sexpr(List("fby", v.ppr, e.ppr))
+    def ppr = pretty.text("fby") <> pretty.tupleP(List(v, e))
 
   /** Previous value.
    * Pre(e) is equivalent to Fby(undefined, e) for some fresh undefined
@@ -34,7 +34,7 @@ object Flow:
    */
   case class Pre(e: Exp) extends Flow:
     def sort = e.sort
-    def ppr  = pretty.sexpr(List("pre", e.ppr))
+    def ppr = pretty.text("pre") <> pretty.tupleP(List(e))
 
   def app(prim: Prim, args: Exp*) =
     Flow.Pure(Compound.app(prim, args : _*))
