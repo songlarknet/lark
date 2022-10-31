@@ -14,8 +14,16 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
   def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
 
   def pprNode(node: Node, options: Trace.Options, assumptionsSet: names.immutable.RefSet, obligationsSet: names.immutable.RefSet): pretty.Doc =
+    // TODO: disable slicing for the generated integer-overflow checks. Because
+    // these only exist in the system representation, we can't easily slice the
+    // original node to see what they refer to. This is a bit dumb. The integer
+    // overflow stuff is a bit shonky. It also has issues with overflows in
+    // unused parts of ifs (see src/test/scala/lark/examples/bug/IntegerOverflow.scala).
+    val noSlicing =
+      invalidates.exists(p => !node.props.contains(p.judgment.judgment))
     val slice =
       options.focus match
+        case _ if noSlicing => node
         case Trace.Options.FocusMutualInfluence =>
           Grate.influence(node, invalidatesSet, assumptionsSet ++ obligationsSet)
         case Trace.Options.FocusAllProperties =>
@@ -60,7 +68,6 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
         if evals(p.term, prefix).forall(v => v == Val.Bool(true))
         then pretty.Colour.Green
         else pretty.Colour.Red
-        // else pretty.Colour.Yellow
 
       pprI(p.pprObligationShort <> pretty.colon, indentDepth) <>
       pprI(pprX(exp, prefix), indentDepth + 1, colour) <>
@@ -186,7 +193,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
 
   def pprExpColour(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
     val values = evals(exp, prefix)
-    val valuesP = values.zip(clock).map( (v,c) => if c then v.ppr else pretty.text("-"))
+    val valuesP = values.zip(clock).map( (v,c) => if c then v.ppr else (pretty.Colour.Grey.ppr <> v.ppr <> colour.ppr))
     val pre = pretty.text((" " * depth * 2) + " ~~>")
     val ss = pre ::
       (source match
