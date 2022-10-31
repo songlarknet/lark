@@ -37,9 +37,9 @@ object Prove:
 
     def ppr = pprWith(Trace.Options())
     def pprWith(options: Trace.Options) =
-      val ok  = pretty.Colour.Green.ppr  <> pretty.string("✅")
-      val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
-      val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
+      val ok  = pretty.string("✅")
+      val bad = pretty.string("❌")
+      val huh = pretty.string("❔")
       // TODO feasibility needs to move out of property map, as nodes with no properties can be infeasible
       val assumptions =
         sys.top.system.sorries ++
@@ -59,11 +59,11 @@ object Prove:
 
       val propsP  = properties.map { (ref, prop) =>
         val j = prop.judgment
-        val statusP = prop.status match
-          case Property.Safe    => ok
-          case Property.Unsafe  => bad
-          case Property.Unknown => huh
-        pretty.indent(statusP <+> j.judgment.pprObligationShort <> pretty.colon <+> prop.ppr <> pretty.Colour.Reset.ppr)
+        val (statusP, colour) = prop.status match
+          case Property.Safe    => (ok, pretty.Colour.Green)
+          case Property.Unsafe  => (bad, pretty.Colour.Red)
+          case Property.Unknown => (huh, pretty.Colour.Yellow)
+        pretty.indent(colour.of(statusP <+> j.judgment.pprObligationShort <> pretty.colon <+> prop.ppr))
       }
 
       pretty.vsep(tracesP ++ propsP)

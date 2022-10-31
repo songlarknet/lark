@@ -196,7 +196,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     pretty.indent(colour.of(doc), depth * 2) <> pretty.line
 
   def pprValues(valuesP: List[pretty.Doc], clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
-    val clocked = valuesP.zip(clock).map( (v,c) => if c then v else pprUndefined <> colour.ppr)
+    val clocked = valuesP.zip(clock).map( (v,c) => if c then v else pprUndefined)
     val pre = pretty.text((" " * depth * 2) + " ~~>")
     val ss = pre ::
       (source match
