@@ -15,10 +15,10 @@ object Variable:
 
 case class Variable(sort: Sort, location: Location, mode: Variable.Mode) extends pretty.Pretty:
   def ppr =
-    pretty.value(this.mode) <+> pretty.colon <+> this.sort.ppr <+> this.location.ppr
+    pretty.value(this.mode) <> pretty.colon <+> this.sort.ppr <+> this.location.ppr
 
   def pprNamed(name: pretty.Pretty) =
-    pretty.value(this.mode) <+> name.ppr <+> pretty.colon <+> this.sort.ppr <+> this.location.ppr
+    pretty.value(this.mode) <+> name.ppr <> pretty.colon <+> this.sort.ppr <+> this.location.ppr
 
   def isInput: Boolean =
     mode == Variable.Argument || mode == Variable.Forall

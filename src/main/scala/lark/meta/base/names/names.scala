@@ -165,6 +165,8 @@ package object names:
       val docs = prefix.map(_.ppr)
       pretty.ssep(docs, pretty.dot)
 
+    def parent: Prefix = Prefix(prefix.dropRight(1))
+
   given Ordering_Prefix: scala.math.Ordering[Prefix] with
     def compare(x: Prefix, y: Prefix): Int =
       summon[Ordering[(List[Component])]].compare(x.prefix, y.prefix)

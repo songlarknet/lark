@@ -97,17 +97,27 @@ object Prove:
       this.copy(dump = dump)
 
     /** When printing a counterexample, specify what to "focus" on by hiding
-     * some bindings. The default behaviour is to print only bindings that the
-     * failing property transitively refers to. If you find you want a little
-     * bit more information, try `focusAllProperties`. If you want a lot more
-     * information, then try `focusEverything` or even `everything`.
+     * some bindings. The default behaviour is to print bindings that the
+     * failing property transitively refers to, as well as any bindings related
+     * to any assumptions or subproperties that might restrict the behaviour
+     * or these bindings.
+     * If you find you want less information, try `focusFailingProperty`.
+     * If you want a more information, try `focusAllProperties` or even
+     * `everything`.
      */
     def focus(focus: smt.Trace.Options.Focus): Options =
       this.copy(trace = trace.copy(focus = focus))
 
+    /** When printing a counterexample, "focus" on the properties by only
+     * printing the bindings that the properties actually depend upon. This
+     * filters out some implementation details but can print stuff that's not
+     * directly relevant to the failure.
+     */
+    def focusMutualInfluence: Options =
+      focus(smt.Trace.Options.FocusMutualInfluence)
+
     /** When printing a counterexample, "focus" on the failing property by only
      * printing the bindings that the failing property actually depends upon.
-     * This is the default behaviour.
      */
     def focusFailingProperty: Options =
       focus(smt.Trace.Options.FocusFailingProperty)

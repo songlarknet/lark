@@ -30,6 +30,32 @@ object Grate:
     val only = fixSeed(seed, deps)
     grateNode(names.Prefix(List()), n, only)
 
+  /** Deeply slice a node, keeping all bindings that are relevant to the seed
+   * set, as well as any bindings referred to by any members of the influence
+   * set that might somehow affect the seed set.
+   * The idea is that if you have a node with an assumption and a check that
+   * fails:
+   * > node example(x: Int)
+   * >   assume f(x) < 100
+   * >   check g(x) >= 0
+   *
+   * then when printing the failure for "g(x) >= 0", we are probably also
+   * interested in the result of f(x). In this case, we could set the seed set
+   * as the check and the influences set as the assumption.
+   */
+  def influence(n: Node, seed: names.immutable.RefSet, influences: names.immutable.RefSet): Node =
+    val deps = deepDependencies(names.Prefix(List()), n)
+    val only = fixSeed(seed, deps)
+    val fix  = influences.foldLeft(only) { (fix, i) =>
+      // PERF: we could certainly make this faster.
+      // At the moment it's only used to print a counterexample.
+      val ifix = fixSeed(immutable.SortedSet(i), deps)
+      if ifix.intersect(only).nonEmpty
+      then fix ++ ifix
+      else fix
+    }
+    grateNode(names.Prefix(List()), n, fix)
+
   def deepDependencies(prefix: names.Prefix, n: Node) : MultiMap[names.Ref, names.Ref] =
     // The dependency graph is quite coarse with respect to subnode
     // dependencies, so we need to add a bit extra info.
@@ -88,9 +114,8 @@ object Grate:
     }
     val props    = n.props.filter { p =>
       // All free variables must be mentioned in the keep set.
-      // For subnode references "subnode.output" check just "subnode".
       lark.meta.core.term.Compound.take.vars(p.term).forall { v =>
-        only.contains(v.v)
+        only.contains(prefix(v.v))
       }
     }
     val nested   = grateNested(prefix, n, n.nested, only)

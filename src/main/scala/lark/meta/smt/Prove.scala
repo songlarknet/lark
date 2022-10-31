@@ -41,19 +41,20 @@ object Prove:
       val bad = pretty.Colour.Red.ppr    <> pretty.string("❌")
       val huh = pretty.Colour.Yellow.ppr <> pretty.string("❔")
       // TODO feasibility needs to move out of property map, as nodes with no properties can be infeasible
-      val judgments =
+      val assumptions =
         sys.top.system.sorries ++
-        sys.top.system.relies ++
-        sys.top.system.guarantees
-      val judgmentsS =
-        scala.collection.immutable.SortedSet.from(judgments.map(_.consequent))
+        sys.top.system.relies
+      val assumptionsS =
+        scala.collection.immutable.SortedSet.from(assumptions.map(_.consequent))
+      val obligationsS =
+        scala.collection.immutable.SortedSet.from(sys.top.system.guarantees.map(_.consequent))
 
       val tracesP = traces match
         case List() => List()
         case List(head) =>
-          List(head.pprNode(node, options, judgmentsS))
+          List(head.pprNode(node, options, assumptionsS, obligationsS))
         case head :: rest =>
-          List(head.pprNode(node, options, judgmentsS),
+          List(head.pprNode(node, options, assumptionsS, obligationsS),
             pretty.text(s"...${rest.size} more counterexamples not shown."))
 
       val propsP  = properties.map { (ref, prop) =>
@@ -263,6 +264,7 @@ object Prove:
             channel.update(
               unknowns.map(_.withBmc(Property.Disprove(Property.Unknown, step)))
             )
+            return
           case CommandsResponses.SatStatus     =>
             val model = solver.command(Commands.GetModel())
             val trace = Trace.fromModel(step, model, unknowns, Trace.Counterexample)
@@ -326,6 +328,7 @@ object Prove:
             channel.update(
               unknowns.map(_.withKind(Property.Prove(Property.Unknown, step)))
             )
+            return
           case CommandsResponses.SatStatus     =>
             val model = solver.command(Commands.GetModel())
             val trace = Trace.fromModel(step, model, unknowns, Trace.Inductive)

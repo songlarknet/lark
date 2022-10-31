@@ -56,6 +56,15 @@ case class Node(
     val v = vars(name)
     Exp.Var(v.sort, names.Ref.fromComponent(name))
 
+  def expOfJudgment(prop: Judgment): Flow =
+    prop.term match
+      case Exp.Var(_, v)
+       if v.prefix == List() =>
+        nested.bindings.get(v.name) match
+          case Some(Node.Binding.Equation(_, rhs)) => rhs
+          case _ => Flow.Pure(prop.term)
+      case e => Flow.Pure(e)
+
   def ppr = pprWithSubnodes(List())
   def pprSubnodes = pprWithSubnodes(subnodes.toList)
 

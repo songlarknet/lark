@@ -13,16 +13,18 @@ import smtlib.trees.Terms.SExpr
 case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Trace.Source) extends pretty.Pretty:
   def ppr = pretty.indent(pretty.vsep(steps.map(_.ppr)))
 
-  def pprNode(node: Node, options: Trace.Options, allPropertiesSet: names.immutable.RefSet): pretty.Doc =
+  def pprNode(node: Node, options: Trace.Options, assumptionsSet: names.immutable.RefSet, obligationsSet: names.immutable.RefSet): pretty.Doc =
     val slice =
       options.focus match
+        case Trace.Options.FocusMutualInfluence =>
+          Grate.influence(node, invalidatesSet, assumptionsSet ++ obligationsSet)
         case Trace.Options.FocusAllProperties =>
-          Grate.node(node, allPropertiesSet)
+          Grate.node(node, assumptionsSet ++ obligationsSet)
         case Trace.Options.FocusFailingProperty =>
           Grate.node(node, invalidatesSet)
         case Trace.Options.FocusEverything =>
           node
-    pretty.text("Node") <+> node.klass.ppr <> pretty.colon <@>
+    pretty.Colour.Grey.of(pretty.text("Node") <+> node.klass.ppr <> pretty.colon) <@>
     pprNode(slice, names.Prefix(List()), indentDepth = 1, subnodeDepth = 0, steps.map(_ => true), List(), options) <>
     (source match
       case Trace.Counterexample => pretty.emptyDoc
@@ -44,22 +46,48 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     val paramsP = node.vars.filter(_._2.isInput).map { (c,v) =>
       val argP = args.find(_._1 == c) match
         case None => pretty.emptyDoc
-        case Some((_, e)) => pretty.equal <+> e.ppr
-      pprI(v.pprNamed(c) <> argP, indentDepth) <>
+        case Some((_, e)) => pretty.equal <+> pprX(e, prefix.parent)
+      pprI(v.pprNamed(prefix(c)) <> argP, indentDepth) <>
       pprExp(node.xvar(c), prefix, clock, indentDepth)
     }
     val outputsP = node.vars.filter(_._2.isOutput).map { (c,v) =>
-      val argP = args.find(_._1 == c) match
-        case None => pretty.emptyDoc
-        case Some((_, e)) => pretty.equal <+> e.ppr
-      pprI(v.pprNamed(c) <> argP, indentDepth) <>
+      pprI(v.pprNamed(prefix(c)), indentDepth) <>
       pprExp(node.xvar(c), prefix, clock, indentDepth)
+    }
+    val propsP = node.props.map { p =>
+      val exp = node.expOfJudgment(p)
+      val colour =
+        if evals(p.term, prefix).forall(v => v == Val.Bool(true))
+        then pretty.Colour.Green
+        else pretty.Colour.Red
+        // else pretty.Colour.Yellow
+
+      pprI(p.pprObligationShort <> pretty.colon, indentDepth) <>
+      pprI(pprX(exp, prefix), indentDepth + 1, colour) <>
+      pprExpColour(p.term, prefix, clock, indentDepth + 1, colour)
     }
     val nested =
       if subnodeDepth >= options.hideSubnodeBindingsAtDepth
-      then outputsP.toSeq ++ pprAbstract(node, node.nested, prefix, indentDepth, subnodeDepth, clock, options)
-      else Seq(pprNested(node, node.nested, prefix, indentDepth, subnodeDepth, clock, options))
+      then outputsP.toSeq ++ pprAbstract(node, node.nested, prefix, indentDepth, subnodeDepth, clock, options) ++ propsP
+      else Seq(pprNested(node, node.nested, prefix, indentDepth, subnodeDepth, clock, options)) ++ propsP
     pretty.vsep(paramsP.toSeq ++ nested)
+
+  def pprX(e: Exp, prefix: names.Prefix): pretty.Doc = e match
+    case Exp.Cast(_, e) => pprX(e, prefix)
+    case Exp.App(_, prim, args*) =>
+      pretty.parens(pretty.hsep(prim.ppr +: args.map(pprX(_, prefix))))
+    case Exp.Val(v) =>
+      Val.unwrap(v).ppr
+    case Exp.Var(_, v) =>
+      prefix(v).ppr
+  def pprX(e: Flow, prefix: names.Prefix): pretty.Doc = e match
+    case Flow.Arrow(a, b) =>
+      pretty.text("arrow") <> pretty.tuple(List(pprX(a, prefix), pprX(b, prefix)))
+    case Flow.Pre(e) =>
+      pretty.text("pre") <> pretty.tuple(List(pprX(e, prefix)))
+    case Flow.Fby(a, b) =>
+      pretty.text("fby") <> pretty.tuple(List(Val.unwrap(a).ppr, pprX(b, prefix)))
+    case Flow.Pure(e) => pprX(e, prefix)
 
   def pprNested(
     node:   Node,
@@ -70,25 +98,25 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     clock:  List[Boolean],
     options: Trace.Options
   ): pretty.Doc =
-    val ps = nested.children.map { b =>
+    val noprops = nested.children.filter { b =>
+      b match
+        case Node.Binding.Equation(lhs, _) =>
+          !node.props.exists(p => p.term == node.xvar(lhs))
+        case _ =>
+          true
+    }
+    val ps = noprops.map { b =>
       b match
         case Node.Binding.Equation(lhs, rhs) =>
-          def pprX(e: Exp) = lark.meta.target.C.Term.exp("state", e)
           rhs match
-            case Flow.Pure(e) =>
-              pprIRef(prefix(lhs), pretty.equal <+> pprX(e), indentDepth) <>
-              pprExp(node.xvar(lhs), prefix, clock, indentDepth)
-            case Flow.Arrow(a, b) =>
-              pprIRef(prefix(lhs), pretty.equal <+> "arrow" <> pretty.tuple(List(pprX(a), pprX(b))), indentDepth) <>
-              pprExp(node.xvar(lhs), prefix, clock, indentDepth)
-            case Flow.Fby(v, e) =>
-              pprIRef(prefix(lhs), pretty.equal <+> "fby" <> pretty.tuple(List(Val.unwrap(v).ppr, pprX(e))), indentDepth) <>
-              pprExp(node.xvar(lhs), prefix, clock, indentDepth)
             case Flow.Pre(e) =>
               val inits  = steps.map(s => nested.INIT.fold(Val.Bool(false))(i => s.state(prefix(i))))
               val clockX = clock.zip(inits).map { (c,i) => c && i == Val.Bool(false) }
-              pprIRef(prefix(lhs), pretty.equal <+> "pre" <> pretty.tuple(List(pprX(e))), indentDepth) <>
+              pprIRef(prefix(lhs), pretty.equal <+> "pre" <> pretty.tuple(List(pprX(e, prefix))), indentDepth) <>
               pprExp(node.xvar(lhs), prefix, clockX, indentDepth)
+            case e =>
+              pprIRef(prefix(lhs), pretty.equal <+> pprX(e, prefix), indentDepth) <>
+              pprExp(node.xvar(lhs), prefix, clock, indentDepth)
 
         case Node.Binding.Subnode(subnode, args) =>
           val sn = node.subnodes(subnode)
@@ -97,19 +125,19 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
           pprI(pretty.text("Subnode") <+> prefix(subnode).ppr <+> pretty.equal <+> sn.klass.pprString <> metasP <> pretty.colon, indentDepth) <>
           pprNode(sn, prefix ++ names.Prefix(List(subnode)), indentDepth + 1, subnodeDepth + 1, clock, argsX, options)
         case Node.Binding.Merge(scrutinee, cases) =>
-          pprI(pretty.text("Merge") <> pretty.tupleP(List(scrutinee)), indentDepth) <>
+          pprI(pretty.text("Merge") <> pretty.tuple(List(pprX(scrutinee, prefix))), indentDepth) <>
           pprExp(scrutinee, prefix, clock, indentDepth) <@>
           pretty.vsep(cases.map { (v,nested) =>
             val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => Val.unwrap(s) == Val.unwrap(v) && c }
             val indentDepthX = indentDepth + 1
-            val header = pretty.text("Match") <> pretty.tupleP(List(v))
+            val header = pretty.text("Match") <> pretty.tupleP(List(Val.unwrap(v)))
 
             if clockX.exists(c => c)
             then pprI(header, indentDepthX) <> pprNested(node, nested, prefix, indentDepth + 2, subnodeDepth, clockX, options)
             else pprI(header <+> pretty.text("..."), indentDepthX)
           })
         case Node.Binding.Reset(exp, nestedX) =>
-          pprI(pretty.text("Reset") <> pretty.tupleP(List(exp)), indentDepth) <>
+          pprI(pretty.text("Reset") <> pretty.tuple(List(pprX(exp, prefix))), indentDepth) <>
           pprExp(exp, prefix, clock, indentDepth) <@>
           pprNested(node, nestedX, prefix, indentDepth + 1, subnodeDepth, clock, options)
     }
@@ -151,22 +179,13 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     }
 
   def pprIRef(ref: names.Ref, rest: pretty.Doc, depth: Int) =
-    val colour =
-      if invalidates.exists(p => p.judgment.consequent == ref)
-      then pretty.Colour.Red
-      else pretty.Colour.Grey
-    pprI(colour.of(ref.ppr <+> rest), depth)
+    pprI(ref.ppr <+> rest, depth)
 
-  def pprI(doc: pretty.Doc, depth: Int) =
-    pretty.Colour.Grey.of(pretty.indent(doc, depth * 2)) <> pretty.line
+  def pprI(doc: pretty.Doc, depth: Int, colour: pretty.Colour.Code = pretty.Colour.Grey) =
+    pretty.indent(colour.of(doc), depth * 2) <> pretty.line
 
-  def pprExp(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int) =
+  def pprExpColour(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
     val values = evals(exp, prefix)
-    val fv = Compound.take.vars(exp)
-    val colour =
-      if invalidates.exists(p => fv.exists(v => p.judgment.consequent == v.v))
-      then pretty.Colour.Red
-      else pretty.Colour.Yellow
     val valuesP = values.zip(clock).map( (v,c) => if c then v.ppr else pretty.text("-"))
     val pre = pretty.text((" " * depth * 2) + " ~~>")
     val ss = pre ::
@@ -175,6 +194,8 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
         case Trace.Inductive      => pretty.text("...") :: valuesP)
     colour.of(pretty.hsep(ss.map(pretty.padto(24, _))))
 
+  def pprExp(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int) =
+    pprExpColour(exp, prefix, clock, depth, pretty.Colour.Yellow)
 
   def evals(exp: Exp, prefix: names.Prefix) =
     steps.map { s =>
@@ -195,12 +216,13 @@ object Trace:
   case object Inductive extends Source
 
   case class Options(
-    focus: Options.Focus = Options.FocusFailingProperty,
+    focus: Options.Focus = Options.FocusMutualInfluence,
     hideSubnodeBindingsAtDepth: Int = 1,
   )
 
   object Options:
     sealed trait Focus
+    case object FocusMutualInfluence extends Focus
     case object FocusAllProperties extends Focus
     case object FocusFailingProperty extends Focus
     case object FocusEverything extends Focus
