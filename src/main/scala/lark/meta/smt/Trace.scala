@@ -52,11 +52,11 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     options: Trace.Options
   ): pretty.Doc =
     val paramsP = node.vars.filter(_._2.isInput).map { (c,v) =>
-      val argP = args.find(_._1 == c) match
-        case None => pretty.emptyDoc
-        case Some((_, e)) => pretty.equal <+> pprX(e, prefix.parent)
+      val (argP, e, pfx) = args.find(_._1 == c) match
+        case None => (pretty.emptyDoc, node.xvar(c), prefix)
+        case Some((_, e)) => (pretty.equal <+> pprX(e, prefix.parent), e, prefix.parent)
       pprI(v.pprNamed(prefix(c)) <> argP, indentDepth) <>
-      pprExp(node.xvar(c), prefix, clock, indentDepth)
+      pprExp(e, pfx, clock, indentDepth)
     }
     val outputsP = node.vars.filter(_._2.isOutput).map { (c,v) =>
       pprI(v.pprNamed(prefix(c)), indentDepth) <>
@@ -115,15 +115,9 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     val ps = noprops.map { b =>
       b match
         case Node.Binding.Equation(lhs, rhs) =>
-          rhs match
-            case Flow.Pre(e) =>
-              val inits  = steps.map(s => nested.INIT.fold(Val.Bool(false))(i => s.state(prefix(i))))
-              val clockX = clock.zip(inits).map { (c,i) => c && i == Val.Bool(false) }
-              pprIRef(prefix(lhs), pretty.equal <+> "pre" <> pretty.tuple(List(pprX(e, prefix))), indentDepth) <>
-              pprExp(node.xvar(lhs), prefix, clockX, indentDepth)
-            case e =>
-              pprIRef(prefix(lhs), pretty.equal <+> pprX(e, prefix), indentDepth) <>
-              pprExp(node.xvar(lhs), prefix, clock, indentDepth)
+          val values = evalFlow(prefix(lhs), rhs, nested, prefix)
+          pprIRef(prefix(lhs), pretty.equal <+> pprX(rhs, prefix), indentDepth) <>
+          pprValues(values.map(_.ppr), clock, indentDepth, pretty.Colour.Yellow)
 
         case Node.Binding.Subnode(subnode, args) =>
           val sn = node.subnodes(subnode)
@@ -135,7 +129,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
           pprI(pretty.text("Merge") <> pretty.tuple(List(pprX(scrutinee, prefix))), indentDepth) <>
           pprExp(scrutinee, prefix, clock, indentDepth) <@>
           pretty.vsep(cases.map { (v,nested) =>
-            val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => Val.unwrap(s) == Val.unwrap(v) && c }
+            val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => s == Val.unwrap(v) && c }
             val indentDepthX = indentDepth + 1
             val header = pretty.text("Match") <> pretty.tupleP(List(Val.unwrap(v)))
 
@@ -174,7 +168,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
           List(subnodeP)
         case Node.Binding.Merge(scrutinee, cases) =>
           cases.flatMap { (v,nested) =>
-            val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => Val.unwrap(s) == Val.unwrap(v) && c }
+            val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => s == Val.unwrap(v) && c }
             val indentDepthX = indentDepth + 1
 
             if clockX.exists(c => c)
@@ -191,28 +185,77 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
   def pprI(doc: pretty.Doc, depth: Int, colour: pretty.Colour.Code = pretty.Colour.Grey) =
     pretty.indent(colour.of(doc), depth * 2) <> pretty.line
 
-  def pprExpColour(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
-    val values = evals(exp, prefix)
-    val valuesP = values.zip(clock).map( (v,c) => if c then v.ppr else (pretty.Colour.Grey.ppr <> v.ppr <> colour.ppr))
+  def pprValues(valuesP: List[pretty.Doc], clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
+    val clocked = valuesP.zip(clock).map( (v,c) => if c then v else pprUndefined <> colour.ppr)
     val pre = pretty.text((" " * depth * 2) + " ~~>")
     val ss = pre ::
       (source match
-        case Trace.Counterexample => valuesP
-        case Trace.Inductive      => pretty.text("...") :: valuesP)
+        case Trace.Counterexample => clocked
+        case Trace.Inductive      => pretty.text("...") :: clocked)
     colour.of(pretty.hsep(ss.map(pretty.padto(24, _))))
+
+  def pprExpColour(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int, colour: pretty.Colour.Code) =
+    val values = evals(exp, prefix)
+    pprValues(values.map(_.ppr), clock, depth, colour)
 
   def pprExp(exp: Exp, prefix: names.Prefix, clock: List[Boolean], depth: Int) =
     pprExpColour(exp, prefix, clock, depth, pretty.Colour.Yellow)
 
-  def evals(exp: Exp, prefix: names.Prefix) =
+  def heaps(prefix: names.Prefix): List[Eval.Heap] =
     steps.map { s =>
-      val heap = s.heap.flatMap { (r,v) =>
+      (s.heap ++ s.state).flatMap { (r,v) =>
         if r.fullyQualifiedPath.startsWith(prefix.prefix)
         then Some(names.Ref.fromPathUnsafe(r.fullyQualifiedPath.drop(prefix.prefix.length)) -> v)
         else None
       }
-      Eval.exp(heap, exp, Eval.Options(checkRefinement = false))
     }
+
+  def evals(exp: Exp, prefix: names.Prefix) =
+    heaps(prefix).map { heap =>
+      try
+        Val.unwrap(Eval.exp(heap, exp, Eval.Options(checkRefinement = true)))
+      catch
+        case _ : Eval.except.RefinementException =>
+          new pretty.Pretty:
+            def ppr = pprOverflow
+    }
+
+  /** Evaluate a flow expression. We could just look its value up in the heap,
+   * but the model coming from the SMT solver takes non-deterministic values
+   * when there's an integer overflow.
+   * We need to re-evaluate the expressions to catch them.
+   * We really need to do some kind of taint analysis, because this won't
+   * propagate overflows through all bindings as much as it should.
+  */
+  def evalFlow(ref: names.Ref, flow: Flow, nested: Node.Nested, prefix: names.Prefix) =
+    val hps = heaps(prefix)
+
+    hps.zip(None +: hps.map(Some(_))).map { case (heap, pre_heap) =>
+      try
+        def exp(e: Exp, h: Eval.Heap = heap) =
+          Val.unwrap(Eval.exp(h, e, Eval.Options(checkRefinement = true)))
+        flow match
+          case Flow.Pure(e) => exp(e)
+          case Flow.Arrow(a, b) =>
+            if heap(nested.INIT.get) == Val.Bool(true)
+            then exp(a)
+            else exp(b)
+          case Flow.Fby(v, e) =>
+            pre_heap.map(h => exp(e, h)).getOrElse(heap(ref))
+          case Flow.Pre(e) =>
+            if heap(nested.INIT.get) == Val.Bool(true)
+            then
+              new pretty.Pretty:
+                def ppr = pprUndefined
+            else pre_heap.map(h => exp(e, h)).getOrElse(heap(ref))
+      catch
+        case e : Eval.except.RefinementException =>
+          new pretty.Pretty:
+            def ppr = pprOverflow
+    }
+
+  val pprUndefined = pretty.Colour.Grey.of("-")
+  val pprOverflow  = pretty.Colour.Red.of("overflow")
 
   def invalidatesSet =
     scala.collection.immutable.SortedSet.from(invalidates.map(_.judgment.consequent))

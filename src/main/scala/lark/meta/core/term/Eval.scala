@@ -44,7 +44,12 @@ object Eval:
       else throw new except.RefinementException(r, v, e, heap)
     case Exp.Cast.Unbox(t) => v match
       case Val.Refined(_, vX) => vX
-      case _ => throw new except.CastUnboxException(op, v, e, heap)
+      // TODO-BOUNDED-ARITH: this used to throw an exception when you tried to
+      // get logical-of-bounded on a logical integer, but I have temporarily
+      // changed it to just return the logical integer. This isn't so nice, but
+      // the bounded arithmetic needs a serious overhaul, so a little extra
+      // mess here isn't the worst.
+      case v => v
 
   object except:
     class EvalException(msg: String) extends Exception(msg)
@@ -53,12 +58,6 @@ object Eval:
       s"""No such variable ${e.v.pprString} with sort ${e.sort.pprString}.
         |Heap: ${names.Namespace.fromMap(heap).pprString}
         |Prefix: ${prefix.pprString}""".stripMargin)
-
-    class CastUnboxException(op: Exp.Cast.Op, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
-      s"""Cannot unbox value ${v.pprString} with op ${op}.
-         |Expression: ${e.fold("")(_.pprString)}
-         |Heap: ${h.fold("")(names.Namespace.fromMap(_).pprString)}
-         |Expected a boxed value.""".stripMargin)
 
     class RefinementException(sort: Sort.Refinement, v: Val, e: Option[Exp], h: Option[Heap]) extends EvalException(
       s"""Cannot cast value ${v.pprString} to refinement type ${sort.pprString}.
