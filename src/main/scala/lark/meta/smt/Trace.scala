@@ -64,14 +64,24 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
     }
     val propsP = node.props.map { p =>
       val exp = node.expOfJudgment(p)
+      val values = evals(p.term, prefix)
+      val ok =
+        values.forall(v => v == Val.Bool(true))
       val colour =
-        if evals(p.term, prefix).forall(v => v == Val.Bool(true))
+        if ok
         then pretty.Colour.Green
         else pretty.Colour.Red
+      val valuesP = values.map { v =>
+        if ok
+        then v.ppr
+        else if v == Val.Bool(false)
+        then pretty.Colour.Red.of(v.ppr)
+        else pretty.Colour.Yellow.of(v.ppr)
+      }
 
       pprI(p.pprObligationShort <> pretty.colon, indentDepth) <>
       pprI(pprX(exp, prefix), indentDepth + 1, colour) <>
-      pprExpColour(p.term, prefix, clock, indentDepth + 1, colour)
+      pprValues(valuesP, clock, indentDepth + 1, colour)
     }
     val nested =
       if subnodeDepth >= options.hideSubnodeBindingsAtDepth
