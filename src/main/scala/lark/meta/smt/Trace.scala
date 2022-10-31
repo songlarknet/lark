@@ -66,7 +66,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
       val exp = node.expOfJudgment(p)
       val values = evals(p.term, prefix)
       val ok =
-        values.forall(v => v == Val.Bool(true))
+        values.zip(clock).forall((v, c) => !c || v == Val.Bool(true))
       val colour =
         if ok
         then pretty.Colour.Green
