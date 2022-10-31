@@ -81,17 +81,17 @@ object BrakeLights:
     valid   := imu.clock || fby(False, imu.clock)
 
     guarantees("available means current") {
-      imu.clock ==> (accel == imu.accel)
+      imu.clock implies (accel == imu.accel)
     }
     guarantees("available means fresh") {
-      imu.clock ==> valid
+      imu.clock implies valid
     }
 
     // If the input stream is always zero, then the result is always zero.
     val always_zero =
       Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means output zero") {
-      always_zero ==> (accel == V3.zero)
+      always_zero implies (accel == V3.zero)
     }
 
   /** The accelerometer has gravity. Because gravity doesn't change too much,
@@ -118,7 +118,7 @@ object BrakeLights:
     val always_zero =
       Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means always zero") {
-      always_zero ==> (accel == V3.zero)
+      always_zero implies (accel == V3.zero)
     }
     // The above guarantee looks like a straightforward consequence from the
     // guarantees in the HoldImu and Filter.iir subnodes. However, it's not
@@ -131,7 +131,7 @@ object BrakeLights:
     }
     check("sneaky invariant: IIR.always_zero") {
       val iir = Sneaky(this.builder).subnodes("IIR")
-      always_zero ==>
+      always_zero implies
       Sneaky.forall(iir) { i =>
         i.subnode("SoFar").output[Bool]
       }
@@ -222,7 +222,7 @@ object BrakeLights:
 
     val lastn_not_braking = subnode(Sample.LastN(Lights.off, accel.y > real(Lights.braking)))
     check("not braking, no light") {
-      lastn_not_braking.out ==> !light
+      lastn_not_braking.out implies !light
     }
     check("sneaky invariant") {
       trigger_off.count >= lastn_not_braking.count
@@ -277,14 +277,14 @@ object BrakeLights:
       nok_stuck := True
 
     check("not braking, no light") {
-      Sample.lastN(Lights.off, filter.accel.y > real(Lights.braking)) ==> !light
+      Sample.lastN(Lights.off, filter.accel.y > real(Lights.braking)) implies !light
     }
 
     check("invariant") {
       val lights   = Sneaky(OK.builder).subnode("Lights")
       val subcount = lights.subnodes("LastN").last.variable[UInt16]("count") + 0
       val count    = Sneaky(this.builder).subnode("LastN").variable[UInt16]("count") + 0
-      OK.active ==>
+      OK.active implies
         ifthenelse(
           light,
           subcount == count,

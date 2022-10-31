@@ -49,7 +49,7 @@ object Filter:
 
     // If the input signal is always zero, then the output should be zero:
     guarantees("always zero") {
-      Sample.sofar(signal == zero) ==> (out == zero)
+      Sample.sofar(signal == zero) implies out == zero
     }
 
   /** Apply an IIR filter to a signal */

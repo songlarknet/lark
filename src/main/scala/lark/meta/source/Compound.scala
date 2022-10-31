@@ -49,7 +49,7 @@ object Compound:
     def ||(y: Stream[Stream.Bool]) =
       Compound.or(x, y)
 
-    def ==>(y: Stream[Stream.Bool]) =
+    def implies(y: Stream[Stream.Bool]): Stream[Stream.Bool] =
       Compound.implies(x, y)
 
     def unary_! =

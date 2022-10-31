@@ -13,7 +13,9 @@ import lark.meta.driver.{Prove, Compile, Grind}
 /** Fast tests */
 class Coffee_Check extends munit.FunSuite:
   test("Check") {
-    Prove.success() { Coffee.Top(_) }
+    Prove.success(
+      Prove.Options().dump(lark.meta.driver.Dump.file())
+    ) { Coffee.Top(_) }
   }
 
   test("Compile") {
@@ -153,7 +155,7 @@ object Coffee:
         (spent > 0) == (emit != Drink.None)
     }
     check("No spontaneous emitting") {
-        (emit != Drink.None) ==> (button != Button.None)
+        emit != Drink.None implies button != Button.None
     }
 
   case class Top(invocation: Node.Invocation) extends Node(invocation):

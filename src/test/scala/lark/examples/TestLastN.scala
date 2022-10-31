@@ -29,7 +29,7 @@ class TestLastN extends munit.FunSuite:
       lastN.count <= lastSN.count && lastSN.count <= lastN.count + 1
     }
     check("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
-      lastSN.out ==> lastN.out
+      lastSN.out implies lastN.out
     }
 
   case class LastN(n: Integer, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):

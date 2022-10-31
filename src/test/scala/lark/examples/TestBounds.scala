@@ -22,7 +22,7 @@ class TestBounds extends munit.FunSuite:
     val last_in_bounds  = LastN(n, human_in_bounds)
     val mean            = MeanN(n, human32)
     val mean_in_bounds  = mean < OVERRIDE
-    val prop            = last_in_bounds ==> mean_in_bounds
+    val prop            = last_in_bounds implies mean_in_bounds
 
     check("if last_in_bounds then mean_in_bounds") {
       prop
@@ -68,14 +68,14 @@ class TestBounds extends munit.FunSuite:
   //   val human = i32(1)
   //   val machine = i32(1)
   //   check("if no human override then machine control") {
-  //     LastN(HISTORY, human < OVERRIDE) ==> (SteerSelector(human, machine) == machine)
+  //     LastN(HISTORY, human < OVERRIDE) implies (SteerSelector(human, machine) == machine)
   //   }
   //   check("if no human override then machine control") {
-  //     LastN(HISTORY, human < OVERRIDE) ==> MeanN(HISTORY, human) < OVERRIDE
+  //     LastN(HISTORY, human < OVERRIDE) implies MeanN(HISTORY, human) < OVERRIDE
   //   }
 
   //   check("if no human override then machine control") {
-  //     human < OVERRIDE && fby(False, human < OVERRIDE) ==>
+  //     human < OVERRIDE && fby(False, human < OVERRIDE) implies
   //       ((human + fby(0, human)) / 2 < OVERRIDE)
   //   }
 
@@ -89,7 +89,7 @@ class TestBounds extends munit.FunSuite:
   //     val mean            = mean_sum / 2
   //     val mean_in_bounds  = mean < OVERRIDE
 
-  //     last_in_bounds ==> mean_in_bounds
+  //     last_in_bounds implies mean_in_bounds
   //   }
 
   //   check("bounds-3: if no human override then machine control") {
@@ -103,5 +103,5 @@ class TestBounds extends munit.FunSuite:
   //     val mean            = mean_sum / 3
   //     val mean_in_bounds  = mean < OVERRIDE
 
-  //     last_in_bounds ==> mean_in_bounds
+  //     last_in_bounds implies mean_in_bounds
   //   }

@@ -118,17 +118,17 @@ class TestAutomaton extends munit.FunSuite:
     }
 
     check("!btn_on ==> off") {
-      !btn_on ==> (state == S_OFF)
+      !btn_on implies (state == S_OFF)
     }
 
     check("!btn_on ==> accel_out == accel") {
-      !btn_on ==> (accel_out == accel)
+      !btn_on implies (accel_out == accel)
     }
 
     check("accel >= 100 => accel_out == accel") {
-      (accel >= 100) ==> (accel_out == accel)
+      (accel >= 100) implies (accel_out == accel)
     }
 
     check("no set, no change") {
-      !cmd_set ==> (speed_out == u8(0) || speed_out == pre(speed_out))
+      !cmd_set implies (speed_out == u8(0) || speed_out == pre(speed_out))
     }
