@@ -130,12 +130,12 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
           pprI(pretty.text("Subnode") <+> prefix(subnode).ppr <+> pretty.equal <+> sn.klass.pprString <> metasP <> pretty.colon, indentDepth) <>
           pprNode(sn, prefix ++ names.Prefix(List(subnode)), indentDepth + 1, subnodeDepth + 1, clock, argsX, options)
         case Node.Binding.Merge(scrutinee, cases) =>
-          pprI(pretty.text("Merge") <> pretty.tuple(List(pprX(scrutinee, prefix))), indentDepth) <>
+          pprI(pretty.text("Match") <> pretty.tuple(List(pprX(scrutinee, prefix))), indentDepth) <>
           pprExp(scrutinee, prefix, clock, indentDepth) <@>
           pretty.vsep(cases.map { (v,nested) =>
             val clockX = evals(scrutinee, prefix).zip(clock).map { (s,c) => s == Val.unwrap(v) && c }
             val indentDepthX = indentDepth + 1
-            val header = pretty.text("Match") <> pretty.tupleP(List(Val.unwrap(v)))
+            val header = pretty.text("Case") <> pretty.tupleP(List(Val.unwrap(v)))
 
             if clockX.exists(c => c)
             then pprI(header, indentDepthX) <> pprNested(node, nested, prefix, indentDepth + 2, subnodeDepth, clockX, options)

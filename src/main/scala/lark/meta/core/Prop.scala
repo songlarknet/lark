@@ -67,7 +67,7 @@ object Prop:
 
     def pprObligationShort =
       pretty.text("Property") <+>
-      pretty.text(name) <>
+      pretty.dquotes(pretty.text(name)) <>
       location.ppr(pretty.space) <+>
       (syntax match
         case Syntax.Generated(g) => pretty.text("(generated)")
