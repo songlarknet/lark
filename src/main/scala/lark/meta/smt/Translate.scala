@@ -217,6 +217,9 @@ object Translate:
         for
           v  <- expr(context, pre)
           st <- SystemV.stateX(ref, b.rhs.sort)
+          // SMT-PERF: add an invariant here that `init => v = v0`.
+          // This is trivial in bounded-model-checking from initial state and
+          // inside a "reset", but not so clear inside a "when".
         yield compound.equal(st, v)
 
       SystemV.state(ref, b.rhs.sort) <&& SystemV.init(tinit) <&& SystemV.step(tstep)

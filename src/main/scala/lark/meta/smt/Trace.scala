@@ -25,11 +25,11 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
       options.focus match
         case _ if noSlicing => node
         case Trace.Options.FocusMutualInfluence =>
-          Grate.influence(node, invalidatesSet, assumptionsSet ++ obligationsSet)
+          Grate.influence(node, invalidatesSet, assumptionsSet ++ obligationsSet).node
         case Trace.Options.FocusAllProperties =>
-          Grate.node(node, assumptionsSet ++ obligationsSet)
+          Grate.node(node, assumptionsSet ++ obligationsSet).node
         case Trace.Options.FocusFailingProperty =>
-          Grate.node(node, invalidatesSet)
+          Grate.node(node, invalidatesSet).node
         case Trace.Options.FocusEverything =>
           node
     pretty.Colour.Grey.of(pretty.text("Node") <+> node.klass.ppr <> pretty.colon) <@>

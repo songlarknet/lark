@@ -16,7 +16,7 @@ An expression like `if x > 0 then x - 1 else 0` is obviously safe, but if you pu
 #### Bounded arithmetic counterexamples are confusing
 There are a few issues with counterexamples:
 * slicing machinery doesn't work with them because they don't exist on node level
-* when a bounded-of-logical fails, the logical-of-bounded gets a non-deterministic value. crazy.
+* ~~when a bounded-of-logical fails, the logical-of-bounded gets a non-deterministic value. crazy.~~ (this is partially fixed in counterexample-printing, which tries to evaluate and prints overflows as "overflow")
 
 ### SMT.Translate
 * ~~SMT.Translate should use node.Node instead of node.Builder~~

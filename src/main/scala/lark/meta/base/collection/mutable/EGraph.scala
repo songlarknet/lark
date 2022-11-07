@@ -14,30 +14,32 @@ import scala.collection.mutable
  * equivalent.
  * The key contributions of the egg paper are splitting out the invariant
  * maintenance to an explicit rebuild step, and adding a framework for e-class
- * analyses. We only implement the first (explicit rebuild) here yet.
+ * analyses. We only implement the first (explicit rebuild) here yet, but the
+ * analyses would be useful for constant folding at least.
  *
  * To implement this I also referred to the Python reference implementation at
  *  https://colab.research.google.com/drive/1tNOQijJqe5tw-Pk9iqd6HHb2abC5aRid?usp=sharing
- * and the Rust implementation at https://github.com/egraphs-good/egg.
+ * I'd recommend reading the paper for an overview, then looking at the Python
+ * reference implementation. The reference code in the paper has a few
+ * omissions.
  */
 class EGraph[T]:
   type Node       = EGraph.Node[T]
   type Class      = EGraph.Id
-  type ClassUsage = EGraph.ClassUsage[T]
 
   /** Union-find or "U" in paper that keeps track of the canonical class for
     * each class id. */
   val unionFind = EGraph.UnionFind()
 
   /** Map from e-class id to e-class usage information. */
-  val classes  = mutable.HashMap[Class, ClassUsage]()
+  val usages    = mutable.HashMap[Class, EGraph.ClassUsage[T]]()
 
   /** Hashcons or "H" in paper to avoid re-creating classes from the same
    * canonical node. */
-  val nodes    = mutable.HashMap[Node, Class]()
+  val nodes     = mutable.HashMap[Node, Class]()
 
   /** Worklist of classes that need to be repaired. */
-  val worklist = mutable.ArrayBuffer[Class]()
+  val worklist  = mutable.ArrayBuffer[Class]()
 
   /** Version, useful for checking if graph is at a fixed point. */
   var version: Long = 0
@@ -50,7 +52,7 @@ class EGraph[T]:
 
       val klass = this.newSingletonClass(nodeX)
       nodeX.children.foreach { child =>
-        classes(child).parents += (nodeX -> klass)
+        usages(child).parents += (nodeX -> klass)
       }
       klass
     })
@@ -83,8 +85,8 @@ class EGraph[T]:
       // be normalized to refer to c1. Add any nodes that refer to c2 to c1's
       // parents map so it can find them later, and then add c1 to the worklist
       // to be rebuilt.
-      val cu1 = classes(c1)
-      val cu2 = classes(c2)
+      val cu1 = usages(c1)
+      val cu2 = usages(c2)
       cu1.parents ++= cu2.parents
       cu2.parents.clear()
       this.worklist += c1
@@ -115,7 +117,7 @@ class EGraph[T]:
 
   /** Repair the invariants for the given class. */
   private def repair(klass: Class): Unit =
-    val usage = classes(klass)
+    val usage = usages(klass)
     // Ensure that the map from canonical nodes to classes points to the
     // canonical class.
     usage.parents.foreach { (pnode, pklass) =>
@@ -147,32 +149,62 @@ class EGraph[T]:
     // The paper does not have a find here, but the Python reference code does.
     // If a class refers to itself, eg "x = f x", then normalising its parents
     // might merge the class itself.
-    classes(this.find(klass)).parents ++= newParents
+    usages(this.find(klass)).parents ++= newParents
+
+  /** Get all of the equivalence classes and the terms inside them as nodes */
+  def classes: mutable.HashMap[Class, mutable.HashSet[Node]] =
+    val map = mutable.HashMap[Class, mutable.HashSet[Node]]()
+    this.nodes.foreach { (node, klass) =>
+      val set = map.getOrElseUpdate(this.find(klass), mutable.HashSet[Node]())
+      set.add(node)
+    }
+    map
 
   /** Construct a fresh equivalence class for a previously-unseen node */
   private def newSingletonClass(node: Node): Class =
     val id    = this.unionFind.allocate()
     val usage = EGraph.ClassUsage[T](id)
-    classes += (id -> usage)
+    usages += (id -> usage)
     id
 
 
 object EGraph:
+
+  /** An equivalence class identifier. */
+  case class Id(index: Int)
+
+  /** Nodes represent terms and term applications. The operator `op` can
+   * represent a base value or variable, or a primitive or function to be
+   * applied. For primitives and functions the `children` list denotes the
+   * arguments, which refer to equivalence classes rather than explicit terms.
+   * For values and variables the `children` should be empty.
+   */
+  case class Node[T](val op: T, val children: List[Id])
+
+  /** This internal data structure records the occurrences of each equivalence
+   * class. The parents map should be empty for non-canonical class
+   * identifiers. */
   class ClassUsage[T](val id: Id):
     var parents = mutable.HashMap[Node[T], Id]()
 
-  case class Node[T](val op: T, val children: List[Id])
-
-  case class Id(index: Int)
-
+  /** Union-find data structure that tracks equivalence classes. */
   class UnionFind:
+    /** The parents array is conceptually a map from Id to the parent Id.
+     * For canonical identifiers, the parent is the identifier itself. Two
+     * identifiers refer to the same equivalence class if they have shared
+     * ancestry.
+    */
     val parents = mutable.ArrayBuffer[Id]()
 
+    /** Allocate a new, canonical equivalence class. */
     def allocate(): Id =
       val id = Id(parents.length)
       this.parents += id
       id
 
+    /** Find the canonical identifier for the equivalence class referred to by
+     * the given identifier. Two identifiers `a` and `b` refer to the same
+     * equivalence class if `find(a) == find(b)`. */
     def find(id: Id): Id =
       var current = id
       while (current != this.parents(current.index))
@@ -184,7 +216,7 @@ object EGraph:
       current
 
     /** Merge two canonical equivalence classes together. The two input class
-     * identifiers must both be canonical. The left identifier is the new
+     * identifiers must both be canonical. The `left` identifier is the new
      * canonical id.
      *
      * The e-graph relies on this merging into the left.

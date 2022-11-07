@@ -29,7 +29,7 @@ import scala.collection.mutable
  *
  * Too much magic?
  *
- * OPTIMISE: looking at the core program, the main difference between my
+ * SMT-PERF: looking at the core program, the main difference between my
  * hand-written automaton and the generated one is that this generated one
  * has lots of resets. each state has two reset contexts, one for resetting
  * the transitions, and one for resetting the state bindings. we should be
@@ -41,6 +41,14 @@ import scala.collection.mutable
  * which cannot, either. I wonder whether this was one of the issues that
  * made Kind2's automata a bit slow, if reset contexts introduce extra copies
  * of the state there too.
+ *
+ * 2022/11/07: Extra thought: many automata do have restarts, but they don't
+ * have self-loops. This means that you never have to restart a state when it's
+ * enabled. We could have a separate, specialised "reset/when" context that
+ * clears its internal state whenever the "when" clock is false. Then the
+ * "when" could use the disabled ticks to reset, when it's otherwise just
+ * holding the previous values. This would apply for all states that have no
+ * self-loops and which are the target of only restart transitions.
  */
 abstract class Automaton(invocation: node.Invocation) extends Node(invocation):
   /** The user must specify their initial state */

@@ -18,6 +18,19 @@ import lark.meta.core.term.Compound
  * node invocation differently according to how its results are used.
  */
 object Grate:
+
+  /** "Grated" represents a node that has been deeply sliced. This transform
+   * changes each subnode uniquely, but it does not rename the subnode
+   * invocations to have different class name references. This means that the
+   * result won't compile cleanly.
+   *
+   * @param node
+   *  the grated node, which is suitable for pretty-printing and analysis but
+   *  not compilation.
+   */
+  case class Grated(node: Node) extends lark.meta.base.pretty.Pretty:
+    def ppr = node.ppr
+
   /** Deeply slice a node so that only the bindings directly relevant to the seed set
    * remain. This transform recurses into the subnodes.
    *
@@ -25,7 +38,7 @@ object Grate:
    * the subnode invocations to have different class name references. This
    * means that the result won't compile cleanly.
    */
-  def node(n: Node, seed: names.immutable.RefSet): Node =
+  def node(n: Node, seed: names.immutable.RefSet): Grated =
     val deps = deepDependencies(names.Prefix(List()), n)
     val only = fixSeed(seed, deps)
     grateNode(names.Prefix(List()), n, only)
@@ -43,7 +56,7 @@ object Grate:
    * interested in the result of f(x). In this case, we could set the seed set
    * as the check and the influences set as the assumption.
    */
-  def influence(n: Node, seed: names.immutable.RefSet, influences: names.immutable.RefSet): Node =
+  def influence(n: Node, seed: names.immutable.RefSet, influences: names.immutable.RefSet): Grated =
     val deps = deepDependencies(names.Prefix(List()), n)
     val only = fixSeed(seed, deps)
     val fix  = influences.foldLeft(only) { (fix, i) =>
@@ -102,14 +115,14 @@ object Grate:
       go(acc, v)
     }
 
-  def grateNode(prefix: names.Prefix, n: Node, only: names.immutable.RefSet): Node =
+  def grateNode(prefix: names.Prefix, n: Node, only: names.immutable.RefSet): Grated =
     val params   = n.params.filter { case k => only.contains(prefix(k)) }
     val vars     = n.vars.filter { case (k,v) => only.contains(prefix(k)) }
     val subnodes = n.subnodes.flatMap { case (k,sn) =>
       val prefixX  = prefix(k).fullyQualifiedPath
       val required = only.exists(r => r.prefix.startsWith(prefixX))
       if required
-      then Some(k -> grateNode(prefix ++ names.Ref.fromComponent(k), sn, only))
+      then Some(k -> grateNode(prefix ++ names.Ref.fromComponent(k), sn, only).node)
       else None
     }
     val props    = n.props.filter { p =>
@@ -119,7 +132,7 @@ object Grate:
       }
     }
     val nested   = grateNested(prefix, n, n.nested, only)
-    Node(n.klass, n.metas, params, vars, subnodes, props, nested)
+    Grated(Node(n.klass, n.metas, params, vars, subnodes, props, nested))
 
   def grateNested(prefix: names.Prefix, node: Node, n: Node.Nested, only: names.immutable.RefSet): Node.Nested =
     val children = n.children.flatMap { grateBinding(prefix, node, _, only) }
