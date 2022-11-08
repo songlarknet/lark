@@ -34,23 +34,20 @@ class TestLastN extends munit.FunSuite:
 
   case class LastN(n: Integer, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     require(n <= 255)
+    val MAX       = 254
 
     val count     = output[UInt8]
     val out       = output[Bool]
     val pre_count = u8(0) -> pre(count)
 
     count := select(
-      when(e && pre_count <  n) { pre_count + 1 },
-      when(e && pre_count >= n) { n },
-      otherwise                 { 0 }
+      when(e && pre_count <  MAX) { pre_count + 1 },
+      when(e && pre_count >= MAX) { MAX },
+      otherwise                   { 0 }
     )
 
     val chk = out   := count >= n
 
-    check("0 <= count <= n") {
-      u8(0) <= count && count <= n
+    check("0 <= count <= MAX") {
+      u8(0) <= count && count <= MAX
     }
-
-    // check("count <= ${n - 1} (not true!)") {
-    //   count <= (n - 1)
-    // }

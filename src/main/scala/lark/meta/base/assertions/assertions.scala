@@ -6,10 +6,7 @@ package object assertions:
       pretty.text(prefix) <@>
       pretty.string(message)
     val ns = notes.map { case (n,obj) =>
-      val pp = obj match
-        case pp: pretty.Pretty => pp.ppr
-        case pp: pretty.Doc => pp
-        case _ => pretty.value(obj)
+      val pp = pretty.value(obj)
       pretty.text(n) <> pretty.colon <+> pretty.nest(pp)
     }
     throw new java.lang.AssertionError(pretty.layout(msg <@> pretty.vsep(ns)))

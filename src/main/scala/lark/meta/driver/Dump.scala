@@ -25,10 +25,11 @@ object Dump:
     object Typecheck extends Substage(Prepare, "30-tcheck", "Typecheck")
 
   object Prove extends Stage("10-prove", "Model checking proofs", ".smt", "; "):
-    object System extends Substage(Prove, "00-system", "Labelled transition system", Some(".lts"), Some("// "))
-    object Bmc extends Substage(Prove, "1x-bmc", "Bounded model checking (SMT)")
-    object Kind extends Substage(Prove, "1x-kind", "K-inductive checking (SMT)")
-    object Feas extends Substage(Prove, "1x-feas", "Feasibility checking (SMT)")
+    object Equiv extends Substage(Prove, "00-equiv", "Equivalence-based invariant generation (EI3)", Some(".lark"), Some("// "))
+    object System extends Substage(Prove, "10-system", "Labelled transition system", Some(".lts"), Some("// "))
+    object Bmc extends Substage(Prove, "2x-bmc", "Bounded model checking (SMT)")
+    object Kind extends Substage(Prove, "2x-kind", "K-inductive checking (SMT)")
+    object Feas extends Substage(Prove, "2x-feas", "Feasibility checking (SMT)")
 
   object Compile extends Stage("10-compile", "Compile", ""):
     object Schedule extends Substage(Compile, "00-sched", "Schedule", Some(".log"))

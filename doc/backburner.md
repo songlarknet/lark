@@ -27,6 +27,9 @@ There are a few issues with counterexamples:
 Change the "merge" construct in nodes to match on small types.
 This will make it easier to bake the clocks later and simplify some of the codegen.
 
+### Rename merge/when to match/case
+Rename merge/when everywhere to fit with Scala a bit better
+
 ## Missing features
 
 ### Expressions missing source location

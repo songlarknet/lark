@@ -26,7 +26,7 @@ object Compound:
   def ite(p: Exp, t: Exp, f: Exp) =
     app(prim.Table.Ite, p, t, f)
 
-  /** Perform variable-variable substitution */
+  /** Perform variable-variable substitution on expressions */
   def substVV(subst: names.Ref => names.Ref, exp: Exp): Exp = exp match
     case Exp.Val(_) => exp
     case Exp.Var(s, v) => Exp.Var(s, subst(v))
@@ -34,6 +34,13 @@ object Compound:
       Exp.App(s, p, args.map(substVV(subst, _)) : _*)
     case Exp.Cast(op, e) =>
       Exp.Cast(op, substVV(subst, e))
+
+  /** Perform variable-variable substitution on flow expressions */
+  def substVV(subst: names.Ref => names.Ref, flow: Flow): Flow = flow match
+    case Flow.Pure(e)     => Flow.Pure(substVV(subst, e))
+    case Flow.Pre(e)      => Flow.Pre(substVV(subst, e))
+    case Flow.Fby(v, e)   => Flow.Fby(v, substVV(subst, e))
+    case Flow.Arrow(a, b) => Flow.Arrow(substVV(subst, a), substVV(subst, b))
 
   def subst(env: names.immutable.RefMap[Exp], exp: Exp): Exp = exp match
     case Exp.Val(_) => exp

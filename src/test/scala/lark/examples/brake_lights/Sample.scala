@@ -36,23 +36,20 @@ object Sample:
 
   /** True if the stream e has been true for n or more ticks. */
   case class LastN(n: Ticks, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
-    require(n.ticks <= 65535)
+    val MAX = 65534
+    require(n.ticks <= MAX)
 
     val count     = output[UInt16]
     val out       = output[Bool]
     val pre_count = fby(u16(0), count)
 
     count := select(
-      when(e && pre_count <  n.ticks) { pre_count + 1 },
-      when(e && pre_count >= n.ticks) { n.ticks },
-      otherwise                       { 0 }
+      when(e && pre_count <  MAX) { pre_count + 1 },
+      when(e && pre_count >= MAX) { MAX },
+      otherwise                   { 0 }
     )
 
     out   := count >= n.ticks
-
-    check("0 <= count <= n") {
-      u16(0) <= count && count <= n.ticks
-    }
 
   /** True if the stream e has been true for n or more ticks. */
   def lastN(n: Ticks, e: Stream[Bool])(using builder: Node.Builder, location: lark.meta.macros.Location): Stream[Bool] =

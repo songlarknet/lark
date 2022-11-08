@@ -168,10 +168,17 @@ object Node:
    * be nested inside. */
   type Path = List[Path.Entry]
   object Path:
-    sealed trait Entry
+    sealed trait Entry extends pretty.Pretty:
+      def mapX(f: Exp => Exp): Entry
+
     object Entry:
       /** Reset when clock expression is true. */
-      case class Reset(clock: Exp) extends Entry
+      case class Reset(clock: Exp) extends Entry:
+        def mapX(f: Exp => Exp) =
+          Reset(f(clock))
+        def ppr =
+          pretty.text("reset") <> pretty.parens(clock.ppr)
+
       /** One arm of a multi-arm merge. The list `not` contains the conditions
        * of the previous arms of the merge, and `yes` contains the condition for
        * this arm. The arm is active when the conditions of the previous arms are
@@ -180,3 +187,9 @@ object Node:
       case class Merge(scrutinee: Exp, value: Val) extends Entry:
         def clock: Exp =
           term.Compound.app(term.prim.Table.Eq, scrutinee, term.Compound.val_(value))
+
+        def mapX(f: Exp => Exp) =
+          Merge(f(scrutinee), value)
+
+        def ppr =
+          pretty.text("match-case") <> pretty.parens(clock.ppr)

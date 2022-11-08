@@ -66,6 +66,9 @@ object Prove:
     (using location: lark.meta.macros.Location)
   : smt.Prove.Summary =
     val prepared = Prepare.prepareCheck(options.dump, body)
+
+    val equivalences =
+      core.node.analysis.Equivalence.program(prepared, options.dump, Dump.Prove.Equiv)
     val futures = prepared.map { node =>
       val sys = smt.Translate.nodes(node.allNodes, options.check.translate)
       (node, sys, Future {

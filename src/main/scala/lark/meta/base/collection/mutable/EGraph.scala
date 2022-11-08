@@ -1,5 +1,6 @@
 package lark.meta.base.collection.mutable
 
+import lark.meta.base.pretty
 import scala.collection.mutable
 
 /**
@@ -23,7 +24,7 @@ import scala.collection.mutable
  * reference implementation. The reference code in the paper has a few
  * omissions.
  */
-class EGraph[T]:
+class EGraph[T] extends Cloneable with pretty.Pretty:
   type Node       = EGraph.Node[T]
   type Class      = EGraph.Id
 
@@ -32,7 +33,7 @@ class EGraph[T]:
   val unionFind = EGraph.UnionFind()
 
   /** Map from e-class id to e-class usage information. */
-  val usages    = mutable.HashMap[Class, EGraph.ClassUsage[T]]()
+  val usages    = mutable.SortedMap[Class, EGraph.ClassUsage[T]]()
 
   /** Hashcons or "H" in paper to avoid re-creating classes from the same
    * canonical node. */
@@ -152,13 +153,24 @@ class EGraph[T]:
     usages(this.find(klass)).parents ++= newParents
 
   /** Get all of the equivalence classes and the terms inside them as nodes */
-  def classes: mutable.HashMap[Class, mutable.HashSet[Node]] =
-    val map = mutable.HashMap[Class, mutable.HashSet[Node]]()
+  def classes: mutable.SortedMap[Class, mutable.HashSet[Node]] =
+    val map = mutable.SortedMap[Class, mutable.HashSet[Node]]()
     this.nodes.foreach { (node, klass) =>
       val set = map.getOrElseUpdate(this.find(klass), mutable.HashSet[Node]())
       set.add(node)
     }
     map
+
+  /** Create a distinct mutable copy of this e-graph. */
+  override def clone(): EGraph[T] =
+    val neu = EGraph[T]()
+    neu.unionFind.copyFrom(this.unionFind)
+    neu.usages   ++= this.usages
+    neu.nodes    ++= this.nodes
+    neu.worklist ++= this.worklist
+    neu.version    = this.version
+    neu
+
 
   /** Construct a fresh equivalence class for a previously-unseen node */
   private def newSingletonClass(node: Node): Class =
@@ -167,11 +179,21 @@ class EGraph[T]:
     usages += (id -> usage)
     id
 
+  def ppr =
+    pretty.vsep(classes.map { (c,ns) =>
+      val nsP = pretty.ssep(ns.toSeq.map(_.ppr), pretty.comma <> pretty.space)
+      c.ppr <+> pretty.text(":=") <+> pretty.braces(pretty.space <> nsP <> pretty.space)
+    }.toSeq)
 
 object EGraph:
 
   /** An equivalence class identifier. */
-  case class Id(index: Int)
+  case class Id(index: Int) extends pretty.Pretty:
+    def ppr = pretty.text("$") <> pretty.value(index)
+
+  given Ordering_Id: scala.math.Ordering[Id] with
+    def compare(x: Id, y: Id): Int =
+      summon[Ordering[Int]].compare(x.index, y.index)
 
   /** Nodes represent terms and term applications. The operator `op` can
    * represent a base value or variable, or a primitive or function to be
@@ -179,7 +201,11 @@ object EGraph:
    * arguments, which refer to equivalence classes rather than explicit terms.
    * For values and variables the `children` should be empty.
    */
-  case class Node[T](val op: T, val children: List[Id])
+  case class Node[T](val op: T, val children: List[Id]) extends pretty.Pretty:
+    def ppr =
+      if children.nonEmpty
+      then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(_.ppr)))
+      else pretty.value(op)
 
   /** This internal data structure records the occurrences of each equivalence
    * class. The parents map should be empty for non-canonical class
@@ -231,3 +257,55 @@ object EGraph:
      */
     def unionLeft(left: Id, right: Id): Unit =
       this.parents(right.index) = left
+
+    /** Copy the equivalence sets from a new empty UnionFind structure. */
+    def copyFrom(old: UnionFind): Unit =
+      assert(this.parents.isEmpty, "cannot clone into non-empty UnionFind structure - it would mess up the identifiers")
+      this.parents ++= old.parents
+
+
+  // class Match[T](graph: EGraph[T]):
+  //   val classes = graph.classes
+
+  //   object take:
+  //     def unop(k: graph.Class): Seq[(T, graph.Class)] =
+  //       classes(k).toSeq.flatMap { n =>
+  //         if n.children.length == 1
+  //         then Some((n.op, n.children.head))
+  //         else None
+  //       }
+
+  //     def pre(k: graph.Class): Seq[graph.Class] =
+  //       unop(k).flatMap { (op,arg) =>
+  //         if op == Pre
+  //         then Some(arg)
+  //         else None
+  //       }
+
+  //     def pure(k: graph.Class): Seq[(T, List[graph.Class])] =
+  //       classes(k).toSeq.flatMap { n =>
+  //         if n.op.isPure
+  //         then Some((n.op, n.children))
+  //         else None
+  //       }
+
+  //   object make:
+  //     def pre(p: graph.Class): graph.Class =
+  //       graph.add(Op.Pre, p)
+  //     def op(op: T, p: graph.Class*): graph.Class =
+  //       graph.add(op, p*)
+
+  //   def match1(k: graph.Class): Seq[graph.Class] =
+  //     for
+  //       arg       <- take.pre(k)
+  //       (op,args) <- take.pure(arg)
+  //     yield
+  //       make.op(op, args.map(make.pre(_))*)
+
+  //   // pre (map f e) = map f (pre e)
+  //   // m.take(Pre) match
+  //   //   case List(m.node(_ : Map, e)) => e
+
+
+  //   // e -> e = e
+  // object Match

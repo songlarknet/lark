@@ -84,6 +84,12 @@ object pretty extends kiama.output.PrettyPrinter:
     then parens(doc)
     else doc
 
+  override def value(obj: Any): Doc = obj match
+    case pp: Pretty => pp.ppr
+    case pp: Doc => pp
+    case _ => super.value(obj)
+
+
   /** Assignment syntax */
   val gets = colon <> equal
 

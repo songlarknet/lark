@@ -22,7 +22,7 @@ object Prop:
 
   /** The syntactic form used to declare a judgment. Mainly for debugging. */
   sealed trait Syntax extends pretty.Pretty:
-    def ppr = pretty.value(this)
+    def ppr = pretty.text(this.toString())
     def form: Form
   object Syntax:
     /** Contract precondition.
