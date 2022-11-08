@@ -32,35 +32,57 @@ object Equivalence:
    * The nameless de Bruijn representation ensures that alpha-equivalent
    * recursive bindings look the same.
    */
-  sealed trait Op extends pretty.Pretty
+  sealed trait Op extends pretty.Pretty:
+    def isLeaf: Boolean
   object Op:
     /** Variable occurrence. Argument list should be empty. */
     case class Var(v: names.Ref) extends Op:
       def ppr = v.ppr
+      def isLeaf = true
 
     /** Value. Argument list should be empty. */
     case class Val(v: term.Val) extends Op:
       def ppr = v.ppr
+      def isLeaf = true
 
     /** Primitive application. */
     case class Prim(prim: term.Prim) extends Op:
       def ppr = prim.ppr
+      def isLeaf = false
 
     /** Streaming `pre` */
     case object Pre extends Op:
       def ppr = pretty.text("pre")
+      def isLeaf = false
 
     /** Streaming arrow `x -> y` */
     case object Arrow extends Op:
       def ppr = pretty.text("arrow")
+      def isLeaf = false
 
     /** Recursive binding */
     case object MuBinder extends Op:
       def ppr = pretty.text("µ.")
+      def isLeaf = false
 
-    /** Reference to recursive binder */
+    /** Reference to recursive binder.
+     * The level is the de Bruijn index, specifying how many other µ-binders
+     * occur between this reference and the binder.
+     * For many recursive binders there's only one binder, so:
+     * > sum = (0 -> pre sum) + e
+     * becomes
+     * > sum = µ. (0 -> pre µ0) + e
+     *
+     * Mutually recursive bindings can be more interesting:
+     * > rec0 = rec1 + (0 -> pre rec0)
+     * > rec1 = pre rec0 + (0 -> pre rec1)
+     * should become:
+     * > rec0 = µ. (µ. pre µ1 + (0 -> pre µ0)) + (0 -> pre µ0)
+     * > rec1 = µ. pre (µ. µ1 + (0 -> pre µ0)) + (0 -> pre µ0)
+     */
     case class MuVar(level: Int) extends Op:
       def ppr = pretty.text("µ") <> pretty.value(level)
+      def isLeaf = true
 
 
   /** A "layer" is a set of equations that all operate on the same clock. The
@@ -83,6 +105,9 @@ object Equivalence:
       val equationsP = equations.map { (r,f) =>
         r.ppr <+> pretty.text("=") <+> f.ppr
       }
+      val invariantsP = invariants.map { (l,r) =>
+        l.ppr <+> pretty.text("=") <+> r.ppr
+      }
       pretty.vsep(Seq(
         pretty.text("Equations:"),
         pretty.indent(pretty.vsep(equationsP.toSeq)),
@@ -90,7 +115,28 @@ object Equivalence:
         pretty.indent(initial.ppr),
         pretty.text("Saturated e-graph:"),
         pretty.indent(saturated.ppr),
+        pretty.text("Invariants:"),
+        pretty.indent(pretty.vsep(invariantsP)),
       ))
+
+    /** Get the "interesting" invariants */
+    def invariants: List[(EGraph.Node[Op], EGraph.Node[Op])] =
+      val g0   = initial.clone()
+      val invs = mutable.ArrayBuffer[(EGraph.Node[Op], EGraph.Node[Op])]()
+      saturated.classes.foreach { (klass, nodes) =>
+        val ns = nodes.filter(n => n.op.isLeaf)
+        ns.toList match
+          case head :: next :: _ =>
+            val h = g0.add(head)
+            val n = g0.add(next)
+            if h != n
+            then
+              invs += head -> next
+              g0.merge(h, n)
+              g0.rebuild()
+          case _ =>
+      }
+      invs.toList
 
 
   class Layers(
@@ -169,6 +215,7 @@ object Equivalence:
         normalise(l)
       }
 
+    /** Convert named recursion to µ-bindings */
     def normalise(layer: Layer): Unit =
       // Transitive and direct dependencies for each binding
       val mpDeps  = mutable.SortedMap[names.Ref, names.immutable.RefSet]()
@@ -176,6 +223,8 @@ object Equivalence:
 
       val empty = immutable.SortedSet[names.Ref]()
 
+      // LODO: this is a bit shaky for mutual recursion; see TestMutualRecursion.scala:rec0-rec1
+      /** Unfold a reference */
       def unfoldR(ref: names.Ref, stop: names.Ref, deps: names.immutable.RefSet): (EGraph.Id, names.immutable.RefSet) =
         val depsX = deps + ref
         if deps.contains(ref)
