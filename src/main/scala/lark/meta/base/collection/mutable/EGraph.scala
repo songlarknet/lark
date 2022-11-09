@@ -20,9 +20,11 @@ import scala.collection.mutable
  *
  * To implement this I also referred to the Python reference implementation at
  *  https://colab.research.google.com/drive/1tNOQijJqe5tw-Pk9iqd6HHb2abC5aRid?usp=sharing
+ * (I'm not sure who the author is, or whether it's an official reference)
  * I'd recommend reading the paper for an overview, then looking at the Python
  * reference implementation. The reference code in the paper has a few
- * omissions.
+ * omissions. The Rust code is written for performance and supports a few other
+ * features (analysis, explanations) so is a bit more complicated.
  */
 class EGraph[T] extends Cloneable with pretty.Pretty:
   type Node       = EGraph.Node[T]
@@ -89,19 +91,25 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
       this.unionFind.unionLeft(c1, c2)
       // We have merged c2 into c1, so any nodes that refer to c2 will need to
       // be normalized to refer to c1. Add any nodes that refer to c2 to c1's
-      // parents map so it can find them later, and then add c1 to the worklist
-      // to be rebuilt.
+      // parents map so it can find them later, and then add the affected nodes
+      // to the worklist to be rebuilt.
+      // The paper and the Python reference implementation only add c1 to the
+      // work list. But if we want to maintain the invariant that this.nodes
+      // only contains canonical nodes, then we need to remove any references
+      // to the old class c2. So make sure to repair everything that refers to
+      // c2 as well.
       val cu1 = usages(c1)
       val cu2 = usages(c2)
+      this.worklist += c1
+      this.worklist ++= cu2.parents.keys.flatMap(_.children)
       cu1.parents ++= cu2.parents
       cu2.parents.clear()
-      this.worklist += c1
       c1
 
   /** Canonicalize a node so that all of its arguments (children) refer to
    * canonical class identifiers. */
   def canonicalize(node: Node): Node =
-    val children = node.children.map(this.unionFind.find(_))
+    val children = node.children.map(this.find(_))
     EGraph.Node(node.op, children)
 
   /** Find the canonical class identifier for the given equivalence class. */
@@ -124,18 +132,17 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
   /** Repair the invariants for the given class. */
   private def repair(klass: Class): Unit =
     val usage = usages(klass)
-    // Ensure that the map from canonical nodes to classes points to the
-    // canonical class.
-    usage.parents.foreach { (pnode, pklass) =>
-      this.nodes -= pnode
-      val pnodeX = this.canonicalize(pnode)
-      this.nodes += (pnodeX -> this.find(pklass))
-    }
-
     // Clear the parents because we're going to re-create them, but keep a copy
     // around so we can loop over them.
     // The merging in the loop can update klass.parents too, so we need to
     // clear it before the loop or we'd lose any updates.
+    // The paper and Python reference perform two loops here: the first updates
+    // the nodes hashcons with the new canonical nodes, while the second
+    // re-canonicalises, merges, and updates the class usages. But there is
+    // some risk that the re-canonical nodes in the second loop won't match
+    // the first loop, because some classes have been merged. This would result
+    // in this.nodes referring to an old canonical node, while the new parents
+    // refers to the new canonical node, but they need to agree.
     val parents    = usage.parents
     val newParents = mutable.HashMap[Node, Class]()
     usage.parents  = mutable.HashMap[Node, Class]()
@@ -146,10 +153,17 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
         // Two separate parent nodes are now equivalent, so we can merge the
         // two classes together. This will enqueue more work on the worklist.
         case Some(pklassX) =>
-          val merged = this.merge(pklass, pklassX)
+          val merged  = this.merge(pklass, pklassX)
+          // pnodeX may no longer be canonical after the merge, but if it isn't
+          // then it will be repaired by work enqueued by the merge.
+          this.nodes -= pnode
+          this.nodes += (pnodeX -> merged)
           newParents += (pnodeX -> merged)
         case None =>
-          newParents += (pnodeX -> this.find(pklass))
+          val pklassX = this.find(pklass)
+          this.nodes -= pnode
+          this.nodes += (pnodeX -> pklassX)
+          newParents += (pnodeX -> pklassX)
     }
 
     // The paper does not have a find here, but the Python reference code does.
@@ -185,10 +199,30 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
     id
 
   def ppr =
-    pretty.vsep(classes.map { (c,ns) =>
+    // Check if the e-graph needs to be rebuilt and print a warning if so. We
+    // can't rebuild the e-graph here, as pretty-printing must not mutate.
+    (if this.worklist.nonEmpty
+    then pretty.text("Dirty e-graph!") <+> pretty.tupleP(this.worklist.toSeq) <> pretty.line
+    else pretty.emptyDoc) <>
+    pretty.vsep(this.classes.map { (c,ns) =>
+      val canonP = pretty.vsep(ns.toSeq.flatMap { n =>
+        val canon = this.canonicalize(n)
+        if canon != n
+        then Some(pretty.text("  !!! e-graph invariant failed: not canonical ") <> n.ppr <> pretty.text(" -> ") <> canon.ppr <> pretty.line)
+        else None
+      })
       val nsP = pretty.ssep(ns.toSeq.map(_.ppr), pretty.comma <> pretty.space)
-      c.ppr <+> pretty.text(":=") <+> pretty.braces(pretty.space <> nsP <> pretty.space)
+      canonP <> c.ppr <+> pretty.text(":=") <+> pretty.braces(pretty.space <> nsP <> pretty.space)
     }.toSeq)
+
+  /** Pretty-print with debug information */
+  def pprDebug = ppr <@>
+    (pretty.vsep(this.nodes.map { (n,c) =>
+      n.ppr <> pretty.text(" -canon> ") <> c.ppr
+    }.toSeq)) <@>
+    (pretty.vsep(this.usages.map { (c,u) =>
+      c.ppr <> pretty.text(" -used> ") <> pretty.tuple(u.parents.map { (k,v) => k.ppr <+> v.ppr }.toSeq)
+    }.toSeq)) <@> pretty.text(this.toString())
 
 object EGraph:
 
@@ -253,10 +287,12 @@ object EGraph:
     def find(id: Id): Id =
       var current = id
       while (current != this.parents(current.index))
+        // Perform a sort of path compression, where we rewrite children to
+        // refer directly to their grandparent. This makes it quicker to find
+        // the final ancestor next time.
         val p   = this.parents(current.index)
         val pp  = this.parents(p.index)
-        this.parents(current.index)
-                = pp
+        this.parents(current.index) = pp
         current = pp
       current
 

@@ -226,7 +226,7 @@ object Equivalence:
       invs.toList
 
     def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxDepth: Int): List[Tree[Op]] =
-      val trees = classes.getOrElse(klass, mutable.HashSet()).flatMap { n =>
+      val trees = classes(klass).flatMap { n =>
         n.op match
           case Op.Val(_) => List(Tree(n.op))
           case Op.Var(_) => List(Tree(n.op))
@@ -445,6 +445,10 @@ object Equivalence:
   def appendEGraph(prefix: names.Prefix, source: EGraph[Op], dest: EGraph[Op]): Unit =
     // Mapping from e-classes in the source to e-classes in the destination
     val destClass = mutable.HashMap[source.Class, dest.Class]()
+    // Both graphs must be canonical because we're going to use equivalence
+    // information from both.
+    source.rebuild()
+    dest.rebuild()
     var v = dest.version - 1
     // Run to a fixpoint until we stop changing the destination.
     while (v != dest.version)
