@@ -101,7 +101,7 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
       val cu1 = usages(c1)
       val cu2 = usages(c2)
       this.worklist += c1
-      this.worklist ++= cu2.parents.keys.flatMap(_.children)
+      this.worklist ++= mutable.HashSet.from(cu2.parents.flatMap(_._1.children))
       cu1.parents ++= cu2.parents
       cu2.parents.clear()
       c1
