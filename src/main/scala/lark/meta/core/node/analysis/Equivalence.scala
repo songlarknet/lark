@@ -209,7 +209,10 @@ object Equivalence:
       // because they retain their value even when the clock is off
       val classes = interesting.classes
       // Try to add invariants for small terms before looking at larger ones
-      Seq(0, 1, 2, Int.MaxValue).foreach { maxDepth =>
+      // PERF: hard-code depth limit to 100 to break cycles. Real fix is to
+      // make `takeSimpleTrees` keep track of what it's seen or something, but
+      // in practice who could ever want an invariant term with height 100?
+      Seq(0, 1, 2, 100).foreach { maxDepth =>
         classes.foreach { (klass, nodes) =>
           val ns = takeSimpleTrees(g0, classes, klass, maxDepth)
           if ns.length > 1
