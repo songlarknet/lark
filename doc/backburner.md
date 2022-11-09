@@ -21,6 +21,7 @@ There are a few issues with counterexamples:
 ### SMT.Translate
 * ~~SMT.Translate should use node.Node instead of node.Builder~~
 * SMT.System should use term.Exp with a separate Exp->SMTLib step
+* Is there a way to avoid having each nested context defining its own init flag? Maybe each node could take the parent's init flag as an argument.
 
 
 ### ~~Core language: merge => match~~

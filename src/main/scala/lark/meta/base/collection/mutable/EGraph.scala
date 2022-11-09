@@ -27,6 +27,7 @@ import scala.collection.mutable
 class EGraph[T] extends Cloneable with pretty.Pretty:
   type Node       = EGraph.Node[T]
   type Class      = EGraph.Id
+  type Tree       = EGraph.Tree[T]
 
   /** Union-find or "U" in paper that keeps track of the canonical class for
     * each class id. */
@@ -65,6 +66,10 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
   /** Helper for adding node operator */
   def add(op: T, children: Class*): Class =
     add(EGraph.Node(op, children.toList))
+
+  /** Helper for adding tree */
+  def add(tree: Tree): Class =
+    add(EGraph.Node(tree.op, tree.children.map(add(_))))
 
   /** Merge two equivalence classes together, returning the merged class.
    * This operation does not maintain the congruence relation and instead
@@ -165,7 +170,7 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
   override def clone(): EGraph[T] =
     val neu = EGraph[T]()
     neu.unionFind.copyFrom(this.unionFind)
-    neu.usages   ++= this.usages
+    neu.usages   ++= this.usages.mapValues(_.clone)
     neu.nodes    ++= this.nodes
     neu.worklist ++= this.worklist
     neu.version    = this.version
@@ -207,11 +212,25 @@ object EGraph:
       then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(_.ppr)))
       else pretty.value(op)
 
+  /** Trees represent a specific, concrete term. It's really just an expression
+   * tree.
+   */
+  case class Tree[T](val op: T, val children: List[Tree[T]] = List()) extends pretty.Pretty:
+    def ppr =
+      if children.nonEmpty
+      then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(_.ppr)))
+      else pretty.value(op)
+
   /** This internal data structure records the occurrences of each equivalence
    * class. The parents map should be empty for non-canonical class
    * identifiers. */
-  class ClassUsage[T](val id: Id):
+  class ClassUsage[T](val id: Id) extends Cloneable:
     var parents = mutable.HashMap[Node[T], Id]()
+
+    override def clone(): ClassUsage[T] =
+      val neu = ClassUsage[T](id)
+      neu.parents ++= this.parents
+      neu
 
   /** Union-find data structure that tracks equivalence classes. */
   class UnionFind:

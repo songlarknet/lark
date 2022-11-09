@@ -148,7 +148,7 @@ package object names:
       summon[Ordering[(List[Component])]].compare(x.fullyQualifiedPath, y.fullyQualifiedPath)
 
   /** A prefix of a qualified path which can be used to qualify names */
-  case class Prefix(prefix: List[Component]) extends pretty.Pretty:
+  case class Prefix(prefix: List[Component] = List()) extends pretty.Pretty:
     def apply(name: names.Ref): names.Ref =
       names.Ref(prefix ++ name.prefix, name.name)
 
