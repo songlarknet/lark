@@ -10,7 +10,8 @@ import lark.meta.driver.{Prove, Compile, Grind, Dump}
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
-    Prove.success() { LemmaLastN(3) }
+    // Use a high enough `n` so that we can't prove it with k-induction
+    Prove.success(Prove.Options().withMaximumInductiveSteps(2)) { LemmaLastN(10) }
   }
 
   test("lastN compile") {
@@ -25,9 +26,6 @@ class TestLastN extends munit.FunSuite:
     val e      = forall[Bool]
     val lastN  = subnode(LastN(n,     e))
     val lastSN = subnode(LastN(n + 1, e))
-    check("invariant LastN(n, e).count <= LastN(n + 1, e).count <= LastN(n, e).count + 1") {
-      lastN.count <= lastSN.count && lastSN.count <= lastN.count + 1
-    }
     check("forall n e. LastN(n + 1, e) ==> LastN(n, e)") {
       lastSN.out implies lastN.out
     }

@@ -5,6 +5,7 @@ import lark.meta.base.names.given
 import lark.meta.core.node.Node
 import lark.meta.core.node.analysis.Equivalence
 import lark.meta.core.term.{Exp, Compound => ExpCompound}
+import lark.meta.core.Prop
 import lark.meta.driver.Dump
 import lark.meta.smt.Term.compound
 
@@ -136,7 +137,7 @@ object Prove:
       }
     }
 
-  def checkNode(node: Node, sys: system.Top, options: Options, dump: debug.Options)(using ExecutionContext): NodeSummary =
+  def checkNode(node: Node, sys: system.Top, equiv: Equivalence.Layers, options: Options, dump: debug.Options)(using ExecutionContext): NodeSummary =
     val topS = sys.top
     val dumpKey = Some(node.klass.pprString)
     dump.traceP(sys.top, Dump.Prove.System, dumpKey)
@@ -145,7 +146,16 @@ object Prove:
       j.judgment -> Property(j)
     })
 
-    val bmcC = new Channel(props)()
+    // TODO: the invariants suggested by Equivalence should all be true, but in
+    // general we should treat these as candidates and just ignore them if
+    // they're false.
+    val hints = Property.Map.from(equiv.invariants.map { exp =>
+      val prop = Prop.Judgment(s"invgen-EI3 ${pretty.layout(exp.pprWith(showBoundedArith = false))}", exp, Prop.Syntax.Generated(Prop.Form.Guarantee), lark.meta.macros.Location.empty)
+      val sysj = system.SystemJudgment(List(), exp, prop)
+      prop -> Property(sysj)
+    })
+
+    val bmcC = new Channel(props ++ hints)()
     val indC = bmcC.splitTraces()
     val feaC = bmcC.splitTraces()
 

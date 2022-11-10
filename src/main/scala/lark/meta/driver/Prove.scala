@@ -67,12 +67,14 @@ object Prove:
   : smt.Prove.Summary =
     val prepared = Prepare.prepareCheck(options.dump, body)
 
+    // PERF: this could be concurrent
     val equivalences =
       core.node.analysis.Equivalence.program(prepared, options.dump, Dump.Prove.Equiv)
     val futures = prepared.map { node =>
-      val sys = smt.Translate.nodes(node.allNodes, options.check.translate)
+      val sys   = smt.Translate.nodes(node.allNodes, options.check.translate)
+      val equiv = equivalences(node.klass)
       (node, sys, Future {
-        smt.Prove.checkNode(node, sys, options.check, options.dump)
+        smt.Prove.checkNode(node, sys, equiv, options.check, options.dump)
       })
     }
     val results = futures.map { (node, sys, future) =>
