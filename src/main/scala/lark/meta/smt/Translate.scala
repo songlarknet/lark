@@ -306,6 +306,14 @@ object Translate:
     val ec = ExpContext(names.mutable.Supply(List()), Options(checkRefinement = false))
     expr(ec, exp).value
 
+  /** Translate a pure expression to a term with given state and row prefixes.
+  */
+  def termOfExprWithPrefix(exp: Exp, state: names.Prefix, row: names.Prefix): Terms.Term =
+    val t = termOfExpr(exp)
+    Term.renamePrefix(system.Prefix.state, state,
+      Term.renamePrefix(system.Prefix.row, row,
+        t))
+
   def nameOfPrim(prim: Prim, sort: Sort): String = (prim, sort) match
     // Negate is printed as "-", but that conflicts with binary subtraction.
     case (term.prim.Table.Negate, _) => "-"

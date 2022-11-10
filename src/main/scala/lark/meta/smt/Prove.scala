@@ -90,11 +90,7 @@ object Prove:
   /** Translate a judgment into an SMT-lib term at a given step. */
   def judgmentTerm(judgment: system.SystemJudgment, step: Int): Terms.Term =
     def termOfExp(exp: lark.meta.core.term.Exp): Terms.Term =
-      // TODO subst bad
-      Term.renamePrefix(system.Prefix.state, statePrefix(step),
-      Term.renamePrefix(system.Prefix.stateX, statePrefix(step + 1),
-      Term.renamePrefix(system.Prefix.row, rowPrefix(step),
-        Translate.termOfExpr(exp))))
+      Translate.termOfExprWithPrefix(exp, statePrefix(step), rowPrefix(step))
 
     // The judgment is of form `SoFar(hypotheses) => consequent`, so we
     // add the precondition that all of the hypotheses are true at all steps
