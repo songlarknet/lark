@@ -88,7 +88,7 @@ object Prove:
   case class Options(
     check: smt.Prove.Options = smt.Prove.Options(),
     trace: smt.Trace.Options = smt.Trace.Options(),
-    dump:  Dump              = Dump.quiet
+    dump:  Dump              = Dump.quiet,
   ):
     def disableRefinement: Options =
       this.copy(check = check.copy(

@@ -207,7 +207,7 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
 
   def heaps(prefix: names.Prefix): List[Eval.Heap] =
     steps.map { s =>
-      (s.heap ++ s.state).flatMap { (r,v) =>
+      s.heapState.flatMap { (r,v) =>
         if r.fullyQualifiedPath.startsWith(prefix.prefix)
         then Some(names.Ref.fromPathUnsafe(r.fullyQualifiedPath.drop(prefix.prefix.length)) -> v)
         else None
@@ -283,8 +283,9 @@ object Trace:
     case object FocusEverything extends Focus
 
   case class Row(values: List[(names.Ref, Val)], stateValues: List[(names.Ref, Val)]) extends pretty.Pretty:
-    def heap  = scala.collection.immutable.SortedMap.from(values)
-    def state = scala.collection.immutable.SortedMap.from(stateValues)
+    lazy val heap      = scala.collection.immutable.SortedMap.from(values)
+    lazy val state     = scala.collection.immutable.SortedMap.from(stateValues)
+    lazy val heapState = heap ++ state
     /** Pretty-print all values in the trace */
     def ppr = names.Namespace.fromSeq(values).ppr
 
@@ -344,7 +345,7 @@ object Trace:
 
     val bads  = judgments.filter { prop =>
       stepD.exists { step =>
-        val heap = step.heap
+        val heap = step.heapState
         val eval = Eval.exp(heap, prop.judgment.consequent, Eval.Options(checkRefinement = false))
         eval match
           case Val.Bool(b) => !b

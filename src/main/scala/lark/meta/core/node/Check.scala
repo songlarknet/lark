@@ -28,9 +28,19 @@ object Check:
    * @param exp
    *  Term typechecking options including whether to perform integer bounds
    *  checks on literal integers (exp.checkRefinement).
+   *
+   * @param exposeStateVariables
+   *  If true, expressions in the program can refer to internal variables such
+   *  as the init flag `^ctx.^init` which is true for the first step, or the
+   *  state variable for each flow binding, for example "x = pre y" binds a
+   *  variable `^ctx.x` which contains the previous value of y, regardless of
+   *  whether the nested context ^ctx is clocked on.
+   *  This is useful during model checking because some invariants need to
+   *  talk about internal state.
    */
   case class Options(
     exp: term.Check.Options = term.Check.Options(),
+    exposeStateVariables: Boolean = false,
   )
 
   def program(nodes: Iterable[Node], options: Options): names.immutable.RefMap[Info] =
@@ -40,7 +50,7 @@ object Check:
       })
 
   def node(n: Node, options: Options): Info =
-    val env  = envOfNode(names.Prefix(List()), n)
+    val env  = envOfNode(names.Prefix(List()), n, options)
     val top  = n.vars.filter { (c,v) => v.isInput }.keySet
     val visible =
       n.nested.children.map(visibleOfBinding(_))
@@ -68,16 +78,30 @@ object Check:
     info
 
   /** Get environment of node */
-  def envOfNode(prefix: names.Prefix, node: Node): term.Check.Env =
-    // TODO: include internal state in nested contexts for sneaky mode
-
+  def envOfNode(prefix: names.Prefix, node: Node, options: Options): term.Check.Env =
     val scalars = node.vars.map { (c,v) =>
       prefix(c) -> v.sort
     }
     val subnodes = node.subnodes.map { (c,n) =>
-      envOfNode(prefix ++ names.Ref.fromComponent(c), n)
+      envOfNode(prefix ++ names.Ref.fromComponent(c), n, options)
     }
-    subnodes.fold(SortedMap.from(scalars))(_ ++ _)
+    val states =
+      if options.exposeStateVariables
+      then node.allSubnesteds.map { (n,p) =>
+        val i = n.INIT.map(r => prefix(r) -> Sort.Bool)
+        val bs = n.bindings.flatMap { (c,b) => b match
+          case Node.Binding.Equation(_, Flow.Pure(_)) =>
+            None
+          case Node.Binding.Equation(_, f) =>
+            Some(prefix(names.Ref(List(n.context), c)) -> f.sort)
+          case Node.Binding.Subnode(_, _) =>
+            None
+        }
+        SortedMap.from[names.Ref, Sort](bs ++ i)
+      }
+      else Seq()
+
+    (subnodes ++ states).fold(SortedMap.from(scalars))(_ ++ _)
 
   def nested(node: Node, n: Node.Nested, visible: SortedSet[names.Component], env: term.Check.Env, options: Options): Bindings =
     // PERF: this has the wrong complexity - visibleOfBinding should be cached
@@ -93,7 +117,10 @@ object Check:
 
   def binding(n: Node, b: Node.Binding, visible: SortedSet[names.Component], env: term.Check.Env, options: Options): Bindings =
     val envX = env.filter { (v,s) =>
-        visible.contains(v.fullyQualifiedPath.head)
+      // Include only the visible variables, as well as the state variables if
+      // the exposeStateVariables option is on (usually only during model
+      // checking)
+      visible.contains(v.fullyQualifiedPath.head) || (v.isStateRef && options.exposeStateVariables)
     }
     try
       b match

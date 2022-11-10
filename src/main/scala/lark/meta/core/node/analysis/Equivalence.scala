@@ -229,7 +229,13 @@ object Equivalence:
       val trees = classes(klass).flatMap { n =>
         n.op match
           case Op.Val(_) => List(Tree(n.op))
-          case Op.Var(_) => List(Tree(n.op))
+          // Because we might be inside a "when" context, some variables might
+          // be undefined when the clock goes off. The invariants really want
+          // to only refer to variables that are defined all the time, so for
+          // now only take state variables. My gut feeling is that interesting
+          // invariants only refer to state anyway, but maybe there are some
+          // interesting invariants where only one side is a state variable?
+          case Op.Var(ref) if ref.isStateRef => List(Tree(n.op))
           case Op.Prim(p)
            if maxDepth > 0 =>
             val childrenX = n.children.map(takeSimpleTrees(g0, classes, _, maxDepth - 1))
@@ -311,8 +317,7 @@ object Equivalence:
       // Add a constraint for each equation
       equations.foreach { (path, equationsX) =>
         val layerX = layer(path)
-        equationsX.foreach { (c, flow) =>
-          val ref = names.Ref.fromComponent(c)
+        equationsX.foreach { (ref, flow) =>
           layerX.equations += ref -> flow
           for (g <- Seq(layerX.boring, layerX.interesting)) {
             val id = insertTerm(g, flow)
@@ -326,13 +331,6 @@ object Equivalence:
         nested.INIT.foreach { init =>
           val layerX = layer(path)
           layerX.inits += init
-          // Add a binding `init = true -> false`, but only add it to the
-          // interesting graph because it's not clear from the transition
-          // system alone.
-          val g = layerX.interesting
-          // TODO: add init when typechecking environment includes init flags
-          // val i = g.add(Op.Arrow, g.add(Op.Val(Val.Bool(true))), g.add(Op.Val(Val.Bool(false))))
-          // g.merge(i, g.add(Op.Var(init)))
         }
       }
 
@@ -349,6 +347,10 @@ object Equivalence:
      * have some recursion that goes through multiple nodes.
      */
     def normalise(): Unit =
+      // TODO: here, or in assemble, we can sink pure expressions down to lower
+      // layers. (It's not so easy to sink streaming expressions though.)
+      // This would give the lower layers some more context.
+
       layers.foreach { (p,l) =>
         l.normalise()
       }
@@ -361,18 +363,38 @@ object Equivalence:
 
     /** Get invariants of all layers as pure expressions */
     def invariants: List[Exp] =
-      val env = core.node.Check.envOfNode(names.Prefix(), this.node)
-      val invs = layers.values.flatMap { l =>
-        l.invariants
-      }.toList
-      invs.map { trees =>
-        val exps = trees.map(expOfTree(env, _))
-        exps.zip(exps.drop(1)).map { (l,r) =>
-          Compound.app(term.prim.Table.Eq, l, r)
-        }.reduce { (l,r) =>
-          Compound.app(term.prim.Table.And, l, r)
+      val opts = core.node.Check.Options(exposeStateVariables = true)
+      val env  = core.node.Check.envOfNode(names.Prefix(), this.node, opts)
+      val invs = layers.flatMap { (p, l) =>
+        def eqs(trees: List[Tree[Op]]): Exp =
+          val exps = trees.map(expOfTree(env, _))
+          exps.zip(exps.drop(1)).map { (l,r) =>
+            Compound.app(term.prim.Table.Eq, l, r)
+          }.reduce { (l,r) =>
+            Compound.app(term.prim.Table.And, l, r)
+          }
+
+        // If there are multiple init flags, then we include an invariant that
+        // they're all equal. We don't use the equivalence class machinery for
+        // this because we also use the init flags to deal with invariants that
+        // refer to unguarded pres.
+        val inits =
+          if l.inits.length > 1
+          then Some(eqs(l.inits.toList.map(r => Tree(Op.Var(r)))))
+          else None
+
+        val rest = l.invariants.map { trees =>
+          val inv = eqs(trees)
+          // If the invariant refers to a "pre", then it will be undefined on
+          // the first step. Rather than trying to figure out whether it's OK,
+          // just make the invariant always true on the first step.
+          l.inits.headOption.fold(inv) { init =>
+            Compound.app(term.prim.Table.Or, Compound.var_(Sort.Bool, init), inv)
+          }
         }
-      }
+        inits ++ rest
+      }.toList
+      invs
 
     def expOfTree(env: term.Check.Env, tree: Tree[Op]): Exp = tree.op match
       case Op.Val(v) => Exp.Val(Val.unwrap(v))
@@ -478,15 +500,25 @@ object Equivalence:
         }
       }
 
-  def bindingsOfNode(node: Node): (mutable.HashMap[Node.Path, names.mutable.ComponentMap[Flow]], mutable.HashMap[Node.Path, names.mutable.ComponentMap[Node.Binding.Subnode]]) =
-    val equations = mutable.HashMap[Node.Path, names.mutable.ComponentMap[Flow]]()
+  def bindingsOfNode(node: Node): (mutable.HashMap[Node.Path, names.mutable.RefMap[Flow]], mutable.HashMap[Node.Path, names.mutable.ComponentMap[Node.Binding.Subnode]]) =
+    val equations = mutable.HashMap[Node.Path, names.mutable.RefMap[Flow]]()
     val subnodes  = mutable.HashMap[Node.Path, names.mutable.ComponentMap[Node.Binding.Subnode]]()
 
     node.allSubnesteds.foreach { (n,p) =>
       n.bindings.foreach { (c,b) =>
         b match
           case Node.Binding.Equation(_, flow) =>
-            equations.getOrElseUpdate(p, mutable.SortedMap()) += (c -> flow)
+            val ref = names.Ref.fromComponent(c)
+            // We include the internal state variables, because these retain
+            // their value when the clock is off inside "when" contexts. If the
+            // invariants referred to normal variables inside a "when", the
+            // values would be undefined and it wouldn't make sense.
+            val state = flow match
+              case Flow.Pure(_) => List()
+              case _ =>
+                List(names.Ref(List(n.context), c) -> Flow.Pure(Exp.Var(flow.sort, ref)))
+            val binds = (ref -> flow) :: state
+            equations.getOrElseUpdate(p, mutable.SortedMap()) ++= binds
           case b: Node.Binding.Subnode =>
             subnodes.getOrElseUpdate(p, mutable.SortedMap()) += (c -> b)
       }

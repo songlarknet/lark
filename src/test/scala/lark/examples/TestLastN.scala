@@ -10,7 +10,8 @@ import lark.meta.driver.{Prove, Compile, Grind, Dump}
 
 class TestLastN extends munit.FunSuite:
   test("lastN") {
-    // Use a high enough `n` so that we can't prove it with k-induction
+    // Use a high enough `n` so that we can't prove it with k-induction, to
+    // test out the invariant generation
     Prove.success(Prove.Options().withMaximumInductiveSteps(2)) { LemmaLastN(10) }
   }
 

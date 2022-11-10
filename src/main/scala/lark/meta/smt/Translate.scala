@@ -227,11 +227,7 @@ object Translate:
       SystemV.pure(compound.value(v))
 
     case Exp.Var(sort, ref) =>
-      // HACK: if the variable refers to the special ^state namespace, then
-      // look up that variable in the state instead of the row.
-      val stateVariable = (ref.prefix.exists(_.symbol == names.ComponentSymbol.STATE))
-
-      if (stateVariable)
+      if (ref.isStateRef)
         SystemV.state(ref, sort)
       else
         SystemV.row(ref, sort)

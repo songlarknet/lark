@@ -93,6 +93,10 @@ package object names:
       val docs = fullyQualifiedPath.map(_.ppr)
       pretty.ssep(docs, pretty.dot)
 
+    /** State variables are treated kind of specially in a few places... Hmm */
+    def isStateRef: Boolean =
+      prefix.exists(_.symbol == ComponentSymbol.STATE)
+
   object Ref:
     def fromComponent(name: Component) = Ref(List(), name)
 
