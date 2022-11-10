@@ -7,7 +7,7 @@ import lark.meta.core.node.Node
 import lark.meta.core.Prop.Judgment
 import lark.meta.core.{Prop, Sort}
 import lark.meta.core.term
-import lark.meta.core.term.{Exp, Flow, Prim, Val}
+import lark.meta.core.term.{Exp, Flow, prim, Prim, Val, Compound => ExpCompound}
 
 import lark.meta.smt.Solver
 import lark.meta.smt.Term.compound
@@ -27,13 +27,14 @@ object Translate:
   class Context(
     val nodes: Map[names.Ref, system.Node],
     val supply: names.mutable.Supply,
-    val options: Options)
+    val options: Options):
 
+    def expContext: ExpContext = ExpContext(supply, options)
+
+  /** We don't need node information to translate expressions. */
   class ExpContext(
-    val context: Context,
-    val node: Node):
-
-    def supply = context.supply
+    val supply: names.mutable.Supply,
+    val options: Options)
 
   def nodes(inodes: Iterable[Node], options: Options): system.Top =
     var map = Map[names.Ref, system.Node]()
@@ -50,25 +51,22 @@ object Translate:
 
     // We need to unbox each parameter with a bounded type to ensure that the
     // bounded integer constraints are added. Otherwise, the SMT translation
-    // would allow out-of-range values for unused parameters, which can be
-    // pretty confusing.
+    // would allow out-of-range values for unused parameters, which could be
+    // pretty confusing in counterexamples.
     val paramsS    = System.conjoin(node.params.map { p =>
       val x = node.xvar(p)
       x.sort match
         case s: Sort.Refinement =>
-          expr(ExpContext(context, node), Exp.Cast(Exp.Cast.Unbox(s), x)).system
+          expr(context.expContext, Exp.Cast(Exp.Cast.Unbox(s), x)).system
         case _ =>
-          expr(ExpContext(context, node), x).system
+          expr(context.expContext, x).system
     }.toSeq)
 
     def prop(judgment: Judgment): SystemJudgment =
-      judgment.term match
-        // LODO: deal with non-variables by creating a fresh row variable for them
-        case Exp.Var(s, v) =>
-          SystemJudgment(
-            List(),
-            v,
-            judgment)
+      SystemJudgment(
+        List(),
+        judgment.term,
+        judgment)
 
     val sysprops = System(
       relies     = node.relies.map(prop).toList,
@@ -99,22 +97,20 @@ object Translate:
 
   def binding(context: Context, node: Node, contextPrefix: names.Prefix, binding: Node.Binding): SystemV[Unit] = binding match
     case b: Node.Binding.Equation =>
-      val ec    = ExpContext(context, node)
       val xref  = names.Ref.fromComponent(b.lhs)
       val tstep =
         for
-          erhs <- flow(ec, contextPrefix, b)
+          erhs <- flow(context.expContext, contextPrefix, b)
           x    <- SystemV.row(xref, b.rhs.sort)
         yield compound.equal(x, erhs)
       SystemV.step(tstep)
 
     case b: Node.Binding.Subnode =>
       val v = b.subnode
-      val ec = ExpContext(context, node)
       val subnode = node.subnodes(v)
       val subsystem = context.nodes(subnode.klass)
 
-      val argsT  = b.args.map(expr(ec, _))
+      val argsT  = b.args.map(expr(context.expContext, _))
       val argsEq: List[SystemV[Unit]] =
         subnode.params.zip(argsT).map { (param,argT) =>
           for
@@ -128,7 +124,7 @@ object Translate:
       def pfx(p: names.Prefix) = names.Prefix(p.prefix :+ v)
       def pfxR(r: names.Ref) = names.Ref(List(v) ++ r.prefix, r.name)
       def pfxJ(j: SystemJudgment) =
-        SystemJudgment(j.hypotheses.map(pfxR), pfxR(j.consequent), j.judgment)
+        SystemJudgment(j.hypotheses.map(ExpCompound.substVV(pfxR(_), _)), ExpCompound.substVV(pfxR(_), j.consequent), j.judgment)
 
       val subrelies     = subsystem.system.relies.map(pfxJ)
       val subguarantees = subsystem.system.guarantees.map(pfxJ)
@@ -166,10 +162,11 @@ object Translate:
     case b: Node.Binding.Merge =>
       def go(scrut: Terms.Term, case1: (Val, Node.Nested)): SystemV[Unit] =
         val whenE  = compound.equal(scrut, compound.value(case1._1))
+        val whenX  = ExpCompound.app(prim.Table.Eq, b.scrutinee, ExpCompound.val_(case1._1))
         val subT   = nested(context, node, case1._2)
-        subT.when(context.supply, whenE)
+        subT.when(context.supply, whenE, whenX)
       for
-        s <- expr(ExpContext(context, node), b.scrutinee)
+        s <- expr(context.expContext, b.scrutinee)
         _ <- SystemV.conjoin(b.cases.map(go(s, _)))
       yield
         ()
@@ -177,7 +174,7 @@ object Translate:
     case b: Node.Binding.Reset =>
       val sub = nested(context, node, b.nested)
       for
-        kE    <- expr(ExpContext(context, node), b.clock)
+        kE    <- expr(context.expContext, b.clock)
         // Put a copy of sub's state inside row.reset. There won't be
         // any conflicts because the nested contexts inside sub must have
         // unique ids.
@@ -245,22 +242,20 @@ object Translate:
       yield compound.funapp(nameOfPrim(prim, sort), targs : _*)
 
     case Exp.Cast(_, e)
-      if !context.context.options.checkRefinement
+      if !context.options.checkRefinement
       => expr(context, e)
 
     // box(x : t) : { t | p }
     // requires   p(x);
     // guarantees \result.value == x;
     case Exp.Cast(Exp.Cast.Box(s), e) =>
-      val relyR  = context.supply.freshRef(names.ComponentSymbol.PROP, forceIndex = true)
+      // Allocate somewhere to store the result
       val boxR   = context.supply.freshRef(names.ComponentSymbol.BOX, forceIndex = true)
-
-      val relyJ = SystemJudgment(
-        List(), relyR,
-        Judgment(s"${s.pprString} bounds", s.refinesExp(e), Prop.Syntax.Generated.check, lark.meta.macros.Location.empty))
 
       for
         eT     <- expr(context, e)
+        // Make sure the input expression is a variable as we'll refer to it many times.
+        // "letRow" will return it as-is if it's a variable and bind it otherwise
         let    <- SystemV.letRow(s.logical, eT) { () =>
           context.supply.freshRef(names.ComponentSymbol.UNBOX, forceIndex = true)
         }
@@ -268,14 +263,16 @@ object Translate:
         refT = let._2
 
         refV  = Exp.Var(s.logical, ref)
-        relyT <- expr(context, s.refinesExp(refV))
+        relyE  = s.refinesExp(refV)
+        relyT <- expr(context, relyE)
+        relyJ  = SystemJudgment(
+          List(), relyE,
+          Judgment(s"${s.pprString} bounds", s.refinesExp(e), Prop.Syntax.Generated.check, lark.meta.macros.Location.empty))
 
-        relyTX <- SystemV.row(relyR, Sort.Bool)
         boxT   <- SystemV.row(boxR, s.logical)
 
-        _  <- SystemV.step(compound.equal(relyTX, relyT))
-        _  <- SystemV.step(compound.implies(relyTX, compound.equal(refT, boxT)))
-
+        _  <- SystemV.step(compound.equal(relyT, relyT))
+        _  <- SystemV.step(compound.implies(relyT, compound.equal(refT, boxT)))
         _  <- SystemV(System(guarantees = List(relyJ)), ())
       yield
         boxT
@@ -301,6 +298,13 @@ object Translate:
       case _ =>
         assert(false, s"translate ${exp.pprString}: can't unbox sort ${logical.pprString} as it's not a refinement")
 
+  /** Translate a pure expression to a term rather than a system.
+   * Cast-to-bounded-integer expressions, which can usually generate proof
+   * obligations, are treated as identity.
+  */
+  def termOfExpr(exp: Exp): Terms.Term =
+    val ec = ExpContext(names.mutable.Supply(List()), Options(checkRefinement = false))
+    expr(ec, exp).value
 
   def nameOfPrim(prim: Prim, sort: Sort): String = (prim, sort) match
     // Negate is printed as "-", but that conflicts with binary subtraction.

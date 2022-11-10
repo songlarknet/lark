@@ -3,9 +3,11 @@ package lark.meta.smt
 import lark.meta.base.{debug, names, pretty}
 import lark.meta.base.names.given
 import lark.meta.core.node.Node
+import lark.meta.core.node.analysis.Equivalence
+import lark.meta.core.term.{Exp, Compound => ExpCompound}
 import lark.meta.driver.Dump
-
 import lark.meta.smt.Term.compound
+
 import smtlib.trees.{Commands, CommandsResponses, Terms}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
@@ -45,9 +47,11 @@ object Prove:
         sys.top.system.sorries ++
         sys.top.system.relies
       val assumptionsS =
-        scala.collection.immutable.SortedSet.from(assumptions.map(_.consequent))
+        scala.collection.immutable.SortedSet.from(
+          assumptions.flatMap(p => ExpCompound.take.vars(p.consequent).map(_.v)))
       val obligationsS =
-        scala.collection.immutable.SortedSet.from(sys.top.system.guarantees.map(_.consequent))
+        scala.collection.immutable.SortedSet.from(
+          sys.top.system.guarantees.flatMap(p => ExpCompound.take.vars(p.consequent).map(_.v)))
 
       val tracesP = traces match
         case List() => List()
@@ -85,6 +89,13 @@ object Prove:
 
   /** Translate a judgment into an SMT-lib term at a given step. */
   def judgmentTerm(judgment: system.SystemJudgment, step: Int): Terms.Term =
+    def termOfExp(exp: lark.meta.core.term.Exp): Terms.Term =
+      // TODO subst bad
+      Term.renamePrefix(system.Prefix.state, statePrefix(step),
+      Term.renamePrefix(system.Prefix.stateX, statePrefix(step + 1),
+      Term.renamePrefix(system.Prefix.row, rowPrefix(step),
+        Translate.termOfExpr(exp))))
+
     // The judgment is of form `SoFar(hypotheses) => consequent`, so we
     // add the precondition that all of the hypotheses are true at all steps
     // up to and including now.
@@ -92,10 +103,11 @@ object Prove:
     val antecedents =
       for i <- 0 to step
           h <- judgment.hypotheses
-      yield compound.qid(rowPrefix(i)(h))
+      yield
+        termOfExp(h)
     compound.implies(
       compound.and(antecedents : _*),
-      compound.qid(rowPrefix(step)(judgment.consequent)))
+      termOfExp(judgment.consequent))
 
   def asserts(props: List[system.SystemJudgment], step: Int, solver: Solver): Unit =
     props.foreach { prop =>
@@ -134,7 +146,7 @@ object Prove:
     dump.traceP(sys.top, Dump.Prove.System, dumpKey)
 
     val props = Property.Map.from(topS.system.guarantees.map { j =>
-      j.consequent -> Property(j)
+      j.judgment -> Property(j)
     })
 
     val bmcC = new Channel(props)()
@@ -193,7 +205,7 @@ object Prove:
       propertiesRef.accumulateAndGet(mpProps, Property.Map.join)
 
     def update(props: List[Property]): Property.Map =
-      val mpProps = Property.Map.from(props.map(p => (p.judgment.consequent, p)))
+      val mpProps = Property.Map.from(props.map(p => (p.judgment.judgment, p)))
       update(mpProps)
 
     def counterexample(trace: Trace): Unit =

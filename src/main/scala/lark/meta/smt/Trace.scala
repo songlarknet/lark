@@ -262,7 +262,8 @@ case class Trace(steps: List[Trace.Row], invalidates: List[Property], source: Tr
   val pprOverflow  = pretty.Colour.Red.of("overflow")
 
   def invalidatesSet =
-    scala.collection.immutable.SortedSet.from(invalidates.map(_.judgment.consequent))
+    val vars = invalidates.flatMap(p => Compound.take.vars(p.judgment.consequent))
+    scala.collection.immutable.SortedSet.from(vars.map(_.v))
 
 object Trace:
   sealed trait Source
@@ -343,9 +344,16 @@ object Trace:
 
     val bads  = judgments.filter { prop =>
       stepD.exists { step =>
-        step.heap(prop.judgment.consequent) match
+        val heap = step.heap
+        val eval = Eval.exp(heap, prop.judgment.consequent, Eval.Options(checkRefinement = false))
+        eval match
           case Val.Bool(b) => !b
-          case _ => false
+          case _ =>
+            lark.meta.base.assertions.implausible(
+              "Evaluating property returned non-boolean",
+              "heap" -> heap,
+              "prop" -> prop,
+              "eval" -> eval)
       }
     }
 

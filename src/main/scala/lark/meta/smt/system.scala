@@ -7,7 +7,7 @@ import lark.meta.core.node.Builder
 import lark.meta.core.node.Builder.Node
 import lark.meta.core.Prop
 import lark.meta.core.Sort
-import lark.meta.core.term.{Exp, Prim, Val}
+import lark.meta.core.term.{Exp, Prim, Val, Compound => ExpCompound, prim}
 
 import lark.meta.smt.Solver
 import lark.meta.smt.Term.compound
@@ -108,8 +108,14 @@ object system:
 
     /** Slow the clock of a system, so it only steps when the boolean
      * expression `klock` is true.
+     *
+     * LODO: the judgments use Exp, but the rest of the system still uses SMT
+     * terms. Eventually I want to move everything over to Exp, so that we can
+     * evaluate them directly and so the translation to SMT is very small.
+     * In the mean time, this takes the klock as an SMT term and an Exp because
+     * we need to modify the judgments.
      */
-    def when(supply: names.mutable.Supply, klock: Terms.Term): System =
+    def when(supply: names.mutable.Supply, klock: Terms.Term, klockX: Exp): System =
       val allSame =
         for s <- state.refs(names.Prefix(List()))
         yield compound.equal(
@@ -117,43 +123,29 @@ object system:
           compound.qid(system.Prefix.stateX(s)))
       val stay = compound.and(allSame.toSeq : _*)
 
-      def impliesRef(r: names.Ref): SystemV[names.Ref] =
-        val rr = supply.freshRef(names.ComponentSymbol.PROP, forceIndex = true)
-        for
-          r0 <- SystemV.row(r, Sort.Bool)
-          rx <- SystemV.row(rr, Sort.Bool)
-          _ <- SystemV.step(compound.equal(rx, compound.implies(klock, r0)))
-        yield
-          rr
+      def impliesX(e: Exp): Exp =
+        ExpCompound.app(prim.Table.Implies, klockX, e)
 
-      def judgment(j: SystemJudgment): SystemV[SystemJudgment] =
-        val hypsS = j.hypotheses.map(impliesRef(_))
-        val consequentS = impliesRef(j.consequent)
-        for
-          hyps <- SystemV.conjoin(hypsS)
-          consequent <- consequentS
-        yield
-          SystemJudgment(hyps.toList, consequent, j.judgment)
+      def judgment(j: SystemJudgment): SystemJudgment =
+        val hyps = j.hypotheses.map(impliesX(_))
+        val consequent = impliesX(j.consequent)
+        SystemJudgment(hyps.toList, consequent, j.judgment)
 
-      def judgments(j: List[SystemJudgment]): SystemV[List[SystemJudgment]] =
-        for
-          js <- SystemV.conjoin(j.map(judgment(_)))
-        yield
-          js.toList
+      def judgments(js: List[SystemJudgment]): List[SystemJudgment] =
+        js.map(judgment(_))
 
       val relies     = judgments(this.relies)
       val guarantees = judgments(this.guarantees)
       val sorries    = judgments(this.sorries)
-      val sysJ       = relies.system <> guarantees.system <> sorries.system
 
       System(
         state = this.state,
         row   = this.row,
         init  = this.init,
         step  = compound.ite(klock, this.step, stay),
-        relies     = relies.value,
-        guarantees = guarantees.value,
-        sorries    = sorries.value) <> sysJ
+        relies     = relies,
+        guarantees = guarantees,
+        sorries    = sorries)
 
     /** Reset a system whenever boolean expression `klock` is true.
      * Fresh is a fresh name such that row.fresh is not used.
@@ -235,8 +227,8 @@ object system:
     def map[U](f: T => U): SystemV[U] =
       flatMap(t => SystemV.pure(f(t)))
 
-    def when(supply: names.mutable.Supply, klock: Terms.Term): SystemV[T] =
-      SystemV(this.system.when(supply, klock), this.value)
+    def when(supply: names.mutable.Supply, klock: Terms.Term, klockX: Exp): SystemV[T] =
+      SystemV(this.system.when(supply, klock, klockX), this.value)
 
     def reset(fresh: names.Component, klock: Terms.Term): SystemV[T] =
       SystemV(this.system.reset(fresh, klock), this.value)
@@ -315,13 +307,12 @@ object system:
 
 
   /** A judgment with hypotheses.
-   * The hypotheses and consequent refer to row variables excluding the row
-   * prefix. All hypotheses must be true for current and previous steps:
-   * > SoFar(row(hyps_0) and ... and row(hyps_i)) => row(consequent)
+   * All hypotheses must be true for current and previous steps:
+   * > SoFar(hyps_0 and ... and hyps_i) => consequent
    *
    * This meaning is different from the bare implication `hyps => consequent`.
    */
-  case class SystemJudgment(hypotheses: List[names.Ref], consequent: names.Ref, judgment: Prop.Judgment) extends pretty.Pretty:
+  case class SystemJudgment(hypotheses: List[Exp], consequent: Exp, judgment: Prop.Judgment) extends pretty.Pretty:
     def ppr =
       val hyp = hypotheses match
         case Nil => pretty.emptyDoc

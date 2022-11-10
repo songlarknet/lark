@@ -30,8 +30,6 @@ class P extends HedgehogSuite:
 
   val solver = Solver.gimme()
   val supply = names.mutable.Supply(List())
-  // Translation requires a dummy node. Refactor translation to remove this.
-  val dummy  = node.Builder.Node(supply, List(), names.Ref.fromComponent(names.Component(names.ComponentSymbol.fromScalaSymbol("dummy")))).freeze
 
   def declareConsts(solver: Solver, ns: names.Namespace[Sort], prefix: names.Prefix) =
       solver.declareConsts(
@@ -42,9 +40,7 @@ class P extends HedgehogSuite:
       )
 
   def solverEval(heap: Eval.Heap, exp: Exp, options: Translate.Options = Translate.Options()): Val =
-    val xctx = Translate.ExpContext(
-      Translate.Context(Map.empty, supply, options),
-      dummy)
+    val xctx = Translate.ExpContext(supply, options)
     solver.pushed {
       val heaps = heap.map { case (k0,v0) =>
         for

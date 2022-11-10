@@ -1,6 +1,7 @@
 package lark.meta.smt
 
 import lark.meta.base.{debug, names, pretty}
+import lark.meta.core.Prop
 
 sealed case class Property(
   judgment: system.SystemJudgment,
@@ -41,9 +42,9 @@ sealed case class Property(
 
 object Property:
 
-  type Map = names.immutable.RefMap[Property]
+  type Map = scala.collection.immutable.Map[Prop.Judgment, Property]
   object Map:
-    export scala.collection.immutable.SortedMap._
+    export scala.collection.immutable.Map._
 
     def join(map1: Map, map2: Map): Map =
       map2.foldLeft(map1) { case (acc, (ref, prop)) =>
