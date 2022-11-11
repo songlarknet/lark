@@ -69,7 +69,7 @@ object Prove:
 
     // PERF: this could be concurrent
     val equivalences =
-      core.node.analysis.Equivalence.program(prepared, options.dump, Dump.Prove.Equiv)
+      core.node.analysis.Equivalence.program(prepared, options.equivalence, options.dump, Dump.Prove.Equiv)
     val futures = prepared.map { node =>
       val sys   = smt.Translate.nodes(node.allNodes, options.check.translate)
       val equiv = equivalences(node.klass)
@@ -88,6 +88,8 @@ object Prove:
   case class Options(
     check: smt.Prove.Options = smt.Prove.Options(),
     trace: smt.Trace.Options = smt.Trace.Options(),
+    equivalence: lark.meta.core.node.analysis.Equivalence.Options
+                             = lark.meta.core.node.analysis.Equivalence.Options(),
     dump:  Dump              = Dump.quiet,
   ):
     def disableRefinement: Options =

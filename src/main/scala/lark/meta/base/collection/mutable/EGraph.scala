@@ -198,6 +198,31 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
     usages += (id -> usage)
     id
 
+  /** Modify graph by running `work` until it no longer changes it.
+   * The options determine the maximum number of iterations, and whether to
+   * die or warn the user when we reach the limit.
+  */
+  def fixpoint(options: EGraph.FixOptions)(work: () => Unit): Unit =
+    var v = this.version - 1
+    var i = 0
+    while (v != this.version)
+      v  = this.version
+      i += 1
+      work()
+
+      if i >= options.maximumIterations
+      then
+        val msg   = "EGraph.fixpoint: exceeded maximum iterations. This probably means that there's a bug and the e-graph is growing indefinitely."
+        val notes = Seq("iterations" -> i, "graph" -> this)
+        options.exceed match
+          case EGraph.FixOptions.Silent =>
+          case EGraph.FixOptions.Warn =>
+            lark.meta.base.assertions.warn(msg, notes*)
+          case EGraph.FixOptions.Die =>
+            lark.meta.base.assertions.implausible(msg, notes*)
+        return
+    println(s"EGraph.fixpoint: required ${i} iterations")
+
   def ppr =
     // Check if the e-graph needs to be rebuilt and print a warning if so. We
     // can't rebuild the e-graph here, as pretty-printing must not mutate.
@@ -318,6 +343,15 @@ object EGraph:
       assert(this.parents.isEmpty, "cannot clone into non-empty UnionFind structure - it would mess up the identifiers")
       this.parents ++= old.parents
 
+
+  /** Maximum iterations to perform fixpoint to, and what to do if we exceed
+   * the limit. */
+  case class FixOptions(maximumIterations: Int = 100, exceed: FixOptions.Exceed = FixOptions.Warn)
+  object FixOptions:
+    sealed trait Exceed
+    case object Silent extends Exceed
+    case object Warn   extends Exceed
+    case object Die    extends Exceed
 
   // class Match[T](graph: EGraph[T]):
   //   val classes = graph.classes

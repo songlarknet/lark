@@ -17,6 +17,18 @@ import scala.collection.immutable
 import scala.collection.mutable
 
 object Equivalence:
+
+  /** Options for equivalence analysis
+   *
+   * PERF: hard-code depth limit to 100 to break cycles. Real fix is to
+   * make `takeSimpleTrees` keep track of what it's seen or something, but
+   * in practice who could ever want an invariant term with height 100?
+   */
+  case class Options(
+    fix: EGraph.FixOptions = EGraph.FixOptions(),
+    invariantTermDepths: Seq[Int] = Seq(0, 1, 2, 3, 100)
+  )
+
   /** The equivalence graphs are composed of nodes where each node has an
    * operator (Op) applied to a possibly empty list of arguments. Each argument
    * refers to an equivalence class.
@@ -91,6 +103,9 @@ object Equivalence:
   /** A "layer" is a set of equations that all operate on the same clock. The
    * equations include those from inside subnodes.
    *
+   * @param options
+   * @param inits
+   *  all of the init flags in the nested contexts at this clock layer
    * @param equations
    *  a set of bindings that all have the same clock
    * @param boring
@@ -100,6 +115,7 @@ object Equivalence:
    *  an egraph with interesting rewrites applied
    */
   class Layer(
+    val options: Options,
     val inits: mutable.ArrayBuffer[names.Ref] = mutable.ArrayBuffer[names.Ref](),
     val equations: names.mutable.RefMap[Flow] = mutable.SortedMap[names.Ref, Flow](),
     val boring: EGraph[Op] = EGraph[Op](),
@@ -203,16 +219,11 @@ object Equivalence:
       // Clone the boring graph. We use it to decide which invariants are
       // novel. We update it when adding new invariants to avoid having too
       // many duplicates of the same fact
-      val g0   = boring.clone()
-      val invs = mutable.ArrayBuffer[List[Tree[Op]]]()
-      // TODO: invariants should only refer to state variables and values
-      // because they retain their value even when the clock is off
+      val g0      = boring.clone()
+      val invs    = mutable.ArrayBuffer[List[Tree[Op]]]()
       val classes = interesting.classes
       // Try to add invariants for small terms before looking at larger ones
-      // PERF: hard-code depth limit to 100 to break cycles. Real fix is to
-      // make `takeSimpleTrees` keep track of what it's seen or something, but
-      // in practice who could ever want an invariant term with height 100?
-      Seq(0, 1, 2, 100).foreach { maxDepth =>
+      options.invariantTermDepths.foreach { maxDepth =>
         classes.foreach { (klass, nodes) =>
           val ns = takeSimpleTrees(g0, classes, klass, maxDepth)
           if ns.length > 1
@@ -261,6 +272,7 @@ object Equivalence:
         }
 
   class Layers(
+    val options: Options,
     val node: Node,
     val layers: mutable.HashMap[Node.Path, Layer] = mutable.HashMap[Node.Path, Layer]()
   ) extends pretty.Pretty:
@@ -277,7 +289,7 @@ object Equivalence:
         pretty.indent(pretty.vsep(invariantsP)))
 
     def layer(p: Node.Path): Layer =
-      layers.getOrElseUpdate(p, Layer())
+      layers.getOrElseUpdate(p, Layer(options))
 
     /** Assemble the layers from subnodes' layers as well as the current
      * node's bindings. */
@@ -308,8 +320,8 @@ object Equivalence:
             snLayer.equations.foreach { (ref, eqn) =>
               layerX.equations += prefix(ref) -> Compound.substVV(prefix(_), eqn)
             }
-            appendEGraph(prefix, snLayer.boring, layerX.boring)
-            appendEGraph(prefix, snLayer.interesting, layerX.interesting)
+            this.appendEGraph(prefix, snLayer.boring, layerX.boring)
+            this.appendEGraph(prefix, snLayer.interesting, layerX.interesting)
           }
         }
       }
@@ -415,18 +427,54 @@ object Equivalence:
           "tree" -> tree)
 
 
-  def program(nodes: List[Node], dump: debug.Options, stage: debug.Stage): names.immutable.RefMap[Layers] =
+    /** Append a subnode graph (source) into the destination graph (dest). Any
+     * variable references in the subnode graph are prefixed with the prefix. */
+    def appendEGraph(prefix: names.Prefix, source: EGraph[Op], dest: EGraph[Op]): Unit =
+      // Mapping from e-classes in the source to e-classes in the destination
+      val destClass = mutable.HashMap[source.Class, dest.Class]()
+      // Both graphs must be canonical because we're going to use equivalence
+      // information from both.
+      source.rebuild()
+      dest.rebuild()
+      dest.fixpoint(options.fix) { () =>
+        source.classes.foreach { (klass, enodes) =>
+          val nodesX = enodes.map { n =>
+            try
+              // Check if all child classes have been copied. If not, catch
+              // exception and skip this one for now.
+              val childrenX = n.children.map(destClass(_))
+              val opX = n.op match
+                case Op.Var(ref) =>
+                  Op.Var(prefix(ref))
+                case op =>
+                  op
+
+              val put = dest.add(opX, childrenX*)
+              destClass.get(klass) match
+                case Some(destClassX) =>
+                  dest.merge(put, destClassX)
+                  dest.rebuild()
+                case None =>
+                  destClass += (klass -> put)
+            catch
+              // Skip
+              case _: NoSuchElementException =>
+          }
+        }
+      }
+
+  def program(nodes: List[Node], options: Options, dump: debug.Options, stage: debug.Stage): names.immutable.RefMap[Layers] =
     val mpNodeLayers = mutable.SortedMap[names.Ref, Layers]()
     nodes.foreach { n =>
-      val layers = node(n, mpNodeLayers)
+      val layers = node(n, mpNodeLayers, options)
       dump.traceP(layers, stage, Some(n.klass.pprString))
       mpNodeLayers += n.klass -> layers
     }
     immutable.SortedMap.from(mpNodeLayers)
 
 
-  def node(node: Node, mpNodeLayers: names.mutable.RefMap[Layers]): Layers =
-    val layers = Layers(node)
+  def node(node: Node, mpNodeLayers: names.mutable.RefMap[Layers], options: Options): Layers =
+    val layers = Layers(options, node)
     layers.assemble(mpNodeLayers)
     layers.normalise()
     layers.crank()
@@ -462,44 +510,6 @@ object Equivalence:
       graph.add(Op.Arrow, insertTerm(graph, a), insertTerm(graph, b))
 
 
-  /** Append a subnode graph (source) into the destination graph (dest). Any
-   * variable references in the subnode graph are prefixed with the prefix. */
-  def appendEGraph(prefix: names.Prefix, source: EGraph[Op], dest: EGraph[Op]): Unit =
-    // Mapping from e-classes in the source to e-classes in the destination
-    val destClass = mutable.HashMap[source.Class, dest.Class]()
-    // Both graphs must be canonical because we're going to use equivalence
-    // information from both.
-    source.rebuild()
-    dest.rebuild()
-    var v = dest.version - 1
-    // Run to a fixpoint until we stop changing the destination.
-    while (v != dest.version)
-      v = dest.version
-      source.classes.foreach { (klass, enodes) =>
-        val nodesX = enodes.map { n =>
-          try
-            // Check if all child classes have been copied. If not, catch
-            // exception and skip this one for now.
-            val childrenX = n.children.map(destClass(_))
-            val opX = n.op match
-              case Op.Var(ref) =>
-                Op.Var(prefix(ref))
-              case op =>
-                op
-
-            val put = dest.add(opX, childrenX*)
-            destClass.get(klass) match
-              case Some(destClassX) =>
-                dest.merge(put, destClassX)
-                dest.rebuild()
-              case None =>
-                destClass += (klass -> put)
-          catch
-            // Skip
-            case _: NoSuchElementException =>
-        }
-      }
-
   def bindingsOfNode(node: Node): (mutable.HashMap[Node.Path, names.mutable.RefMap[Flow]], mutable.HashMap[Node.Path, names.mutable.ComponentMap[Node.Binding.Subnode]]) =
     val equations = mutable.HashMap[Node.Path, names.mutable.RefMap[Flow]]()
     val subnodes  = mutable.HashMap[Node.Path, names.mutable.ComponentMap[Node.Binding.Subnode]]()
@@ -513,10 +523,11 @@ object Equivalence:
             // their value when the clock is off inside "when" contexts. If the
             // invariants referred to normal variables inside a "when", the
             // values would be undefined and it wouldn't make sense.
+            // Only "pre" and "fby" have state variables.
             val state = flow match
-              case Flow.Pure(_) => List()
-              case _ =>
+              case Flow.Fby(_, _) | Flow.Pre(_) =>
                 List(names.Ref(List(n.context), c) -> Flow.Pure(Exp.Var(flow.sort, ref)))
+              case _ => List()
             val binds = (ref -> flow) :: state
             equations.getOrElseUpdate(p, mutable.SortedMap()) ++= binds
           case b: Node.Binding.Subnode =>

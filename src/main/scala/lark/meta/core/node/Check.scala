@@ -90,10 +90,10 @@ object Check:
       then node.allSubnesteds.map { (n,p) =>
         val i = n.INIT.map(r => prefix(r) -> Sort.Bool)
         val bs = n.bindings.flatMap { (c,b) => b match
-          case Node.Binding.Equation(_, Flow.Pure(_)) =>
-            None
-          case Node.Binding.Equation(_, f) =>
+          case Node.Binding.Equation(_, f@(Flow.Pre(_) | Flow.Fby(_, _))) =>
             Some(prefix(names.Ref(List(n.context), c)) -> f.sort)
+          case Node.Binding.Equation(_, _) =>
+            None
           case Node.Binding.Subnode(_, _) =>
             None
         }
