@@ -226,17 +226,18 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
   def ppr =
     // Check if the e-graph needs to be rebuilt and print a warning if so. We
     // can't rebuild the e-graph here, as pretty-printing must not mutate.
+    val classes = this.classes
     (if this.worklist.nonEmpty
     then pretty.text("Dirty e-graph!") <+> pretty.tupleP(this.worklist.toSeq) <> pretty.line
     else pretty.emptyDoc) <>
-    pretty.vsep(this.classes.map { (c,ns) =>
+    pretty.vsep(classes.map { (c,ns) =>
       val canonP = pretty.vsep(ns.toSeq.flatMap { n =>
         val canon = this.canonicalize(n)
         if canon != n
         then Some(pretty.text("  !!! e-graph invariant failed: not canonical ") <> n.ppr <> pretty.text(" -> ") <> canon.ppr <> pretty.line)
         else None
       })
-      val nsP = pretty.ssep(ns.toSeq.map(_.ppr), pretty.comma <> pretty.space)
+      val nsP = pretty.ssep(ns.toSeq.map(_.pprDepth(classes, 5)), pretty.comma <> pretty.space)
       canonP <> c.ppr <+> pretty.text(":=") <+> pretty.braces(pretty.space <> nsP <> pretty.space)
     }.toSeq)
 
@@ -269,6 +270,19 @@ object EGraph:
     def ppr =
       if children.nonEmpty
       then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(_.ppr)))
+      else pretty.value(op)
+
+    def pprDepth(classes: mutable.SortedMap[Id, mutable.HashSet[Node[T]]], depth: Int): pretty.Doc =
+      def rec(k: Id, depth: Int) =
+        if depth > 0
+        then classes.get(k).flatMap(_.headOption) match
+          case None => k.ppr
+          case Some(ns) =>
+            k.ppr <> pretty.text("@") <> ns.pprDepth(classes, depth - 1)
+        else
+          k.ppr
+      if children.nonEmpty
+      then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(rec(_, depth))))
       else pretty.value(op)
 
   /** Trees represent a specific, concrete term. It's really just an expression
@@ -346,55 +360,9 @@ object EGraph:
 
   /** Maximum iterations to perform fixpoint to, and what to do if we exceed
    * the limit. */
-  case class FixOptions(maximumIterations: Int = 100, exceed: FixOptions.Exceed = FixOptions.Warn)
+  case class FixOptions(maximumIterations: Int = 100, exceed: FixOptions.Exceed = FixOptions.Die)
   object FixOptions:
     sealed trait Exceed
     case object Silent extends Exceed
     case object Warn   extends Exceed
     case object Die    extends Exceed
-
-  // class Match[T](graph: EGraph[T]):
-  //   val classes = graph.classes
-
-  //   object take:
-  //     def unop(k: graph.Class): Seq[(T, graph.Class)] =
-  //       classes(k).toSeq.flatMap { n =>
-  //         if n.children.length == 1
-  //         then Some((n.op, n.children.head))
-  //         else None
-  //       }
-
-  //     def pre(k: graph.Class): Seq[graph.Class] =
-  //       unop(k).flatMap { (op,arg) =>
-  //         if op == Pre
-  //         then Some(arg)
-  //         else None
-  //       }
-
-  //     def pure(k: graph.Class): Seq[(T, List[graph.Class])] =
-  //       classes(k).toSeq.flatMap { n =>
-  //         if n.op.isPure
-  //         then Some((n.op, n.children))
-  //         else None
-  //       }
-
-  //   object make:
-  //     def pre(p: graph.Class): graph.Class =
-  //       graph.add(Op.Pre, p)
-  //     def op(op: T, p: graph.Class*): graph.Class =
-  //       graph.add(op, p*)
-
-  //   def match1(k: graph.Class): Seq[graph.Class] =
-  //     for
-  //       arg       <- take.pre(k)
-  //       (op,args) <- take.pure(arg)
-  //     yield
-  //       make.op(op, args.map(make.pre(_))*)
-
-  //   // pre (map f e) = map f (pre e)
-  //   // m.take(Pre) match
-  //   //   case List(m.node(_ : Map, e)) => e
-
-
-  //   // e -> e = e
-  // object Match

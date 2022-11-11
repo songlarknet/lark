@@ -26,7 +26,8 @@ object Equivalence:
    */
   case class Options(
     fix: EGraph.FixOptions = EGraph.FixOptions(),
-    invariantTermDepths: Seq[Int] = Seq(0, 1, 2, 3, 100)
+    // TODO: something's wrong with extraction, getting terms that should be obvious
+    invariantTermDepths: Seq[Int] = Seq(0, 1)
   )
 
   /** The equivalence graphs are composed of nodes where each node has an
@@ -205,14 +206,29 @@ object Equivalence:
           (graph.add(Op.Arrow, id1, id2), depsX1 ++ depsX2)
 
       this.equations.foreach { (ref,flow) =>
-        val (id, deps) = unfoldF(flow, ref, empty)
-        if deps.contains(ref) then
-          val mubind = graph.add(Op.MuBinder, id)
-          val refC = graph.add(Op.Var(ref))
-          graph.merge(refC, mubind)
+        // TODO-PERF: sometime: only add µ for streams, because they're really necessary for recursion
+        if true // !flow.isInstanceOf[Flow.Pure]
+        then
+          val (id, deps) = unfoldF(flow, ref, empty)
+          if deps.contains(ref) then
+            val mubind = graph.add(Op.MuBinder, id)
+            val refC = graph.add(Op.Var(ref))
+            graph.merge(refC, mubind)
       }
 
       graph.rebuild()
+
+    /** Turn the crank until we have saturated */
+    def crank(): Unit =
+      this.boring.fixpoint(options.fix) { () =>
+        equivalence.Rewrite.Boring.step(this.boring)
+        this.boring.rebuild()
+      }
+      this.boring.fixpoint(options.fix) { () =>
+        equivalence.Rewrite.Boring.step(this.interesting)
+        equivalence.Rewrite.Interesting.step(this.interesting)
+        this.interesting.rebuild()
+      }
 
     /** Get the "interesting" invariants */
     def invariants: List[List[Tree[Op]]] =
@@ -220,24 +236,35 @@ object Equivalence:
       // novel. We update it when adding new invariants to avoid having too
       // many duplicates of the same fact
       val g0      = boring.clone()
+      def crankX() =
+        // g0.rebuild()
+        // g0.fixpoint(options.fix) { () =>
+          equivalence.Rewrite.Boring.step(g0)
+          // g0.rebuild()
+        // }
+
       val invs    = mutable.ArrayBuffer[List[Tree[Op]]]()
       val classes = interesting.classes
       // Try to add invariants for small terms before looking at larger ones
       options.invariantTermDepths.foreach { maxDepth =>
         classes.foreach { (klass, nodes) =>
           val ns = takeSimpleTrees(g0, classes, klass, maxDepth)
-          if ns.length > 1
+          crankX()
+          val nsX = ns.distinctBy(g0.add(_))
+          if nsX.length > 1
           then
             // Record invariant and merge them so we don't record it again
-            invs += ns
-            ns.map(g0.add(_)).reduce(g0.merge(_, _))
-            g0.rebuild()
+            invs += nsX
+            nsX.map(g0.add(_)).reduce(g0.merge(_, _))
+            crankX()
         }
       }
       invs.toList
 
     def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxDepth: Int): List[Tree[Op]] =
-      val trees = classes(klass).flatMap { n =>
+      // TODO: XXX: HACK: e-graphs are messed up
+      val k = this.interesting.find(klass)
+      val trees = classes.getOrElse(this.interesting.find(k), mutable.HashSet()).flatMap { n =>
         n.op match
           case Op.Val(_) => List(Tree(n.op))
           // Because we might be inside a "when" context, some variables might
@@ -370,8 +397,9 @@ object Equivalence:
 
     /** Turn the crank until we have saturated */
     def crank(): Unit =
-      // TODO: do interesting work
-      ()
+      layers.foreach { (p,l) =>
+        l.crank()
+      }
 
     /** Get invariants of all layers as pure expressions */
     def invariants: List[Exp] =
