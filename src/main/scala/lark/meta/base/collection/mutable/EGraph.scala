@@ -221,7 +221,6 @@ class EGraph[T] extends Cloneable with pretty.Pretty:
           case EGraph.FixOptions.Die =>
             lark.meta.base.assertions.implausible(msg, notes*)
         return
-    println(s"EGraph.fixpoint: required ${i} iterations")
 
   def ppr =
     // Check if the e-graph needs to be rebuilt and print a warning if so. We
@@ -275,7 +274,8 @@ object EGraph:
     def pprDepth(classes: mutable.SortedMap[Id, mutable.HashSet[Node[T]]], depth: Int): pretty.Doc =
       def rec(k: Id, depth: Int) =
         if depth > 0
-        then classes.get(k).flatMap(_.headOption) match
+             // Choose a node to display, preferring leaves
+        then classes.get(k).flatMap(ns => ns.toList.sortBy(_.children.length).headOption) match
           case None => k.ppr
           case Some(ns) =>
             k.ppr <> pretty.text("@") <> ns.pprDepth(classes, depth - 1)

@@ -218,6 +218,8 @@ object Rewrite:
     // > (µ. a ⊙ b ⊙ (z -> pre µ0))
     // > ==rewrite=>
     // > (µ. a ⊙ (z -> pre µ0)) ⊙ (µ. b ⊙ (z -> pre µ0))
+    // TODO: is there a way to rearrange recursive binders so that the
+    // invariant we want refers to only state vars?
     add("🐱 go µ") { k =>
       for
         body <- take.muBinder(k)
@@ -232,7 +234,6 @@ object Rewrite:
         _ <- take.muRef0(mu)
         if !summon[RuleApp].refersToMu0(a)
         if !summon[RuleApp].refersToMu0(b)
-        _ = println(s"cat go ${k.pprString} ${a} ${b} ${z} ${premu}")
       yield
         make.prim(p,
           make.muBinder(make.prim(p, a, make.arrow(z, premu))),
@@ -293,8 +294,6 @@ object Rewrite:
       // Rebuild classes for logging
       val classesX = graph.classes
       matches.foreach { (name, k, result) =>
-        // println(s"Applying rule ${name}: merge ${k.pprString} with ${result.pprString}")
-        // println(s"   { ${classesX(graph.find(k)).map(_.pprString).mkString(", ")} } ~> { ${classesX(graph.find(result)).map(_.pprString).mkString(", ")} }")
         graph.merge(k, result)
       }
 

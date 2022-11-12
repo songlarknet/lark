@@ -26,8 +26,7 @@ object Equivalence:
    */
   case class Options(
     fix: EGraph.FixOptions = EGraph.FixOptions(),
-    // TODO: something's wrong with extraction, getting terms that should be obvious
-    invariantTermDepths: Seq[Int] = Seq(0, 1)
+    invariantTermDepths: Seq[Int] = Seq(0, 1, 2, 3)
   )
 
   /** The equivalence graphs are composed of nodes where each node has an
@@ -116,6 +115,7 @@ object Equivalence:
    *  an egraph with interesting rewrites applied
    */
   class Layer(
+    val path: Node.Path,
     val options: Options,
     val inits: mutable.ArrayBuffer[names.Ref] = mutable.ArrayBuffer[names.Ref](),
     val equations: names.mutable.RefMap[Flow] = mutable.SortedMap[names.Ref, Flow](),
@@ -240,7 +240,7 @@ object Equivalence:
         // g0.rebuild()
         // g0.fixpoint(options.fix) { () =>
           equivalence.Rewrite.Boring.step(g0)
-          // g0.rebuild()
+          g0.rebuild()
         // }
 
       val invs    = mutable.ArrayBuffer[List[Tree[Op]]]()
@@ -273,7 +273,11 @@ object Equivalence:
           // now only take state variables. My gut feeling is that interesting
           // invariants only refer to state anyway, but maybe there are some
           // interesting invariants where only one side is a state variable?
-          case Op.Var(ref) if ref.isStateRef => List(Tree(n.op))
+          // XXX: allow non-state refs for levels without merge/when:
+          // invariants about splitting recursion don't mention only state
+          case Op.Var(ref)
+            if ref.isStateRef || !path.exists(p => p.isInstanceOf[Node.Path.Entry.Merge]) =>
+            List(Tree(n.op))
           case Op.Prim(p)
            if maxDepth > 0 =>
             val childrenX = n.children.map(takeSimpleTrees(g0, classes, _, maxDepth - 1))
@@ -316,7 +320,7 @@ object Equivalence:
         pretty.indent(pretty.vsep(invariantsP)))
 
     def layer(p: Node.Path): Layer =
-      layers.getOrElseUpdate(p, Layer(options))
+      layers.getOrElseUpdate(p, Layer(p, options))
 
     /** Assemble the layers from subnodes' layers as well as the current
      * node's bindings. */
@@ -495,7 +499,13 @@ object Equivalence:
     val mpNodeLayers = mutable.SortedMap[names.Ref, Layers]()
     nodes.foreach { n =>
       val layers = node(n, mpNodeLayers, options)
-      dump.traceP(layers, stage, Some(n.klass.pprString))
+      // PERF: this tracing is taking a while because it's forcing the invariants sequentially.
+      // refactor to compute invariants differently... could do it more compositionally
+      import scala.concurrent.ExecutionContext.Implicits.global
+      import scala.concurrent.Future
+      Future {
+        dump.traceP(layers, stage, Some(n.klass.pprString))
+      }
       mpNodeLayers += n.klass -> layers
     }
     immutable.SortedMap.from(mpNodeLayers)
