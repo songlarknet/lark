@@ -40,7 +40,7 @@ but as our programs got bigger…
 We can't always prove what we want, even if it's true.
 
 There was one particular class of properties that we had issues with.
-Suppose we have a node that checks if an input signal coming from the outside world is "good".
+Suppose we have a controller that checks if an input signal coming from the outside world is "good".
 There are a bunch of criteria for what constitutes a good signal, but one criterion is that the delta
 has to be below some threshold for the last ten samples or something.
 
@@ -57,7 +57,8 @@ tel
 The `lastn` node has some internal state for its counter, and it returns a stream of booleans.
 
 
-Here's a small part of the function's contract, with the implementation hidden:
+We'll use `lastn` to implement `signal_valid`, which checks if the signal is good.
+Here is a small part of the contract, with the implementation hidden:
 
 ```
 function delta_valid(input1: int, input2: int)
@@ -78,7 +79,7 @@ returns (ok: bool)
 
 The contract says that the signal is not OK if the last 10 inputs are not OK.
 
-And in the main node, suppose that we use `signal_valid` to determine whether the system is engaged or not:
+Let's suppose that we use `signal_valid` in the main node to determine whether the system is engaged or not:
 
 ```
 function delta_valid(input1: int, input2: int)
@@ -117,7 +118,7 @@ We've really just restated the guarantee from `signal_valid` at a higher level, 
 ### Pen-and-paper proof
 How about we try to prove the property in `main` on paper.
 In our proof, we're going to assume that the `input_vaild` subnode's contract has been proven separately.
-So let's start by unfolding the contract and substituting the arguments into it:
+Let's start by unfolding the contract and substituting the arguments into it:
 
 ```
 assume
@@ -155,7 +156,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, (SAMPLE_ZERO -> pre sample).adc)) =>
   not engaged;
@@ -174,7 +175,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, (SAMPLE_ZERO -> pre sample).adc)) =>
   not engaged;
@@ -196,7 +197,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, SAMPLE_ZERO.adc -> (pre sample).adc)) =>
   not engaged;
@@ -219,7 +220,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, SAMPLE_ZERO.adc -> (pre sample).adc)) =>
   not engaged;
@@ -241,7 +242,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, SAMPLE_ZERO.adc -> pre sample.adc)) =>
   not engaged;
@@ -264,7 +265,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, 0 -> pre sample.adc)) =>
   not engaged;
@@ -283,7 +284,7 @@ assume
   engaged = signal_valid(sample.adc);
 
   SAMPLE_ZERO = { adc = 0; ... };
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 show main.guarantee:
   not lastn(10, delta_valid(sample.adc, 0 -> pre sample.adc)) =>
   not engaged;
@@ -359,7 +360,7 @@ lts delta_valid_sample:
          delta_main, delta_signal)
 ```
 
-Although our Lustre program is deterministic and pure the init predicate is non-deterministic: it identifies a set of states instead of a single state.
+Although our Lustre program is deterministic and pure, the init predicate is non-deterministic: it identifies a set of states instead of a single state.
 
 The real transition system that Kind2 uses would have a relation for `step` rather than a function, because it can be non-deterministic too, but for this example it's a bit cleaner to only look at deterministic step functions.
 
@@ -546,7 +547,7 @@ How about: `forall e e'. (e -> e').adc = (e.adc -> e'.adc)`
   last.out        = lastn(10, delta_valid(sample.adc, del_sample.adc));
   engaged         = valid.ok;
 
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 
 rewrite prim_distributes_arrow: forall stream e e', pure function f.
   f (e -> e') = (f e) -> (f e')
@@ -570,7 +571,7 @@ rewrites to…
   last.out        = lastn(10, delta_valid(sample.adc, del_sample_adc));
   engaged         = valid.ok;
 
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 
 rewrite prim_distributes_arrow: forall stream e e', pure function f.
   f (e -> e') = (f e) -> (f e')
@@ -599,7 +600,7 @@ and the next rewrite…
   last.out        = lastn(10, delta_valid(sample.adc, del_sample_adc));
   engaged         = valid.ok;
 
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 
 rewrite prim_distributes_pre: forall stream e, pure function f.
   f (pre e) = pre (f e)
@@ -625,7 +626,7 @@ becomes…
   last.out        = lastn(10, delta_valid(sample.adc, del_sample_adc));
   engaged         = valid.ok;
 
----------------------------------------------------------------------------------
+---------------------------------------------------------------------
 
 rewrite prim_distributes_pre: forall stream e, pure function f.
   f (pre e) = pre (f e)
@@ -683,15 +684,15 @@ Let's focus on just this part of the equivalence graph:
   last.arr_count       = 0 -> last.pre_count;
   last.count           = if delta_valid(...)
                          then last.arr_count + 1
-                         else last.arr_count;
+                         else 0;
   last.out             = last.count >= 10;
 
--- subnode valid.last  = lastn(10, delta <= DELTA_MAX)
+-- subnode valid.last  = lastn(10, delta_valid(...))
   valid.last.pre_count = pre valid.last.count;
   valid.last.arr_count = 0 -> valid.last.pre_count;
   valid.last.count     = if delta_valid(...)
                          then valid.last.arr_count + 1
-                         else valid.last.arr_count;
+                         else 0;
   valid.last.out       = valid.last.count >= 10;
 ```
 
@@ -702,40 +703,39 @@ We want some "normalised" form where the names in the recursion don't affect equ
 ```
   last.pre_count       = pre last.count;
   last.arr_count       = 0 -> last.pre_count;
-  last.count           = if delta <= DELTA_MAX
+  last.count           = if delta_valid(...)
                          then last.arr_count + 1
-                         else last.arr_count;
+                         else 0;
 
 ==(rewrite recursive binding)=>
 
   last.count           = µ.
-                         if delta <= DELTA_MAX
+                         if delta_valid(...)
                          then (0 -> pre µ0) + 1
-                         else (0 -> pre µ0);
+                         else 0;
 ```
 
 Here, the mu binder form `µ. e` represents a recursive expression, where the de Bruijn mu variable `µ0` refers to the recursive value of the closest µ binder.
-In the written form here we have two copies of the `0 -> pre µ0` expression, but it's not as bad as it looks in practice because the e-graph will share the two expressions.
 
 Once we do this "µ-normalisation" to both count variables, it becomes clear that they're equal, and we get some nice equalities:
 
 ```
--- subnode last = lastn(10, delta <= DELTA_MAX)
+-- subnode last = lastn(10, delta_valid(...))
   last.pre_count       = valid.last.pre_count
                        = pre last.count;
   last.arr_count       = valid.last.arr_count
                        = 0 -> last.pre_count;
   last.count           = valid.last.count
-                       = if delta <= DELTA_MAX
+                       = if delta_valid(...)
                          then last.arr_count + 1
-                         else last.arr_count;
-                       = if delta <= DELTA_MAX
+                         else 0;
+                       = if delta_valid(...)
                          then valid.last.arr_count + 1
-                         else valid.last.arr_count;
+                         else 0;
                        = µ.
-                         if delta <= DELTA_MAX
+                         if delta_valid(...)
                          then (0 -> pre µ0) + 1
-                         else (0 -> pre µ0);
+                         else 0;
   last.out             = valid.last.out
                        = last.count >= 10;
 ```
@@ -752,6 +752,51 @@ Idea:
 * do interesting rewrites (streaming ops, µ) to interesting graph
 * find small terms that are equivalent only in interesting graph
 * add to boring graph, do more rewrites
+
+### Relationship to k-induction
+
+It's not clear what the relationship to k-induction is, but I think they're complementary techniques.
+Intuitively, some of the equalities we learn feel like what we learn from unfolding the step relation.
+When we learnt that the two deltas were valid by rewriting the arrow and pre, it's a bit like learning from the 2-inductive step relation.
+When we learnt that the two `lastn`s are equal, it's a bit like learning from the 10-inductive step relation.
+
+But there are some cases where it's stronger than k-induction alone, like with `SoFar`:
+
+```
+node SoFar(pred: bool)
+returns (out: bool)
+let
+  out = pred and (true -> pre out);
+tel
+
+---------------------------------------------------------------------
+assume
+  SoFar(X) => P
+
+show
+  SoFar(X) => P
+```
+
+This looks trivial, but k-induction alone can't get it because we have no invariant that the two instances of SoFar have the same state.
+
+However, equivalence extraction isn't strictly stronger than k-induction, because there are almost certainly properties about inequalities that we won't pick up.
+
+```
+node countmod4()
+returns (mod4: int)
+let
+  mod4 = 0 -> if pre mod4 = 3 then 0 else pre mod4 + 1;
+  --%PROPERTY mod4 <= 8;
+tel
+```
+
+Equivalence extraction is also more modular than k-induction.
+We can perform equivalence extraction on subnodes and learn invariants that we then make use of in the parent nodes.
+If the parent node were too large to run equivalence extraction to saturation, we can still use the properties we learnt about the subnodes.
+In comparison, k-induction is kind of all-or-nothing.
+When proving a particular node, there's a single k parameter that affects the whole transition system, including subnodes.
+We can't unfold the `lastn` nodes ten times, while only unfolding the others fewer times.
+This modularity might make equivalence extraction useful even in cases where k-induction would get all of the invariants eventually.
 
 ### Cool stuff
 
@@ -770,42 +815,6 @@ LastN(n, a and b) =
     min((µ. if a then (0 -> pre µ0) + 1 else (0 -> pre µ0)),
         (µ. if b then (0 -> pre µ0) + 1 else (0 -> pre µ0)))
 ```
-
-### Comparison to k-induction
-
-It's not clear what the relationship to k-induction is, but I think they're complementary techniques.
-Intuitively, some of the equalities we learn feel like what we learn from unfolding the step relation.
-When we learnt that the two deltas were valid by rewriting the arrow and pre, it's a bit like learning from the 2-inductive step relation.
-When we learnt that the two `lastn`s are equal, it's a bit like learning from the 10-inductive step relation.
-
-But there are some cases where it's stronger than k-induction alone, like with `SoFar`:
-
-```
-node SoFar(pred: bool)
-returns (out: bool)
-let
-  out = pred and (true -> pre out);
-tel
-
----------------------------------------------------------------------------------
-assume
-  SoFar(X) => P
-
-show
-  SoFar(X) => P
-```
-
-This looks trivial, but k-induction alone can't get it because we have no invariant that the two instances of SoFar have the same state.
-
-However, equivalence extraction isn't strictly stronger than k-induction, because there are almost certainly properties about inequalities that we won't pick up.
-
-Equivalence extraction is also more modular than k-induction.
-We can perform equivalence extraction on subnodes and learn invariants that we then make use of in the parent nodes.
-If the parent node were too large to run equivalence extraction to saturation, we can still use the properties we learnt about the subnodes.
-In comparison, k-induction is kind of all-or-nothing.
-When proving a particular node, there's a single k parameter that affects the whole transition system, including subnodes.
-We can't unfold the `lastn` nodes ten times, while only unfolding the others fewer times.
-This modularity might make equivalence extraction useful even in cases where k-induction would get all of the invariants eventually.
 
 ### Future work
 
