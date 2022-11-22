@@ -91,7 +91,7 @@ object BrakeLights:
     val always_zero =
       Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means output zero") {
-      always_zero implies (accel == V3.zero)
+      always_zero implies Sample.sofar(accel == V3.zero)
     }
 
   /** The accelerometer has gravity. Because gravity doesn't change too much,
@@ -119,22 +119,6 @@ object BrakeLights:
       Sample.sofar(imu.accel == V3.zero)
     guarantees("always zero means always zero") {
       always_zero implies (accel == V3.zero)
-    }
-    // The above guarantee looks like a straightforward consequence from the
-    // guarantees in the HoldImu and Filter.iir subnodes. However, it's not
-    // trivial because the Sample.sofar here and the Sample.sofar there have
-    // different internal state variables.
-    // We manually add a hint that they are equal using a "sneaky invariant"
-    // that can look inside the subnode's state.
-    check("sneaky invariant: HoldImu.always_zero") {
-      always_zero == Sneaky(this.builder).subnode("HoldImu").subnode("SoFar").output[Bool]
-    }
-    check("sneaky invariant: IIR.always_zero") {
-      val iir = Sneaky(this.builder).subnodes("IIR")
-      always_zero implies
-      Sneaky.forall(iir) { i =>
-        i.subnode("SoFar").output[Bool]
-      }
     }
 
   object RemoveGravity:
