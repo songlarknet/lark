@@ -206,8 +206,7 @@ object Equivalence:
           (graph.add(Op.Arrow, id1, id2), depsX1 ++ depsX2)
 
       this.equations.foreach { (ref,flow) =>
-        // TODO-PERF: sometime: only add µ for streams, because they're really necessary for recursion
-        if true // !flow.isInstanceOf[Flow.Pure]
+        if !flow.isInstanceOf[Flow.Pure]
         then
           val (id, deps) = unfoldF(flow, ref, empty)
           if deps.contains(ref) then
@@ -232,16 +231,18 @@ object Equivalence:
 
     /** Get the "interesting" invariants */
     def invariants: List[List[Tree[Op]]] =
+      // TODO: make compositional / modular, don't recompute each time, modify
+      // boring graph directly.
       // Clone the boring graph. We use it to decide which invariants are
       // novel. We update it when adding new invariants to avoid having too
       // many duplicates of the same fact
       val g0      = boring.clone()
       def crankX() =
-        // g0.rebuild()
-        // g0.fixpoint(options.fix) { () =>
+        g0.rebuild()
+        g0.fixpoint(options.fix) { () =>
           equivalence.Rewrite.Boring.step(g0)
           g0.rebuild()
-        // }
+        }
 
       val invs    = mutable.ArrayBuffer[List[Tree[Op]]]()
       val classes = interesting.classes
@@ -273,10 +274,8 @@ object Equivalence:
           // now only take state variables. My gut feeling is that interesting
           // invariants only refer to state anyway, but maybe there are some
           // interesting invariants where only one side is a state variable?
-          // XXX: allow non-state refs for levels without merge/when:
-          // invariants about splitting recursion don't mention only state
           case Op.Var(ref)
-            if ref.isStateRef || !path.exists(p => p.isInstanceOf[Node.Path.Entry.Merge]) =>
+            if ref.isStateRef =>
             List(Tree(n.op))
           case Op.Prim(p)
            if maxDepth > 0 =>

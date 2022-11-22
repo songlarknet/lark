@@ -38,7 +38,35 @@ class TestEquivalences extends munit.FunSuite:
     }
   }
 
+  test("sofar-split-arr") {
+    Prove.success() {
+      new Node(_):
+        val in0   = forall[Bool]
+        val in1   = forall[Bool]
+        val out0  = output[Bool]
+        val out1  = output[Bool]
+        val out01 = output[Bool]
+
+        import TestEquivalences.SoFar2
+
+        out0  := subnode(SoFar2(in0)).out
+        out1  := subnode(SoFar2(in1)).out
+        out01 := subnode(SoFar2(in0 && in1)).out
+
+        val ok = forall[Bool]
+        sorry("out01 implies ok") {
+          out01 implies ok
+        }
+        check("out0 and out1 implies ok") {
+          (out0 && out1) implies ok
+        }
+    }
+  }
 object TestEquivalences:
   case class SoFar(e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val out  = output[Bool]
     out     := e && fby(True, out)
+
+  case class SoFar2(e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
+    val out  = output[Bool]
+    out     := e && (True -> pre(out))

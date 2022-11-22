@@ -56,8 +56,8 @@ object Rewrite:
       prim.Table.Mul -> Set(Val.Real(1), Val.Int(1)),
       prim.Table.Or  -> Set(Val.Bool(false))
     )
-    /** Annihilators (?) `x ⊙ v = v` */
-    val annihilate = Map[Prim, Set[Val]](
+    /** "Cancelling out" `x ⊙ v = v` */
+    val cancel = Map[Prim, Set[Val]](
       prim.Table.And -> Set(Val.Bool(false)),
       prim.Table.Mul -> Set(Val.Real(0), Val.Int(0)),
       prim.Table.Or  -> Set(Val.Bool(true))
@@ -72,6 +72,7 @@ object Rewrite:
     }
 
     // This seems to be exploding. Might be better off normalising associative operators to n-ary
+    // TODO figure out how to reinstate without explosion
     // add("associative") { k =>
     //   for
     //     (Op.Prim(p),  l1, k23) <- take.binop(k)
@@ -91,11 +92,11 @@ object Rewrite:
         l1
     }
 
-    add("right-annihilate") { k =>
+    add("right-cancel") { k =>
       for
         (Op.Prim(p),  l1, l2) <- take.binop(k)
         v                     <- take.val_(l2)
-        if annihilate.contains(p) && annihilate(p).contains(v)
+        if cancel.contains(p) && cancel(p).contains(v)
       yield
         l2
     }
@@ -124,6 +125,7 @@ object Rewrite:
     // PRE REWRITE RULES:
     // pre(x) stuck
     // pre(v):
+    // Maybe this is a boring rule: it should be obvious from transition system
     add("pre(v) = v") { k =>
       for
         arg      <- take.pre(k)
@@ -146,6 +148,7 @@ object Rewrite:
     // pre(µ0) stuck
     // ARROW REWRITE RULES:
     // arrow(e,e) = e
+    // Maybe this is a boring rule: it should be obvious from transition system
     add("arrow(e, e) = e") { k =>
       for
         (l1, l2) <- take.arrow(k)
@@ -168,6 +171,8 @@ object Rewrite:
     }
     // arrow(µ. ..., ...) ?
     // arrow(µ0, ...) ?
+    // TODO: also want arrow(arrow(x, y), z) = arrow(x, z)
+    // TODO: also want arrow(x, arrow(y, z)) = arrow(x, z)
 
     // RECURSIVE REWRITE RULES:
     // This is the most interesting, and least conventional (?) of the rules.
@@ -177,68 +182,58 @@ object Rewrite:
     // > ==rewrite=> if µ0 not in free a, a', b, b'
     // > (µ. a -> a' ⊙ pre µ0) ⊙ (µ. b -> b' ⊙ pre µ0)
     //
-    //
-    // If ⊙ is only associative and not commutative then we need to rearrange
-    // it a tiny bit:
-    // > (µ. a ⊙ b -> a' ⊙ pre µ0 ⊙ b')
+    // The actual rewrites are a slight variation on this, because we want to
+    // ensure that it introduces only equalities that refer to state variables
+    // as they are better suited to extracting invariants.
+    // We have two similar rewrites. Unfortunately we need both because the
+    // treatment of `(z -> pre x)` and `fby(z, x)` are slightly different.
+    // > (µ. z -> pre ((a ⊙ b) ⊙ µ0))
     // > ==rewrite=>
-    // > (µ. a -> a' ⊙ pre µ0) ⊙ (µ. b -> pre µ0 ⊙ b')
-    // so we perform this rewrite instead.
-    //
-    // TODO: want a separate rewrite for (a ⊙ (z -> pre µ0)) = (a ⊙ z -> a ⊙ pre µ0)
-    //
-    // add("🐱 go µ") { k =>
-    //   for
-    //     (p, List(lhs, rhs)) <- take.prim(k)
-    //     if Boring.associative.contains(p)
-    //     lbody <- take.muBinder(lhs)
-    //     rbody <- take.muBinder(rhs)
-    //     (lfirst,lthen) <- take.arrow(lbody)
-    //     (rfirst,rthen) <- take.arrow(rbody)
-    //     (lp, List(lthen1, lthen2)) <- take.prim(lthen)
-    //     if lp == p
-    //     (rp, List(rthen1, rthen2)) <- take.prim(rthen)
-    //     if rp == p
-    //     lpre <- take.pre(lthen2)
-    //     rpre <- take.pre(rthen1)
-    //     _ <- take.muRef0(lpre)
-    //     _ <- take.muRef0(rpre)
-    //     if !summon[RuleApp].refersToMu0(lfirst)
-    //     if !summon[RuleApp].refersToMu0(rfirst)
-    //     if !summon[RuleApp].refersToMu0(lthen1)
-    //     if !summon[RuleApp].refersToMu0(rthen2)
-    //   yield
-    //     make.muBinder(make.arrow(
-    //       make.prim(p, lfirst, rfirst),
-    //       make.prim(p, lthen1, make.prim(p, make.muRef0, rthen2))
-    //     ))
-    // }
-
-    // Start easier:
-    // > (µ. a ⊙ b ⊙ (z -> pre µ0))
-    // > ==rewrite=>
-    // > (µ. a ⊙ (z -> pre µ0)) ⊙ (µ. b ⊙ (z -> pre µ0))
-    // TODO: is there a way to rearrange recursive binders so that the
-    // invariant we want refers to only state vars?
-    add("🐱 go µ") { k =>
+    // > (µ. z -> pre (a ⊙ µ0)) ⊙ (µ. z -> pre (b ⊙ µ0))
+    add("🐱 go µ: (µ. z -> pre (a ⊙ µ0))") { k =>
       for
         body <- take.muBinder(k)
-        (p, List(ab, zpremu)) <- take.prim(body)
+        (z, preabmu) <- take.arrow(body)
+        zv <- take.val_(z)
+        abmu <- take.pre(preabmu)
+        (p, List(ab, mu)) <- take.prim(abmu)
         if Boring.associative.contains(p)
+        if Boring.commutative.contains(p)
+        if Boring.identity.contains(p) && Boring.identity(p).contains(zv)
         (pab, List(a, b)) <- take.prim(ab)
         if pab == p
-        (z,premu) <- take.arrow(zpremu)
-        zv <- take.val_(z)
-        if Boring.identity.contains(p) && Boring.identity(p).contains(zv)
-        mu <- take.pre(premu)
         _ <- take.muRef0(mu)
         if !summon[RuleApp].refersToMu0(a)
         if !summon[RuleApp].refersToMu0(b)
       yield
         make.prim(p,
-          make.muBinder(make.prim(p, a, make.arrow(z, premu))),
-          make.muBinder(make.prim(p, b, make.arrow(z, premu))))
+          make.muBinder(make.arrow(z, make.pre(make.prim(p, a, mu)))),
+          make.muBinder(make.arrow(z, make.pre(make.prim(p, b, mu)))))
     }
+    // > (µ. pre ((a ⊙ b) ⊙ (z -> µ0)))
+    // > ==rewrite=>
+    // > (µ. pre (a ⊙ (z -> µ0))) ⊙ (µ. pre (b ⊙ (z -> µ0)))
+    add("🐱 go µ: (µ. pre (a ⊙ (z -> µ0)))") { k =>
+      for
+        body <- take.muBinder(k)
+        abzmu <- take.pre(body)
+        (p, List(ab, zmu)) <- take.prim(abzmu)
+        if Boring.associative.contains(p)
+        if Boring.commutative.contains(p)
+        (pab, List(a, b)) <- take.prim(ab)
+        if pab == p
+        (z, mu) <- take.arrow(zmu)
+        zv <- take.val_(z)
+        if Boring.identity.contains(p) && Boring.identity(p).contains(zv)
+        _ <- take.muRef0(mu)
+        if !summon[RuleApp].refersToMu0(a)
+        if !summon[RuleApp].refersToMu0(b)
+      yield
+        make.prim(p,
+          make.muBinder(make.pre(make.prim(p, a, make.arrow(z, mu)))),
+          make.muBinder(make.pre(make.prim(p, b, make.arrow(z, mu)))))
+    }
+
 
   class RuleApp(val graph: EGraph[Op], val classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]]):
     def getClass(k: EGraph.Id): mutable.HashSet[EGraph.Node[Op]] =
