@@ -19,14 +19,14 @@ import scala.collection.mutable
 object Equivalence:
 
   /** Options for equivalence analysis
-   *
-   * PERF: hard-code depth limit to 100 to break cycles. Real fix is to
-   * make `takeSimpleTrees` keep track of what it's seen or something, but
-   * in practice who could ever want an invariant term with height 100?
+   * @param fix maximum number of iterations to perform rewrites for
+   * @param invariantTermDepths
+   *  greedily try to get simpler invariants by first looking for invariants
+   *  that refer to terms of height 0, then height 1, etc
    */
   case class Options(
     fix: EGraph.FixOptions = EGraph.FixOptions(),
-    invariantTermDepths: Seq[Int] = Seq(0, 1, 2, 3)
+    invariantTermDepths: Seq[Int] = Seq(0, 1, 5)
   )
 
   /** The equivalence graphs are composed of nodes where each node has an
@@ -121,12 +121,13 @@ object Equivalence:
     val equations: names.mutable.RefMap[Flow] = mutable.SortedMap[names.Ref, Flow](),
     val boring: EGraph[Op] = EGraph[Op](),
     val interesting: EGraph[Op] = EGraph[Op](),
+    val invariants: mutable.ArrayBuffer[List[Tree[Op]]] = mutable.ArrayBuffer[List[Tree[Op]]](),
   ) extends pretty.Pretty:
     def ppr =
       val equationsP = equations.map { (r,f) =>
         r.ppr <+> pretty.text("=") <+> f.ppr
       }
-      val invariantsP = invariants.map { inv =>
+      val invariantsP = invariants.toSeq.map { inv =>
         pretty.braces(pretty.space <> pretty.ssep(inv.map(_.ppr), pretty.comma <> pretty.space) <> pretty.space)
       }
       pretty.vsep(Seq(
@@ -229,45 +230,39 @@ object Equivalence:
         this.interesting.rebuild()
       }
 
-    /** Get the "interesting" invariants */
-    def invariants: List[List[Tree[Op]]] =
-      // TODO: make compositional / modular, don't recompute each time, modify
-      // boring graph directly.
-      // Clone the boring graph. We use it to decide which invariants are
-      // novel. We update it when adding new invariants to avoid having too
-      // many duplicates of the same fact
-      val g0      = boring.clone()
+    /** Extract the "interesting" invariants */
+    def extract(): Unit =
       def crankX() =
-        g0.rebuild()
-        g0.fixpoint(options.fix) { () =>
-          equivalence.Rewrite.Boring.step(g0)
-          g0.rebuild()
+        this.boring.rebuild()
+        this.boring.fixpoint(options.fix) { () =>
+          equivalence.Rewrite.Boring.step(this.boring)
+          this.boring.rebuild()
         }
 
-      val invs    = mutable.ArrayBuffer[List[Tree[Op]]]()
       val classes = interesting.classes
       // Try to add invariants for small terms before looking at larger ones
       options.invariantTermDepths.foreach { maxDepth =>
         classes.foreach { (klass, nodes) =>
-          val ns = takeSimpleTrees(g0, classes, klass, maxDepth)
+          val ns = takeSimpleTrees(this.boring, classes, klass, maxDepth)
           crankX()
-          val nsX = ns.distinctBy(g0.add(_))
+          val nsX = ns.distinctBy(n => this.boring.find(n._2))
           if nsX.length > 1
           then
             // Record invariant and merge them so we don't record it again
-            invs += nsX
-            nsX.map(g0.add(_)).reduce(g0.merge(_, _))
+            this.invariants += nsX.map(_._1)
+            nsX.map(_._2).reduce(this.boring.merge(_, _))
             crankX()
         }
       }
-      invs.toList
 
-    def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxDepth: Int): List[Tree[Op]] =
+    def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxDepth: Int): List[(Tree[Op], EGraph.Id)] =
       // TODO: XXX: HACK: e-graphs are messed up
       val k = this.interesting.find(klass)
       val trees = classes.getOrElse(this.interesting.find(k), mutable.HashSet()).flatMap { n =>
         n.op match
-          case Op.Val(_) => List(Tree(n.op))
+          case Op.Val(_) =>
+            val t = Tree(n.op)
+            List((t, g0.add(t)))
           // Because we might be inside a "when" context, some variables might
           // be undefined when the clock goes off. The invariants really want
           // to only refer to variables that are defined all the time, so for
@@ -276,16 +271,17 @@ object Equivalence:
           // interesting invariants where only one side is a state variable?
           case Op.Var(ref)
             if ref.isStateRef =>
-            List(Tree(n.op))
+            val t = Tree(n.op)
+            List((t, g0.add(t)))
           case Op.Prim(p)
            if maxDepth > 0 =>
             val childrenX = n.children.map(takeSimpleTrees(g0, classes, _, maxDepth - 1))
-            listCombine(childrenX).map { c => Tree(n.op, c) }
+            listCombine(childrenX).map { c => (Tree(n.op, c.map(_._1)), g0.add(n.op, c.map(_._2)*)) }
           // Ignore flow expressions arrow and pre - prefer the named reference.
           case _ => List()
       }
       // Remove duplicates that are already known to be equal by the e-graph
-      trees.toList.distinctBy(g0.add(_))
+      trees.toList.distinctBy(_._2)
 
     /** Possible combinations of sublists:
      * > List(List(1, 2), List(3, 4)) = List(List(1, 3), List(1, 4), List(2, 3), List(2, 4))
@@ -304,7 +300,8 @@ object Equivalence:
   class Layers(
     val options: Options,
     val node: Node,
-    val layers: mutable.HashMap[Node.Path, Layer] = mutable.HashMap[Node.Path, Layer]()
+    val layers: mutable.HashMap[Node.Path, Layer] = mutable.HashMap[Node.Path, Layer](),
+    val invariants: mutable.ArrayBuffer[Exp] = mutable.ArrayBuffer[Exp](),
   ) extends pretty.Pretty:
 
     def ppr =
@@ -312,7 +309,7 @@ object Equivalence:
         val pathP = pretty.ssep(p.map(_.ppr), pretty.space <> pretty.forwslash <> pretty.space)
         pretty.text("Layer") <+> pathP <> pretty.colon <@> pretty.indent(l.ppr)
       }
-      val invariantsP = invariants.map(_.ppr)
+      val invariantsP = invariants.toSeq.map(_.ppr)
       node.klass.ppr <> pretty.colon <@>
       pretty.indent(pretty.vsep(layersP.toSeq)) <@>
       pretty.indent(pretty.text("Invariant terms:") <@>
@@ -352,6 +349,9 @@ object Equivalence:
             }
             this.appendEGraph(prefix, snLayer.boring, layerX.boring)
             this.appendEGraph(prefix, snLayer.interesting, layerX.interesting)
+          }
+          snLayers.invariants.foreach { inv =>
+            this.invariants += Compound.substVV(prefix(_), inv)
           }
         }
       }
@@ -404,8 +404,12 @@ object Equivalence:
         l.crank()
       }
 
-    /** Get invariants of all layers as pure expressions */
-    def invariants: List[Exp] =
+    /** Extract the invariants */
+    def extract(): Unit =
+      layers.foreach { (p,l) =>
+        l.extract()
+      }
+
       val opts = core.node.Check.Options(exposeStateVariables = true)
       val env  = core.node.Check.envOfNode(names.Prefix(), this.node, opts)
       val invs = layers.flatMap { (p, l) =>
@@ -437,7 +441,7 @@ object Equivalence:
         }
         inits ++ rest
       }.toList
-      invs
+      this.invariants ++= invs
 
     def expOfTree(env: term.Check.Env, tree: Tree[Op]): Exp = tree.op match
       case Op.Val(v) => Exp.Val(Val.unwrap(v))
@@ -498,13 +502,7 @@ object Equivalence:
     val mpNodeLayers = mutable.SortedMap[names.Ref, Layers]()
     nodes.foreach { n =>
       val layers = node(n, mpNodeLayers, options)
-      // PERF: this tracing is taking a while because it's forcing the invariants sequentially.
-      // refactor to compute invariants differently... could do it more compositionally
-      import scala.concurrent.ExecutionContext.Implicits.global
-      import scala.concurrent.Future
-      Future {
-        dump.traceP(layers, stage, Some(n.klass.pprString))
-      }
+      dump.traceP(layers, stage, Some(n.klass.pprString))
       mpNodeLayers += n.klass -> layers
     }
     immutable.SortedMap.from(mpNodeLayers)
@@ -515,6 +513,7 @@ object Equivalence:
     layers.assemble(mpNodeLayers)
     layers.normalise()
     layers.crank()
+    layers.extract()
     layers
 
   def insertTerm(graph: EGraph[Op], value: Val): graph.Class =
