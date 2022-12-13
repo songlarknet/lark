@@ -71,17 +71,18 @@ object Rewrite:
         make.prim(p, l2, l1)
     }
 
-    // This seems to be exploding. Might be better off normalising associative operators to n-ary
-    // TODO figure out how to reinstate without explosion
-    // add("associative") { k =>
-    //   for
-    //     (Op.Prim(p),  l1, k23) <- take.binop(k)
-    //     (Op.Prim(pX), l2, l3)  <- take.binop(k23)
-    //     if p == pX && associative.contains(p)
-    //     if Seq(l1, k23, l2, l3).distinct.length == 4
-    //   yield
-    //     make.prim(p, make.prim(p, l1, l2), l3)
-    // }
+    // PERF: This rule might cause an explosion. Maybe we want to generalise
+    // binary associative operators to n-ary with some normalised order instead
+    // of having an explicit rule here.
+    add("associative") { k =>
+      for
+        (Op.Prim(p),  l1, k23) <- take.binop(k)
+        (Op.Prim(pX), l2, l3)  <- take.binop(k23)
+        if p == pX && associative.contains(p)
+        if Seq(l1, k23, l2, l3).distinct.length == 4
+      yield
+        make.prim(p, make.prim(p, l1, l2), l3)
+    }
 
     add("right-identity") { k =>
       for

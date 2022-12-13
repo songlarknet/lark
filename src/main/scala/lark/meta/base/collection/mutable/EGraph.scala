@@ -294,6 +294,8 @@ object EGraph:
       then pretty.parens(pretty.hsep(pretty.value(op) :: children.map(_.ppr)))
       else pretty.value(op)
 
+    lazy val height: Int = children.map(_.height + 1).maxOption.getOrElse(0)
+
   /** This internal data structure records the occurrences of each equivalence
    * class. The parents map should be empty for non-canonical class
    * identifiers. */

@@ -19,14 +19,27 @@ import scala.collection.mutable
 object Equivalence:
 
   /** Options for equivalence analysis
-   * @param fix maximum number of iterations to perform rewrites for
-   * @param invariantTermDepths
-   *  greedily try to get simpler invariants by first looking for invariants
-   *  that refer to terms of height 0, then height 1, etc
+   * @param fix
+   *  maximum number of iterations to perform rewrites for
+   * @param invariantTermMaxHeight
+   *  only consider invariants with terms up to this height. Simple invariants
+   *  that relate two node applications as being equivalent have height 0, as
+   *  the state variables are considered height 0 and the equality operator is
+   *  not included in the height of the invariant term.
+   *  More interesting invariants need larger heights, for example the
+   *  invariant that tells us that
+   *  > SoFar(X and Y) = SoFar(X) and SoFar(Y)
+   *  would look like this, which requires a height of 1:
+   *  > SoFar?0.state = SoFar?1.state and SoFar?2.state
+   *
+   *  Extracting the invariants involves exploring all possible ways to write
+   *  expressions up to a given height, so larger heights can get exponentially
+   *  slower. Five seems like a reasonable default so far; set it to zero to
+   *  improve extraction speed.
    */
   case class Options(
     fix: EGraph.FixOptions = EGraph.FixOptions(),
-    invariantTermDepths: Seq[Int] = Seq(0, 1, 5)
+    invariantTermMaxHeight: Int = 5
   )
 
   /** The equivalence graphs are composed of nodes where each node has an
@@ -240,22 +253,34 @@ object Equivalence:
         }
 
       val classes = interesting.classes
-      // Try to add invariants for small terms before looking at larger ones
-      options.invariantTermDepths.foreach { maxDepth =>
-        classes.foreach { (klass, nodes) =>
-          val ns = takeSimpleTrees(this.boring, classes, klass, maxDepth)
-          crankX()
-          val nsX = ns.distinctBy(n => this.boring.find(n._2))
-          if nsX.length > 1
-          then
-            // Record invariant and merge them so we don't record it again
-            this.invariants += nsX.map(_._1)
-            nsX.map(_._2).reduce(this.boring.merge(_, _))
-            crankX()
-        }
+
+      val terms = classes.map { (klass,nodes) =>
+        val ns = takeSimpleTrees(this.boring, classes, klass, options.invariantTermMaxHeight)
+        ns.sortBy(_._1.height)
       }
 
-    def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxDepth: Int): List[(Tree[Op], EGraph.Id)] =
+      crankX()
+
+      terms.foreach { ns =>
+        ns match
+          case (t0, id0) :: rest =>
+            var invTerms = List[Tree[Op]]()
+            rest.foreach { (t,id) =>
+              val k0 = this.boring.find(id0)
+              val k  = this.boring.find(id)
+              if (k0 != k) {
+                this.boring.merge(k0, k)
+                invTerms ::= t
+                crankX()
+              }
+            }
+            if (invTerms.nonEmpty)
+              this.invariants += t0 :: invTerms.reverse
+          case Nil =>
+      }
+
+
+    def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxHeight: Int): List[(Tree[Op], EGraph.Id)] =
       // TODO: XXX: HACK: e-graphs are messed up
       val k = this.interesting.find(klass)
       val trees = classes.getOrElse(this.interesting.find(k), mutable.HashSet()).flatMap { n =>
@@ -274,8 +299,8 @@ object Equivalence:
             val t = Tree(n.op)
             List((t, g0.add(t)))
           case Op.Prim(p)
-           if maxDepth > 0 =>
-            val childrenX = n.children.map(takeSimpleTrees(g0, classes, _, maxDepth - 1))
+           if maxHeight > 0 =>
+            val childrenX = n.children.map(takeSimpleTrees(g0, classes, _, maxHeight - 1))
             listCombine(childrenX).map { c => (Tree(n.op, c.map(_._1)), g0.add(n.op, c.map(_._2)*)) }
           // Ignore flow expressions arrow and pre - prefer the named reference.
           case _ => List()
