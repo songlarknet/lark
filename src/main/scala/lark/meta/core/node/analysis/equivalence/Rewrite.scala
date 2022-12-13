@@ -104,6 +104,7 @@ object Rewrite:
 
     add("const-propagation") { k =>
       for
+        _ <- take.skipIfDefined(take.val_(k))
         (p, args) <- take.prim(k)
         vss = args.map(take.val_(_))
         vs  = vss.flatMap(_.headOption)
@@ -112,21 +113,29 @@ object Rewrite:
         make.val_(p.eval(vs))
     }
 
+    add("ite-pred-bool") { k =>
+      for
+        (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
+        Val.Bool(pb) <- take.val_(p)
+      yield
+        if pb then t else f
+    }
+
+    add("ite-same") { k =>
+      for
+        (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
+        if t == f
+      yield
+        t
+    }
+
   /** Interesting rules talk about the things that the SMT solver wouldn't know
    * or aren't obvious after translating to a transition system.
   */
   object Interesting extends RuleSet:
-    // VAR x stuck
-    // VAL v stuck
-    // PRIM REWRITE RULES:
-    // we could rewrite prims:
-    // f(e -> e', ...)
-    // f(pre(e), ...)
-    // but the other direction of these rules are a bit simpler
     // PRE REWRITE RULES:
-    // pre(x) stuck
     // pre(v):
-    // Maybe this is a boring rule: it should be obvious from transition system
+    // Maybe this is a boring rule: it should be obvious on the transition system
     add("pre(v) = v") { k =>
       for
         arg      <- take.pre(k)
@@ -142,6 +151,15 @@ object Rewrite:
       yield
         make.prim(p, args.map(make.pre(_))*)
     }
+    // pre(prim) inverse
+    add("f(pre(e0), pre(e1), ...) = pre(f(e0, e1, ...))") { k =>
+      for
+        (p,args) <- take.prim(k)
+        argsP     = args.flatMap(take.pre(_))
+        if argsP.length == args.length
+      yield
+        make.pre(make.prim(p, argsP*))
+    }
     // pre(pre(e)) stuck
     // pre(arrow(e, e')) stuck
     // pre(µ. e ... µ0):
@@ -149,7 +167,7 @@ object Rewrite:
     // pre(µ0) stuck
     // ARROW REWRITE RULES:
     // arrow(e,e) = e
-    // Maybe this is a boring rule: it should be obvious from transition system
+    // Maybe this is a boring rule: it should be obvious on the transition system
     add("arrow(e, e) = e") { k =>
       for
         (l1, l2) <- take.arrow(k)
@@ -157,11 +175,25 @@ object Rewrite:
       yield
         l1
     }
+    add("arrow(e, arrow(e', e'')) = arrow(e, e'')") { k =>
+      for
+        (l1, l2) <- take.arrow(k)
+        (m1, m2) <- take.arrow(l2)
+      yield
+        make.arrow(l1, m2)
+    }
+    add("arrow(arrow(e, e'), e'') = arrow(e, e'')") { k =>
+      for
+        (l1, l2) <- take.arrow(k)
+        (m1, m2) <- take.arrow(l1)
+      yield
+        make.arrow(m1, l2)
+    }
     // arrow(prim, prim)
-    // I think this is the wrong way around - it's not really exposing opportunities
     add("arrow(f(e0, e1, ...), f(e0', e1', ...)) = f(arrow(e0, e0'), arrow(e1, e1'), ...)") { k =>
       for
         (l1, l2) <- take.arrow(k)
+        _ <- take.skipIfDefined(take.prim(k))
         (p1,args1) <- take.prim(l1)
         (p2,args2) <- take.prim(l2)
         if p1 == p2
@@ -170,10 +202,30 @@ object Rewrite:
       yield
         make.prim(p1, argsX*)
     }
+    // arrow(prim, prim) inverse
+    // PERF: this rule is blowing up - causes out-of-memory error. it seems to
+    // be interacting badly with commutativity and associativity, though even
+    // with those disabled it's still quite slow.
+    // add("f(arrow(e0, e0'), arrow(e1, e1'), ...) = arrow(f(e0, e1, ...), f(e0', e1', ...))") { k =>
+    //   for
+    //     _ <- take.skipIfDefined(take.arrow(k))
+    //     (p, args) <- take.prim(k)
+    //     arrows     = args.map { arg =>
+    //       take.arrow(arg) match
+    //         case x :: _ => Right(x)
+    //         case Nil    => Left(arg)
+    //     }
+    //     if arrows.exists(_.isRight)
+    //     (lhs, rhs) = arrows.map { arr =>
+    //       arr match
+    //         case Left(arg) => (arg, arg)
+    //         case Right((lhs,rhs)) => (lhs, rhs)
+    //     }.unzip
+    //   yield
+    //     make.arrow(make.prim(p, lhs*), make.prim(p, rhs*))
+    // }
     // arrow(µ. ..., ...) ?
     // arrow(µ0, ...) ?
-    // TODO: also want arrow(arrow(x, y), z) = arrow(x, z)
-    // TODO: also want arrow(x, arrow(y, z)) = arrow(x, z)
 
     // RECURSIVE REWRITE RULES:
     // This is the most interesting, and least conventional (?) of the rules.
@@ -363,22 +415,27 @@ object Rewrite:
         else None
       }
 
+    def skipIfDefined[T](when: Seq[T]): Seq[Unit] =
+      when match
+        case _ :: _ => Seq()
+        case Nil    => Seq(())
+
   /** Helpers for constructing right-hand-side */
   object make:
-    def node(op: Op, args: EGraph.Id*)(using ruleApp: RuleApp): EGraph.Id =
-      ruleApp.graph.add(op, args*)
+    def node(op: Op, args: List[EGraph.Id])(using ruleApp: RuleApp): EGraph.Id =
+      ruleApp.graph.add(EGraph.Node(op, args))
 
     def var_(r: names.Ref)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.Var(r))
+      node(Op.Var(r), List())
     def val_(v: Val)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.Val(v))
+      node(Op.Val(v), List())
     def prim(p: Prim, args: EGraph.Id*)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.Prim(p), args*)
+      node(Op.Prim(p), args.toList)
     def pre(arg: EGraph.Id)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.Pre, arg)
+      node(Op.Pre, List(arg))
     def arrow(arg1: EGraph.Id, arg2: EGraph.Id)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.Arrow, arg1, arg2)
+      node(Op.Arrow, List(arg1, arg2))
     def muBinder(arg: EGraph.Id)(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.MuBinder, arg)
+      node(Op.MuBinder, List(arg))
     def muRef0(using ruleApp: RuleApp): EGraph.Id =
-      node(Op.MuVar(0))
+      node(Op.MuVar(0), List())
