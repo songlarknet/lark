@@ -71,18 +71,18 @@ object Rewrite:
         make.prim(p, l2, l1)
     }
 
-    // PERF: This rule might cause an explosion. Maybe we want to generalise
-    // binary associative operators to n-ary with some normalised order instead
+    // PERF: This rule causes an explosion. Maybe we want to generalise
+    // binary associative operators to n-ary with some canonical order instead
     // of having an explicit rule here.
-    add("associative") { k =>
-      for
-        (Op.Prim(p),  l1, k23) <- take.binop(k)
-        (Op.Prim(pX), l2, l3)  <- take.binop(k23)
-        if p == pX && associative.contains(p)
-        if Seq(l1, k23, l2, l3).distinct.length == 4
-      yield
-        make.prim(p, make.prim(p, l1, l2), l3)
-    }
+    // add("associative") { k =>
+    //   for
+    //     (Op.Prim(p),  l1, k23) <- take.binop(k)
+    //     (Op.Prim(pX), l2, l3)  <- take.binop(k23)
+    //     if p == pX && associative.contains(p)
+    //     if Seq(l1, k23, l2, l3).distinct.length == 4
+    //   yield
+    //     make.prim(p, make.prim(p, l1, l2), l3)
+    // }
 
     add("right-identity") { k =>
       for
@@ -104,6 +104,7 @@ object Rewrite:
 
     add("const-propagation") { k =>
       for
+        // We will not learn anything new if the value is already known
         _ <- take.skipIfDefined(take.val_(k))
         (p, args) <- take.prim(k)
         vss = args.map(take.val_(_))
@@ -143,22 +144,34 @@ object Rewrite:
       yield
         arg
     }
-    // pre(prim)
-    add("pre(f(e0, e1, ...)) = f(pre(e0), pre(e1), ...)") { k =>
-      for
-        arg      <- take.pre(k)
-        (p,args) <- take.prim(arg)
-      yield
-        make.prim(p, args.map(make.pre(_))*)
-    }
-    // pre(prim) inverse
-    add("f(pre(e0), pre(e1), ...) = pre(f(e0, e1, ...))") { k =>
+    // // pre(prim)
+    // // This rewrite rule doesn't really expose any further opportunities, so
+    // // what's the point? We are better off going in the other direction,
+    // // even though it's a little bit more complicated.
+    // add("pre(f(e0, e1, ...)) = f(pre(e0), pre(e1), ...)") { k =>
+    //   for
+    //     arg      <- take.pre(k)
+    //     (p,args) <- take.prim(arg)
+    //   yield
+    //     make.prim(p, args.map(make.pre(_))*)
+    // }
+    // pre(prim) inverse, but allow values too
+    add("f(pre(e0) | v0, pre(e1) | v1, ...) = pre(f(e0|v0, e1|v1, ...))") { k =>
       for
         (p,args) <- take.prim(k)
-        argsP     = args.flatMap(take.pre(_))
-        if argsP.length == args.length
+        pres      = args.flatMap { arg =>
+          take.val_(arg) match
+            case v :: _ => List((arg, false))
+            case Nil    => take.pre(k) match
+              case e :: _ => List((e, true))
+              case Nil    => Nil
+        }
+        // check if all values are pre or value
+        if pres.length == args.length
+        // check if any arguments are pre - if only have values, don't bother
+        if pres.exists(_._2)
       yield
-        make.pre(make.prim(p, argsP*))
+        make.pre(make.prim(p, pres.map(_._1)*))
     }
     // pre(pre(e)) stuck
     // pre(arrow(e, e')) stuck
@@ -189,41 +202,54 @@ object Rewrite:
       yield
         make.arrow(m1, l2)
     }
-    // arrow(prim, prim)
-    add("arrow(f(e0, e1, ...), f(e0', e1', ...)) = f(arrow(e0, e0'), arrow(e1, e1'), ...)") { k =>
-      for
-        (l1, l2) <- take.arrow(k)
-        _ <- take.skipIfDefined(take.prim(k))
-        (p1,args1) <- take.prim(l1)
-        (p2,args2) <- take.prim(l2)
-        if p1 == p2
-        if args1.length == args2.length
-        argsX = args1.zip(args2).map { (a1,a2) => make.arrow(a1, a2) }
-      yield
-        make.prim(p1, argsX*)
-    }
+    // // arrow(prim, prim)
+    // // Disable: this doesn't really expose any opportunities, so disable it and
+    // // rewrite in the other direction
+    // add("arrow(f(e0, e1, ...), f(e0', e1', ...)) = f(arrow(e0, e0'), arrow(e1, e1'), ...)") { k =>
+    //   for
+    //     (l1, l2) <- take.arrow(k)
+    //     (p1,args1) <- take.prim(l1)
+    //     (p2,args2) <- take.prim(l2)
+    //     if p1 == p2
+    //     if args1.length == args2.length
+    //     argsX = args1.zip(args2).map { (a1,a2) => make.arrow(a1, a2) }
+    //   yield
+    //     make.prim(p1, argsX*)
+    // }
     // arrow(prim, prim) inverse
     // PERF: this rule is blowing up - causes out-of-memory error. it seems to
     // be interacting badly with commutativity and associativity, though even
     // with those disabled it's still quite slow.
-    // add("f(arrow(e0, e0'), arrow(e1, e1'), ...) = arrow(f(e0, e1, ...), f(e0', e1', ...))") { k =>
-    //   for
-    //     _ <- take.skipIfDefined(take.arrow(k))
-    //     (p, args) <- take.prim(k)
-    //     arrows     = args.map { arg =>
-    //       take.arrow(arg) match
-    //         case x :: _ => Right(x)
-    //         case Nil    => Left(arg)
-    //     }
-    //     if arrows.exists(_.isRight)
-    //     (lhs, rhs) = arrows.map { arr =>
-    //       arr match
-    //         case Left(arg) => (arg, arg)
-    //         case Right((lhs,rhs)) => (lhs, rhs)
-    //     }.unzip
-    //   yield
-    //     make.arrow(make.prim(p, lhs*), make.prim(p, rhs*))
-    // }
+    add("f(arrow(e0, e0'), arrow(e1, e1'), ...) = arrow(f(e0, e1, ...), f(e0', e1', ...))") { k =>
+      for
+        // HACK: do not try to rewrite if k already has a definition
+        // > k = arrow(e, e')
+        // If the arrow already exists, then it's a rough indication that we
+        // might have already applied the rule. It's not totally accurate
+        // though, as we could still learn something from the rewrite. Suppose
+        // that we already knew:
+        // > k = arrow(x, y)
+        // > k = (arrow(1, 2) + arrow(3, 4))
+        // then adding the equation k = arrow((1 + 3), (2 + 4)) would tell us
+        // that x = (1 + 3) and y = (2 + 4).
+        // We need a better way to avoid re-applying every rule, but for now
+        // this check makes it a lot faster.
+        _ <- take.skipIfDefined(take.arrow(k))
+        (p, args) <- take.prim(k)
+
+        arrows     = args.map { arg =>
+          take.val_(arg) match
+            case v :: _ => (arg, arg, false)
+            case Nil    => take.arrow(k) match
+              case (lhs, rhs) :: _ => (lhs, rhs, true)
+              case Nil    => (arg, arg, false)
+        }
+
+        // check if any arguments are actually arrows
+        if arrows.exists(_._3)
+      yield
+        make.arrow(make.prim(p, arrows.map(_._1)*), make.prim(p, arrows.map(_._2)*))
+    }
     // arrow(µ. ..., ...) ?
     // arrow(µ0, ...) ?
 
@@ -243,7 +269,7 @@ object Rewrite:
     // > (µ. z -> pre ((a ⊙ b) ⊙ µ0))
     // > ==rewrite=>
     // > (µ. z -> pre (a ⊙ µ0)) ⊙ (µ. z -> pre (b ⊙ µ0))
-    add("🐱 go µ: (µ. z -> pre (a ⊙ µ0))") { k =>
+    add("🐱 go µ: (µ. z -> pre ((a ⊙ b) ⊙ µ0))") { k =>
       for
         body <- take.muBinder(k)
         (z, preabmu) <- take.arrow(body)
@@ -255,6 +281,9 @@ object Rewrite:
         if Boring.identity.contains(p) && Boring.identity(p).contains(zv)
         (pab, List(a, b)) <- take.prim(ab)
         if pab == p
+        // TERMINATION: do not unfold if a or b are same
+        // TODO: check free variables of a,b not mention k instead of this cheap check
+        if a != k && b != k
         _ <- take.muRef0(mu)
         if !summon[RuleApp].refersToMu0(a)
         if !summon[RuleApp].refersToMu0(b)
@@ -266,7 +295,7 @@ object Rewrite:
     // > (µ. pre ((a ⊙ b) ⊙ (z -> µ0)))
     // > ==rewrite=>
     // > (µ. pre (a ⊙ (z -> µ0))) ⊙ (µ. pre (b ⊙ (z -> µ0)))
-    add("🐱 go µ: (µ. pre (a ⊙ (z -> µ0)))") { k =>
+    add("🐱 go µ: (µ. pre ((a ⊙ b) ⊙ (z -> µ0)))") { k =>
       for
         body <- take.muBinder(k)
         abzmu <- take.pre(body)
@@ -275,6 +304,9 @@ object Rewrite:
         if Boring.commutative.contains(p)
         (pab, List(a, b)) <- take.prim(ab)
         if pab == p
+        // TERMINATION: do not unfold if a or b are same
+        // TODO: check free variables of a,b not mention k instead of this cheap check
+        if a != k && b != k
         (z, mu) <- take.arrow(zmu)
         zv <- take.val_(z)
         if Boring.identity.contains(p) && Boring.identity(p).contains(zv)
@@ -290,7 +322,10 @@ object Rewrite:
 
   class RuleApp(val graph: EGraph[Op], val classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]]):
     def getClass(k: EGraph.Id): mutable.HashSet[EGraph.Node[Op]] =
-      // TODO: XXX: HACK: e-graphs are messed up
+      // Canonicalise the class and look up in the classes. We don't require
+      // that the graph has been rebuilt, so just return empty list if the
+      // desired class is no longer canonical. The next iteration will pick it
+      // up after the graph is rebuilt.
       classes.getOrElse(graph.find(k), mutable.HashSet())
 
     /** Check if a certain class mentions µ0 */
@@ -326,12 +361,12 @@ object Rewrite:
      * This doesn't rebuild after merging the graph - the graph is left in a
      * dirty state.
      */
-    def step(graph: EGraph[Op]): Unit =
+    def step(graph: EGraph[Op], verbose: Boolean = false): Unit =
       val classes = graph.classes
       given RuleApp = RuleApp(graph, classes)
       val matches = mutable.ArrayBuffer[(String, EGraph.Id, EGraph.Id)]()
       rules.foreach { (name, body) =>
-        classes.foreach { (k, _) =>
+        classes.foreach { (k, nodes) =>
           body(k).foreach { result =>
             if result != k
             then matches += ((name, k, result))
@@ -339,8 +374,18 @@ object Rewrite:
         }
       }
 
-      // Rebuild classes for logging
-      val classesX = graph.classes
+      if (verbose) {
+        val classesX = graph.classes
+        matches.foreach { (name, k, result) =>
+          println(s"Rewrite: ${name}: ${k} = ${result}")
+          println("K:")
+          classesX(graph.find(k)).foreach(n =>
+            println("  " + pretty.layout(n.pprDepth(classesX, 5))))
+          println("Result:")
+          classesX(graph.find(result)).foreach(n =>
+            println("  " + pretty.layout(n.pprDepth(classesX, 5))))
+        }
+      }
       matches.foreach { (name, k, result) =>
         graph.merge(k, result)
       }

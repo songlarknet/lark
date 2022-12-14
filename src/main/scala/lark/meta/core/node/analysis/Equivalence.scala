@@ -237,7 +237,7 @@ object Equivalence:
         equivalence.Rewrite.Boring.step(this.boring)
         this.boring.rebuild()
       }
-      this.boring.fixpoint(options.fix) { () =>
+      this.interesting.fixpoint(options.fix) { () =>
         equivalence.Rewrite.Boring.step(this.interesting)
         equivalence.Rewrite.Interesting.step(this.interesting)
         this.interesting.rebuild()
@@ -281,9 +281,7 @@ object Equivalence:
 
 
     def takeSimpleTrees(g0: EGraph[Op], classes: mutable.SortedMap[EGraph.Id, mutable.HashSet[EGraph.Node[Op]]], klass: EGraph.Id, maxHeight: Int): List[(Tree[Op], EGraph.Id)] =
-      // TODO: XXX: HACK: e-graphs are messed up
-      val k = this.interesting.find(klass)
-      val trees = classes.getOrElse(this.interesting.find(k), mutable.HashSet()).flatMap { n =>
+      val trees = classes(klass).flatMap { n =>
         n.op match
           case Op.Val(_) =>
             val t = Tree(n.op)
