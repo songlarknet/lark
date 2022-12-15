@@ -25,7 +25,7 @@ object Dump:
     object Typecheck extends Substage(Prepare, "30-tcheck", "Typecheck")
 
   object Prove extends Stage("10-prove", "Model checking proofs", ".smt", "; "):
-    object Equiv extends Substage(Prove, "00-equiv", "Equivalence-based invariant generation (EI3)", Some(".lark"), Some("// "))
+    object Equiv extends Substage(Prove, "00-ail", "Applicative invariants for Lustre (AIL)", Some(".lark"), Some("// "))
     object System extends Substage(Prove, "10-system", "Labelled transition system", Some(".lts"), Some("// "))
     object Bmc extends Substage(Prove, "2x-bmc", "Bounded model checking (SMT)")
     object Kind extends Substage(Prove, "2x-kind", "K-inductive checking (SMT)")

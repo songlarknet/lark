@@ -35,25 +35,30 @@ object Sample:
 
 
   /** True if the stream e has been true for n or more ticks. */
-  case class LastN(n: Ticks, e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
-    val MAX = 65534
-    require(n.ticks <= MAX)
-
+  // TODO: want 'Const[T]' for ticks
+  case class LastN(n: Stream[UInt16], e: Stream[Bool])(invocation: Node.Invocation) extends Node(invocation):
     val count     = output[UInt16]
     val out       = output[Bool]
     val pre_count = fby(u16(0), count)
 
     count := select(
-      when(e && pre_count <  MAX) { pre_count + 1 },
-      when(e && pre_count >= MAX) { MAX },
-      otherwise                   { 0 }
+      when(e && pre_count <  LastN.MAX) { pre_count + 1 },
+      when(e && pre_count >= LastN.MAX) { LastN.MAX },
+      otherwise                         { 0 }
     )
 
-    out   := count >= n.ticks
+    out   := count >= n
+  object LastN:
+    val MAX = 65534
 
   /** True if the stream e has been true for n or more ticks. */
   def lastN(n: Ticks, e: Stream[Bool])(using builder: Node.Builder, location: lark.meta.macros.Location): Stream[Bool] =
-    node.Sugar.subnode(builder)(LastN(n, e)).out
+    require(n.ticks <= LastN.MAX)
+    node.Sugar.subnode(builder)(LastN(u16(n.ticks), e)).out
+
+  /** Count how many ticks the stream has been consecutively true */
+  def consecutive(e: Stream[Bool])(using builder: Node.Builder, location: lark.meta.macros.Location): Stream[UInt16] =
+    node.Sugar.subnode(builder)(LastN(u16(0), e)).count
 
 
   /** The stream has always been true "so far".

@@ -254,10 +254,23 @@ object Equivalence:
 
       val classes = interesting.classes
 
+      // Take equivalence classes of terms that only mention state variables,
+      // up to a certain term height. We want to prioritise "simpler"
+      // invariants, so a cheap hack is to sort the terms in each equivalence
+      // class by the height of the expression, and then sort all of the
+      // equivalence classes by the height of the shortest expression.
+      // That way, when we go through and try to use them as an invariant,
+      // we'll look at some of the shorter terms first.
+      //
+      // This is a hacky heuristic to prioritise invariants like
+      // > x     = x'
+      // over the equivalent, but less aesthetically-pleasing
+      // > x + 1 = x' + 1
+      // but it's OK that it's a hack because it's only aesthetic.
       val terms = classes.map { (klass,nodes) =>
         val ns = takeSimpleTrees(this.boring, classes, klass, options.invariantTermMaxHeight)
         ns.sortBy(_._1.height)
-      }
+      }.toArray.sortBy(ns => ns.headOption.map(_._1.height).getOrElse(0))
 
       crankX()
 
@@ -374,6 +387,9 @@ object Equivalence:
             this.appendEGraph(prefix, snLayer.interesting, layerX.interesting)
           }
           snLayers.invariants.foreach { inv =>
+            // XXX: why do we add the invariants here? why not put them in the
+            // node itself and have them be inherited like regular properties.
+            // Then we wouldn't have to re-prove them at every level.
             this.invariants += Compound.substVV(prefix(_), inv)
           }
         }

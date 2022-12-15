@@ -88,10 +88,8 @@ object BrakeLights:
     }
 
     // If the input stream is always zero, then the result is always zero.
-    val always_zero =
-      Sample.sofar(imu.accel == V3.zero)
-    guarantees("always zero means output zero") {
-      always_zero implies Sample.sofar(accel == V3.zero)
+    guarantees("bibo-zero") {
+      Sample.sofar(imu.accel == V3.zero) implies (accel == V3.zero)
     }
 
   /** The accelerometer has gravity. Because gravity doesn't change too much,
@@ -115,10 +113,12 @@ object BrakeLights:
     // of good values.
     valid   := Sample.lastN(RemoveGravity.decay, hold.valid)
 
-    val always_zero =
-      Sample.sofar(imu.accel == V3.zero)
-    guarantees("always zero means always zero") {
-      always_zero implies (accel == V3.zero)
+    guarantees("bibo-zero") {
+      Sample.sofar(imu.accel == V3.zero) implies (accel == V3.zero)
+    }
+
+    check("bibo-zero: invariant: and distributes over sofar") {
+      Sample.sofar(hold.accel == V3.zero) == (Sample.sofar(hold.accel.x == 0) && Sample.sofar(hold.accel.y == 0) && Sample.sofar(hold.accel.z == 0))
     }
 
   object RemoveGravity:
@@ -185,31 +185,30 @@ object BrakeLights:
     backward := direction.backward
 
     val braking       = accel.y <= real(Lights.braking) && forward
-    val trigger_on    = subnode(Sample.LastN(Lights.on,    braking))
-    val trigger_off   = subnode(Sample.LastN(Lights.off,  !braking))
+    val trigger_on    = Sample.lastN(Lights.on,    braking)
+    val trigger_off   = Sample.lastN(Lights.off,  !braking)
 
     initial(OFF)
     object OFF extends State:
       unless {
-        resume(trigger_on.out, ON)
+        resume(trigger_on, ON)
       }
       light     := False
     object ON extends State:
       unless {
-        resume(trigger_off.out, OFF)
+        resume(trigger_off, OFF)
       }
       light     := True
 
     check("never on and off") {
-      !(trigger_on.out && trigger_off.out)
+      !(trigger_on && trigger_off)
     }
 
-    val lastn_not_braking = subnode(Sample.LastN(Lights.off, accel.y > real(Lights.braking)))
     check("not braking, no light") {
-      lastn_not_braking.out implies !light
+      Sample.lastN(Lights.off, accel.y > real(Lights.braking)) implies !light
     }
-    check("sneaky invariant") {
-      trigger_off.count >= lastn_not_braking.count
+    check("not braking, no light: invariant") {
+      Sample.consecutive(!braking) >= Sample.consecutive(accel.y > real(Lights.braking))
     }
 
   object Lights:
@@ -255,6 +254,8 @@ object BrakeLights:
       light     := lights.light
       ok        := lights.forward
       nok_stuck := lights.backward // False
+
+      val count = Sample.consecutive(filter.accel.y > real(Lights.braking))
     object STUCK extends State:
       light     := False
       ok        := False
@@ -264,15 +265,13 @@ object BrakeLights:
       Sample.lastN(Lights.off, filter.accel.y > real(Lights.braking)) implies !light
     }
 
-    check("invariant") {
-      val lights   = Sneaky(OK.builder).subnode("Lights")
-      val subcount = lights.subnodes("LastN").last.variable[UInt16]("count") + 0
-      val count    = Sneaky(this.builder).subnode("LastN").variable[UInt16]("count") + 0
+    check("not braking, no light: invariant") {
+      val count    = Sample.consecutive(filter.accel.y > real(Lights.braking))
       OK.active implies
         ifthenelse(
           light,
-          subcount == count,
-          subcount <= count
+          OK.count == count,
+          OK.count <= count
         )
     }
 

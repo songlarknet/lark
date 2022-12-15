@@ -150,7 +150,7 @@ object Prove:
     // general we should treat these as candidates and just ignore them if
     // they're false.
     val hints = Property.Map.from(equiv.invariants.map { exp =>
-      val prop = Prop.Judgment(s"invgen-EI3 ${pretty.layout(exp.pprWith(showBoundedArith = false))}", exp, Prop.Syntax.Generated(Prop.Form.Guarantee), lark.meta.macros.Location.empty)
+      val prop = Prop.Judgment(s"invgen-applicative ${pretty.layout(exp.pprWith(showBoundedArith = false))}", exp, Prop.Syntax.Generated(Prop.Form.Guarantee), lark.meta.macros.Location.empty)
       val sysj = system.SystemJudgment(List(), exp, prop)
       prop -> Property(sysj)
     })
@@ -180,7 +180,9 @@ object Prove:
         then summa
         else summa.copy(traces = indC.traces())
       case traces =>
-        bmcC.abort()
+        // Wait for k-inductive results. If we don't wait, the properties that
+        // didn't fail BMC can non-deterministically show as true or unknown
+        Await.result(indF, Duration.Inf)
         val summa = NodeSummary(node, sys, traces, bmcC.properties())
         assert(!summa.ok)
         summa
@@ -201,7 +203,7 @@ object Prove:
       propertiesRef: AtomicReference[Property.Map] = new AtomicReference(initialProperties),
       tracesRef: java.util.concurrent.ConcurrentLinkedQueue[Trace] = new java.util.concurrent.ConcurrentLinkedQueue()
   ):
-    def checkAbort(): Boolean = abortRef.get()
+    def checkAbort(): Boolean = abortRef.get() || properties().filter(_._2.status == Property.Unknown).isEmpty
     def abort(): Unit = abortRef.set(true)
 
     def properties(): Property.Map =
@@ -275,7 +277,7 @@ object Prove:
       asserts(top.system.relies, step, solver)
       asserts(top.system.sorries, step, solver)
 
-      channel.fix (_.bmc.at(step) == Property.Unknown) { unknowns =>
+      channel.fix (p => p.status == Property.Unknown && p.bmc.at(step) == Property.Unknown) { unknowns =>
         solver.checkSatAssumingX(disprove(unknowns.map(_.judgment), step)) { _.status match
           case CommandsResponses.UnknownStatus =>
             // TODO simplify model, slice, abstract?
@@ -317,7 +319,7 @@ object Prove:
       asserts(top.system.relies, step, solver)
       asserts(top.system.sorries, step, solver)
 
-      channel.fix (_.kind.at(step) == Property.Unknown) { unknowns =>
+      channel.fix (p => p.status == Property.Unknown && p.kind.at(step) == Property.Unknown) { unknowns =>
         val unknownsJ = unknowns.map(_.judgment)
         val unknownAssumptions =
           for stepX <- 0 to step - 1
