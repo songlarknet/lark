@@ -327,7 +327,9 @@ object Prove:
         val unknownGoal =
           disprove(unknownsJ, step)
 
-        // Assume all properties that are known invariant
+        // Assert all properties that are known invariant
+        // SMT-PERF: true invariants should be asserted rather than passed to
+        // checkSatAssuming to make use of incremental solving
         val invariantsJ =
           channel.properties().values.filter { p =>
             p.status == Property.Safe || (p.status == Property.Unknown && p.kind.at(step) == Property.Safe) }
@@ -357,6 +359,7 @@ object Prove:
             )
             // Only log traces at step 1 (normal induction) because these are
             // not too long but might contain enough information to be useful.
+            // TODO: this logs traces that fail at k=1 but succeed at later ks, should only log ones that never succeed
             if step == 1 then
               channel.counterexample(trace)
 
