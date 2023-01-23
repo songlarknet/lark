@@ -307,6 +307,13 @@ object Prove:
       solver.declareConsts(state)
     }
 
+    // We assert some invariants at the top level because the SMT solver might
+    // be able to re-use more incremental information. This set tracks which
+    // have been asserted.
+    // XXX: DISABLE: why is this slower? I have noticed this being 2x slower on
+    // brake lights example, so just use checkSatAssuming for now.
+    // val invariantsAsserted = scala.collection.mutable.Set[Terms.Term]()
+
     channel.loop(count) { step =>
       val state  = top.paramsOfNamespace(statePrefix(step), top.system.state)
       val stateS = top.paramsOfNamespace(statePrefix(step + 1), top.system.state)
@@ -320,23 +327,28 @@ object Prove:
       asserts(top.system.sorries, step, solver)
 
       channel.fix (p => p.status == Property.Unknown && p.kind.at(step) == Property.Unknown) { unknowns =>
-        val unknownsJ = unknowns.map(_.judgment)
-        val unknownAssumptions =
-          for stepX <- 0 to step - 1
-          yield assumptions(unknownsJ, stepX)
-        val unknownGoal =
-          disprove(unknownsJ, step)
-
-        // Assert all properties that are known invariant
-        // SMT-PERF: true invariants should be asserted rather than passed to
-        // checkSatAssuming to make use of incremental solving
+        // Get all known invariants and assert them at all steps, so that if
+        // we learn any new invariants they're automatically added.
         val invariantsJ =
           channel.properties().values.filter { p =>
             p.status == Property.Safe || (p.status == Property.Unknown && p.kind.at(step) == Property.Safe) }
             .map(_.judgment).toList
         val invariantsSteps =
           for stepX <- 0 to step
-          yield assumptions(invariantsJ, stepX)
+              invJ  <- invariantsJ
+          yield judgmentTerm(invJ, stepX)
+
+        // XXX: DISABLE: incremental invariants
+        // val invariantsNew = invariantsSteps.toSet -- invariantsAsserted
+        // solver.assert(compound.and(invariantsNew.toSeq*))
+        // invariantsAsserted ++= invariantsNew
+
+        val unknownsJ = unknowns.map(_.judgment)
+        val unknownAssumptions =
+          for stepX <- 0 to step - 1
+          yield assumptions(unknownsJ, stepX)
+        val unknownGoal =
+          disprove(unknownsJ, step)
 
         val assumingX =
           compound.and(
@@ -352,15 +364,32 @@ object Prove:
             )
             return
           case CommandsResponses.SatStatus     =>
-            val model = solver.command(Commands.GetModel())
-            val trace = Trace.fromModel(step, model, unknowns, Trace.Inductive)
-            channel.update(
-              trace.invalidates.map(_.withKind(Property.Prove(Property.Unsafe, step)))
-            )
+            // Get a list of the candidates that could not be proved
+            val unknownTerms = unknowns.map(u => (u, judgmentTerm(u.judgment, step)))
+            val terms        = unknownTerms.map(_._2)
+            val cmd          = Commands.GetValue(terms.head, terms.tail)
+            val resp         = solver.command(cmd)
+            resp match
+              case CommandsResponses.GetValueResponseSuccess(values) =>
+                val bads = values.zip(unknownTerms).filter { case ((lhs,rhs), (u,t)) =>
+                  if lhs != t then
+                    lark.meta.base.assertions.implausible("SMT solver returned get-values in wrong order",
+                      "command" -> cmd,
+                      "response" -> resp)
+                  rhs == compound.bool(false)
+                }
+                channel.update(
+                  bads.map(_._2._1.withKind(Property.Prove(Property.Unsafe, step))).toList
+                )
+              case r =>
+                lark.meta.base.assertions.implausible("SMT solver (get-values) bad response", "response" -> r)
+
             // Only log traces at step 1 (normal induction) because these are
             // not too long but might contain enough information to be useful.
             // TODO: this logs traces that fail at k=1 but succeed at later ks, should only log ones that never succeed
             if step == 1 then
+              val model = solver.command(Commands.GetModel())
+              val trace = Trace.fromModel(step, model, unknowns, Trace.Inductive)
               channel.counterexample(trace)
 
           case CommandsResponses.UnsatStatus   =>

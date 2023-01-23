@@ -19,7 +19,12 @@ class Solver(interpreter: Interpreter, sink: debug.Sink = debug.Quiet.sink, defi
     val r = commandUnchecked(cmd)
     r match
       case _ : CommandsResponses.Error =>
-        throw new Solver.SolverException(r)
+        throw new Solver.SolverException(r,
+          s"""SMT solver gave error response.
+          |Command:
+          | ${cmd}
+          |Response:
+          """.stripMargin)
       case _ =>
         r
 

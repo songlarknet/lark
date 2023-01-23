@@ -20,7 +20,7 @@ import scala.concurrent.duration.DurationInt
 class BrakeLights extends munit.FunSuite:
   test("Prove") {
     Prove.success(
-      Prove.Options().withMaximumInductiveSteps(10)
+      Prove.Options().withMaximumInductiveSteps(40)
         .dump(lark.meta.driver.Dump.file()))
       { BrakeLights.Top(_) }
   }
@@ -39,7 +39,7 @@ class BrakeLights extends munit.FunSuite:
  * In normal riding conditions, motorcyclists tend to use engine braking before
  * applying the conventional brakes. Unlike conventional brakes,
  * however, applying engine braking will not enable the brake lights. This
- * lark of brake lights means that any vehicles behind the motorcycle are less
+ * lack of brake lights means that any vehicles behind the motorcycle are less
  * likely to notice the braking, which could increase accident risk. The goal
  * of braking inference is to infer when engine braking is happening and enable
  * the brake lights automatically.

@@ -392,6 +392,64 @@ Assuming that the formula produced by `x : concrete(a)` is a conjunction of clau
 
 Looks pretty reasonable.
 
+* Jeannet, Halbwachs, Raymond. Dynamic partitioning in analyses of numerical properties. 1999. https://www.researchgate.net/profile/Pascal-Raymond-2/publication/2332810_Dynamic_Partitioning_in_Analyses_of_Numerical_Properties/links/0912f50d0962f58c79000000/Dynamic-Partitioning-in-Analyses-of-Numerical-Properties.pdf
+
+* Schrammel, Jeannet. Extending Abstract Acceleration to Data-Flow Programs with Numerical Inputs. 2010.
+
+NBAC checks reachability by constructing an automaton where each state is annotated with an abstract interpretation of the values.
+This paper uses polyhedra.
+Applies loop acceleration to abstract interpretation to overapproximate the set of values that are reachable when you apply the transition many times.
+Deal with transitions of the form
+```
+   Ax <= b --> x' = Cx + d
+```
+for variables x, constant matrices A,C and constant vectors b, d.
+The acceleration techniques described in the paper only deal with very constrained matrices such as "translations" where C is identity and "translation with reset" where C is diagonal with ones and zeros.
+Once you add inputs, systems with guards and resets are very expressive, so are very difficult to accelerate.
+They resolve this by restricting the guards to not mention the inputs.
+
+* Yin, Chen, Liu, Wang. Hierarchical analysis of loops with relaxed abstract transformers. 2019. -
+
+### NBAC
+NBAC doesn't accept Lustre as input.
+There's a lus2nbac tool but there's no MacOS binary available.
+I don't know if source is available.
+
+I find it difficult to predict what properties it will work on, but for the following program which is like a `lastn` NBAC can't prove that x and y are equal:
+```
+state
+  x, y : int;
+  ok : bool;
+input
+  p : bool;
+transition
+  x' = if p then if x >= 10 then x else x + 1 else 0;
+  y' = if p then if y >= 10 then y else y + 1 else 0;
+  ok' = ok and x = y;
+initial x=0 and y=0 and ok;
+invariant ok;
+```
+Changing the `if x >= 10 then x` to `if x >= 10 then 10` seems to work, as does adding an extra invariant that `x <= 10`, but it's not always clear what extra invariants are needed to get it to work.
+
+This simpler program also fails in NBAC, though it's a bit more contrived:
+```
+state
+  x, y : int;
+  ok : bool;
+input
+  i : int;
+transition
+  x'  = if x <= i then x + i else x;
+  y'  = if y <= i then y + i else y;
+  ok' = ok and x = y;
+initial x=0 and y=0 and ok;
+invariant ok;
+```
+What extra invariant do we need to prove the above?
+
+[NBAC grammar](http://pop-art.inrialpes.fr/people/bjeannet/nbac/index_4.html)
+
+
 ## Equality abstraction
 
 * Goel. From Finite to Infinite: Scalable Automatic Verification of Hardware Designs and Distributed Protocols. 2021. PhD thesis. https://deepblue.lib.umich.edu/bitstream/handle/2027.42/171355/amangoel_1.pdf?sequence=1
@@ -448,6 +506,70 @@ Then you can strengthen the property to `\phi /\ ~\psi`.
 
 Paper describes a method to generate interpolants for quantifier-free formulae over uninterpreted functions.
 Not directly relevant to model checking, didn't read too closely.
+
+* Krishnan, Vizel, Ganesh, Gurfinkel. Interpolating strong induction. 2019. http://cs.technion.ac.il/~yvizel/files/cav2019_kavy.pdf
+
+Introduces KAVY, extension of AVY.
+Idea: prove property with k-induction, then strengthen to be 1-inductive.
+
+"Moreover, for some theories, strong induction is strictly stronger than 1-induction: there are some properties that are k-inductive, but cannot be strengthened to be 1-inductive." [19] Jovanovic, Dutetre. Property-directed k-induction. 2016.
+Is this true? For finite k? This is difficult to believe. Read it.
+
+Worth reading PDR and AVY refs [7, 13, 29].
+
+* Kumar Madhukar. Scalable safety verification of Statecharts-like programs. 2018. Thesis. https://libarchive.cmi.ac.in/theses/kumarmadhukar_cs2018.pdf
+
+Uses "loop acceleration" for generating invariants.
+Claims to have a modular k-induction.
+Very imperative, hard to see how it'd be applicable to Lustre.
+Hmm, very dense.
+
+* Beyer, Dangl. Software Verification with PDR: An Implementation of the State of the Art. 2020. https://link.springer.com/content/pdf/10.1007/978-3-030-45190-5_1.pdf
+
+Recent survey [6]
+
+* Sharma, Nori, Aiken. Interpolants as classifiers. 2012. https://link.springer.com/content/pdf/10.1007/978-3-642-31424-7_11.pdf
+
+Using support vector machines (SVM) to generalise negative examples.
+
+## Non-linear
+* Kincaid, Koh, Zhu. When less is more: consequence-finding in a weak theory of arithmetic. 2022. https://arxiv.org/pdf/2211.04000.pdf
+
+Introduces "linear integer/real rings" (LIRR), which are commutative rings extended with an order relation and an "integer" predicate.
+Generalisation of linear int/real arithmetic.
+
+* Nguyen, Weimer, Kapur, Forrest. Using Dynamic Analysis to Generate Disjunctive Invariants. 2014. https://arxiv.org/pdf/1904.07463.pdf
+
+Uses traces to infer candidate invariants.
+The traces are interpreted as points that lie inside a polyhedron, and the faces of the polyhedron are inferred.
+You can do this with convex polyhedra by inferring linear inequalities, but such inequalities are limited and can't express disjunctions.
+The idea here is to extend it to a very limited form of non-convex polyhedra, where the edges are "max-plus" inequalities that look like `max(c_0, c_1 + v_1, c_2 + v_2, ...) <= max(d_0, d_1 + v_1, d_2 + v_2, ...)` for constant vectors `c` and `d` and variable vector `v`.
+This is like a linear equality with the dot product `c \dot v <= d \dot v`, except we've replaced the dot product's addition with max and the dot product's multiplication is replaced with addition.
+(Can you adapt the regular simplex algorithm to optimise these max-plus programs?)
+
+See refs Nguyen et al 2012 Using Dynamic Analysis to Discover Polynomial and Array Invariants, and Nguyen et al 2014 DIG: A Dynamic Invariant Generator for Polynomial
+and Array Invariants.
+
+See ref Sharma, Gupta, Hariharan, Aiken, Nori, 2013 Verification as learning geometric concepts.
+
+* Nguyen, Nguyen, Dwyer. Using symbolic states to infer numerical invariants. 2021. https://dynaroars.github.io/pubs/nguyen2021using.pdf
+
+Extension to SymInfer, also by Nguyen.
+Uses existing symbolic execution tools to generalize concrete states to symbolic states.
+A symbolic state describes exactly the set of states that can be reached through a particular path.
+For Lustre programs, the paths probably just correspond to finite unwindings of the transition step relation, though I guess you could split on different if-conditions too.
+
+Also uses SMT solver's optimisation support to find bounds of terms.
+
+* Pham, Sun. Assertion generation through active learning. 2017. https://www.researchgate.net/publication/320304138_Assertion_Generation_Through_Active_Learning
+
+<!-- Uses "most of the primitive templates" from Daikon [8] to represent invariants, falling back to linear inequalities, then boolean combinations of templates.
+See refs Daikon [8], boolean predicates algorithm in [4], SVM classification from [14], conjunction of linear inequalities algorithm in [17].
+
+boolean combination [7]
+SVM classification [23]
+Algorithm in [27] extends SVM to polynomial
+Active learning [9, 30, 31] -->
 
 # Liveness properties
 
@@ -567,3 +689,95 @@ It looks nicer than what we evaluated a few years ago.
 https://tel.archives-ouvertes.fr/tel-03202580/file/95780_GALLOIS-WONG_2021_archivage.pdf
 
 Dissertation.
+
+# Unsorted
+
+## PKind
+* Kahsai, Tinelli. PKIND: A parallel k-induction based model checker.
+https://arxiv.org/pdf/1111.0372.pdf
+
+Describes parallel model checking with base case, inductive case and invariant  generation in parallel.
+
+Experimental results and benchmarks:
+http://clc.cs.uiowa.edu/Kind/index.php?page=experimental-results
+
+## Kind2
+* Champion, Mebsout, Sticksel, Tinelli. The Kind2 model checker. 2016.
+https://www.sticksel.info/christoph/files/CAV2016-Kind2.pdf
+
+Brief description of modular invariant generation.
+
+## SeaHorn
+* Gurfinkel, Kahsai, Komuravelli, Navas. The SeaHorn verification framework. 2015. https://seahorn.github.io/papers/cav15.pdf
+
+verifying LLVM, hmm, not so relevant
+
+
+# Temporal logic
+
+* Halbwachs, Fernandez, Bouajjani. An executable temporal logic to express safety properties and its connection with the language Lustre. 1993. http://www-verimag.imag.fr/PEOPLE/Nicolas.Halbwachs/islip93.html
+
+Has some examples with reformulating temporal logic into past-time view for Lustre.
+
+Temporal logic SL has previous operator from TLP defined as `ᐧp = false -> pre p`, while its dual `not ᐧ (not p)` is true on first instance.
+Since is encoded as `p S q = ∃x. x = (q \/ (p /\ ᐧx))`.
+
+
+* Lichtenstein, Pnueli. The glory of the past. 1985. https://sci-hub.se/https://link.springer.com/chapter/10.1007/3-540-15648-8_16
+
+Introduces a temporal logic with past and future. Primitives are strong next, strong previous, (strong) until, and (strong) since.
+Weak next, weak previous, eventually, globally, past-eventually ("sometime in the past") and past-globally ("always in the past") can be defined in terms of the primitives.
+The subset with only past and no future operators is called "TLP", subset with only future is called "TLF".
+
+Presents a fixpoint for checking satisfiability as well as a deductive system.
+Both are sound and complete.
+
+Would it be useful to have past-G and past-F as builtins in the programming language so we can reason about them better?
+Some of the axioms in the deductive system might apply to systems written in Lustre.
+Even if they're not treated specially, it would be good to check which of these axioms can always be proved.
+
+Normal form theorem: normal forms for temporal logic operators are G φ, F φ, G (F φ) and F (G φ). Formulae with "until" can be rewritten to a conjunction of these too: `p until q = finally (q /\ weak-prev (sofar p))`.
+
+* Markey. Temporal logic with past is exponentially more succinct. 2003. https://hal.archives-ouvertes.fr/hal-01194627/document
+
+Past-LTL with "since" and (strong) "previous" can be translated to "pure" LTL, but it requires duplicating some terms.
+Motivating example is that requests must precede grants:
+```
+always (grant => past-eventually request)
+```
+
+This can be expressed in pure LTL without the past-eventually as:
+```
+not ((not request) until (grant and (not request)))
+```
+Why not `(not grant) until request`? Must be some subtle difference.
+
+* Lesire, Roussel, Doose, Grand. Synthesis of real-time observers from past-time linear temporal logic and timed specification. 2019. https://hal.archives-ouvertes.fr/hal-02913050/file/Lesire2019.pdf
+
+Uses PastLTL as defined in ref [18] (Havelund and Rosu, Synthesizing monitors for safety properties, TACAS 2002) ref [17] (Emerson "Temporal and modal logic" 1990) which has combinators:
+Y φ (yesterday, strong pre), O φ (once, past-finally), H φ (historically, past-globally), φ S φ' (since, strong?).
+
+Also includes last-n versions of once and historically: `O_n φ` is true if φ has been true at least once in the last n states, `H_n φ` for true for all of last n states.
+```
+t |= O_n φ iff ∃i : [k - n + 1 .. k], s_i |= φ
+t |= H_n φ iff ∀i : [k - n + 1 .. k], s_i |= φ
+```
+Semantics of H_n at first n steps is unclear to me, is H_n strong or weak? Would be weak if i is a natural number.
+
+I don't really understand the distinction between atomic observers and timed observers. I think they would be the same in a (regular, periodic) synchronous world.
+
+* Reynolds. More past glories. 2000. https://sci-hub.se/https://ieeexplore.ieee.org/abstract/document/855772
+
+Lists axioms for TL+past. Separation: compound temporal formulas can be separated into a boolean combination of "pure" temporal formulas which are pure past, pure future, etc. But the separated formula could be exponentially bigger.
+
+Large chunk of paper is about computational tree logic with A/E combinators which I'm not so interested in.
+
+* Fisher. A resolution method for temporal logic. 1991. https://www.ijcai.org/Proceedings/91-1/Papers/017.pdf
+
+Promises to describe the resolution method in the full paper, but I can't find the full paper. Maybe: https://intranet.csc.liv.ac.uk/~michael/snf-art.pdf ?
+
+The Separated Normal Form (SNF) splits a formula into groups of rules, such as "init" rules, "always" rules and "eventually" rules.
+The "always" rules are kind of like the step of a transition system, because they have to hold for each step.
+The translation to SNF is mostly local rewrites.
+It also uses a technique called "renaming" which is basically just using existential quantifiers to introduce let-bindings for propositions - it's a bit like ANF.
+Is there any way to apply this to Lustre, to get a translation to transition systems that is mostly local rewrites?
