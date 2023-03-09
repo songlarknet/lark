@@ -65,7 +65,7 @@ object Rewrite:
 
     add("commutative") { k =>
       for
-        (Op.Prim(p), l1, l2) <- take.binop(k)
+        case (Op.Prim(p), l1, l2) <- take.binop(k)
         if commutative.contains(p)
       yield
         make.prim(p, l2, l1)
@@ -86,7 +86,7 @@ object Rewrite:
 
     add("right-identity") { k =>
       for
-        (Op.Prim(p),  l1, l2) <- take.binop(k)
+        case (Op.Prim(p),  l1, l2) <- take.binop(k)
         v                     <- take.val_(l2)
         if identity.contains(p) && identity(p).contains(v)
       yield
@@ -95,7 +95,7 @@ object Rewrite:
 
     add("right-cancel") { k =>
       for
-        (Op.Prim(p),  l1, l2) <- take.binop(k)
+        case (Op.Prim(p),  l1, l2) <- take.binop(k)
         v                     <- take.val_(l2)
         if cancel.contains(p) && cancel(p).contains(v)
       yield
@@ -116,15 +116,15 @@ object Rewrite:
 
     add("ite-pred-bool") { k =>
       for
-        (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
-        Val.Bool(pb) <- take.val_(p)
+        case (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
+        case Val.Bool(pb) <- take.val_(p)
       yield
         if pb then t else f
     }
 
     add("ite-same") { k =>
       for
-        (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
+        case (Op.Prim(prim.Table.Ite), List(p, t, f)) <- take.prim(k)
         if t == f
       yield
         t

@@ -1,4 +1,4 @@
-scalaVersion := "3.1.2"
+scalaVersion := "3.2.2"
 
 /////////////////// Fundamental dependencies
 // SMTlib: used for interfacing with SMT solvers
