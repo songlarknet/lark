@@ -10,6 +10,7 @@ import lark.meta.source.node
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{SortRepr, Bool, UInt8, UInt16, Int32, Real}
+import lark.meta.source.prelude.Sample
 import lark.meta.driver.{Prove, Compile, Grind}
 import lark.meta.source.Sneaky
 

@@ -7,6 +7,7 @@ import lark.meta.source.node
 import lark.meta.source.Node
 import lark.meta.source.Stream
 import lark.meta.source.Stream.{Bool, Real}
+import lark.meta.source.prelude.Sample
 
 object Filter:
 

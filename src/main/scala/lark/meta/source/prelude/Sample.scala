@@ -1,4 +1,4 @@
-package lark.examples.brake_lights
+package lark.meta.source.prelude
 
 import lark.meta.base.num
 
