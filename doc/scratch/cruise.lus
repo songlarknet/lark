@@ -1,0 +1,177 @@
+(* Cruise control example manually translated to Vélus, the verified Lustre compiler *)
+
+node cruise(btn_on : bool; cmd_set : bool; speedo : uint32; accel : uint32)
+returns (accel_out : uint32; light_on: bool; speed_out: uint32)
+var
+  S_AWAIT, S_OFF, S_ON: uint32;
+  pre_state : uint32;
+  state : uint32;
+
+  is_on : bool;
+  when_init_5 : bool when is_on;
+  reset_init_6 : bool when is_on;
+
+  reset_trigger : bool;
+
+  n_on0 : bool when is_on;
+  n_on1 : bool when is_on;
+  n_on2 : bool when is_on;
+  n_on3 : uint32 when is_on;
+  n_on4 : uint32 when is_on;
+  n_on5 : uint32 when is_on;
+  n_on6 : uint32 when is_on;
+let
+  -- Change consts to u32: integer literals are easier for u32 than for u8
+  S_OFF   = 0u;
+  S_AWAIT = 1u;
+  S_ON    = 2u;
+
+  pre_state = 0u fby state;
+
+  state =
+    if pre_state = S_OFF and btn_on
+    then S_AWAIT
+    else if pre_state = S_OFF then S_OFF
+    else S_ON;
+
+  is_on = (state = S_ON);
+  when_init_5 = (true when is_on) -> (false when is_on);
+
+  reset_trigger = state = S_ON and pre_state <> S_ON;
+  reset_init_6 = when_init_5 or (reset_trigger when is_on);
+
+  n_on0 = (speedo when is_on) < n_on6;
+  n_on1 = (accel when is_on) < 100;
+  n_on2 = n_on0 and n_on1;
+  n_on3 = if n_on2 then 100u else (accel when is_on);
+  n_on4 = 13013u fby n_on6;
+  n_on5 = if (cmd_set when is_on) then (speedo when is_on) else n_on4;
+  n_on6 =
+    if reset_init_6
+    then (speedo when is_on)
+    else n_on5;
+
+  accel_out = if state = S_OFF
+    then accel
+    else if state = S_AWAIT
+    then accel
+    else if state = S_ON
+    then merge(is_on; n_on3; 13013u)
+    else 13013u;
+
+  light_on = if state = S_OFF
+    then false
+    else if state = S_AWAIT
+    then true
+    else if state = S_ON
+    then merge(is_on; true; false)
+    else false;
+
+  speed_out = if state = S_OFF
+    then 0u
+    else if state = S_AWAIT
+    then 0u
+    else if state = S_ON
+    then merge(is_on; n_on6; 13013u)
+    else 13013u;
+
+tel
+
+(*
+
+  The Lark core program was:
+
+    cruise = Node main.cruise(btn_on : Bool, cmd_set : Bool, speedo : UInt8, accel : UInt8)
+      Vars:
+        Generated ?8 : UInt8
+        Generated ?16 : Bool
+        Generated ?7 : Bool
+        Output accel_out : UInt8 at TestAutomaton.scala:86:8 in accel_out
+        Generated ?20 : UInt8
+        Generated ?6 : Bool
+        Generated ?10 : UInt8
+        Generated N_ON?2 : Bool in N_ON
+        Generated ?9 : UInt8
+        Generated ?14 : UInt8
+        Generated when$1?0 : Bool at TestAutomaton.scala:104:43 in when$1
+        Generated ?13 : UInt8
+        Local light_on?1 : Bool at TestAutomaton.scala:119:10 in light_on
+        Generated ?1 : Bool
+        Generated ?5 : Bool
+        Generated N_ON?5 : UInt8 in N_ON
+        Generated ?12 : UInt8
+        Generated N_ON?1 : Bool in N_ON
+        Generated ?4 : Bool
+        Generated ?11 : UInt8
+        Output light_on : Bool at TestAutomaton.scala:87:8 in light_on
+        Generated ?2 : Bool
+        Generated ?3 : Bool
+        Generated ?19 : UInt8
+        Generated N_ON?4 : UInt8 in N_ON
+        Generated pre_state?1 : UInt8 at TestAutomaton.scala:91:8 in pre_state
+        Generated pre_state?0 : UInt8 at TestAutomaton.scala:91:8 in pre_state
+        Output speed_out : UInt8 at TestAutomaton.scala:88:8 in speed_out
+        Generated <init>?0 : Bool at TestAutomaton.scala:116:19 in <init>
+        Generated ?15 : Bool
+        Argument btn_on : Bool at TestAutomaton.scala:29:8 in cruise
+        Local state : UInt8 at TestAutomaton.scala:90:8 in state
+        Generated N_ON?0 : Bool in N_ON
+        Generated N_ON?6 : UInt8 in N_ON
+        Generated when$2?0 : Bool at TestAutomaton.scala:110:45 in when$2
+        Argument cmd_set : Bool at TestAutomaton.scala:29:8 in cruise
+        Local speed_out?1 : UInt8 at TestAutomaton.scala:118:10 in speed_out
+        Generated ?18 : UInt8
+        Local accel_out?1 : UInt8 at TestAutomaton.scala:117:10 in accel_out
+        Argument accel : UInt8 at TestAutomaton.scala:29:8 in cruise
+        Argument speedo : UInt8 at TestAutomaton.scala:29:8 in cruise
+        Generated N_ON?3 : UInt8 in N_ON
+        Generated ?0 : Bool
+        Generated ?17 : Bool
+      Bindings:
+        pre_state?0 = (flow'pre main.cruise.state)
+        pre_state?1 = (flow'-> #int'0 main.cruise.pre_state?0)
+        ?0 = (= main.cruise.pre_state?1 #int'0)
+        ?1 = (and main.cruise.?0 main.cruise.btn_on)
+        ?2 = (= main.cruise.pre_state?1 #int'1)
+        ?3 = (not main.cruise.btn_on)
+        ?4 = (and main.cruise.?2 main.cruise.?3)
+        ?5 = (and main.cruise.?2 main.cruise.cmd_set)
+        ?6 = (= main.cruise.pre_state?1 #int'2)
+        ?7 = (and main.cruise.?6 main.cruise.?3)
+        ?8 = (ite main.cruise.?7 #int'0 main.cruise.pre_state?1)
+        ?9 = (ite main.cruise.?5 #int'2 main.cruise.?8)
+        ?10 = (ite main.cruise.?4 #int'0 main.cruise.?9)
+        ?11 = (ite main.cruise.?1 #int'1 main.cruise.?10)
+        state = main.cruise.?11
+        when$1?0 = (= main.cruise.state #int'0)
+        When(main.cruise.when$1?0) @init(^init?1):
+            Reset(#b'false) @init(^init?2):
+        when$2?0 = (= main.cruise.state #int'1)
+        When(main.cruise.when$2?0) @init(^init?3):
+            Reset(#b'false) @init(^init?4):
+        <init>?0 = (= main.cruise.state #int'2)
+        When(main.cruise.<init>?0) @init(^init?5):
+            Reset(main.cruise.?5) @init(^init?6):
+                N_ON?0 = (< main.cruise.speedo main.cruise.speed_out?1)
+                N_ON?1 = (< main.cruise.accel #int'100)
+                N_ON?2 = (and main.cruise.N_ON?0 main.cruise.N_ON?1)
+                N_ON?3 = (ite main.cruise.N_ON?2 #int'100 main.cruise.accel)
+                N_ON?4 = (flow'pre main.cruise.speed_out?1)
+                N_ON?5 = (ite main.cruise.cmd_set main.cruise.speedo main.cruise.N_ON?4)
+                N_ON?6 = (flow'-> main.cruise.speedo main.cruise.N_ON?5)
+        accel_out?1 = main.cruise.N_ON?3
+        light_on?1 = #b'true
+        speed_out?1 = main.cruise.N_ON?6
+        ?12 = (ite main.cruise.<init>?0 main.cruise.accel_out?1 main.cruise.accel_out)
+        ?13 = (ite main.cruise.when$2?0 main.cruise.accel main.cruise.?12)
+        ?14 = (ite main.cruise.when$1?0 main.cruise.accel main.cruise.?13)
+        accel_out = main.cruise.?14
+        ?15 = (ite main.cruise.<init>?0 main.cruise.light_on?1 main.cruise.light_on)
+        ?16 = (ite main.cruise.when$2?0 #b'true main.cruise.?15)
+        ?17 = (ite main.cruise.when$1?0 #b'false main.cruise.?16)
+        light_on = main.cruise.?17
+        ?18 = (ite main.cruise.<init>?0 main.cruise.speed_out?1 main.cruise.speed_out)
+        ?19 = (ite main.cruise.when$2?0 #int'0 main.cruise.?18)
+        ?20 = (ite main.cruise.when$1?0 #int'0 main.cruise.?19)
+        speed_out = main.cruise.?20
+*)

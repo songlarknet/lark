@@ -1,0 +1,158 @@
+(* Part of brake lights example manually translated to Kind2 Lustre dialect *)
+
+node consecutive(p: bool)
+returns (count: int)
+let
+  count = if p then (0 -> pre count) + 1 else 0;
+tel
+
+node lastn(const n: int; p: bool)
+returns (ok: bool)
+let
+  ok = consecutive(p) >= n;
+tel
+
+type v3 = { x: real; y: real; z: real };
+
+const DIRECTION_TICKS:   int  = 10;
+const DIRECTION_STOPPED: real = 0.5;
+const DIRECTION_MOVING:  real = 1.0;
+
+node direction(accel: v3)
+returns (forward, backward: bool)
+var
+  zero, pos, neg: bool;
+let
+  zero = lastn(DIRECTION_TICKS,
+    (-DIRECTION_STOPPED <= accel.y and accel.y <= DIRECTION_STOPPED) and
+    (-DIRECTION_STOPPED <= accel.x and accel.x <= DIRECTION_STOPPED));
+
+  pos = lastn(DIRECTION_TICKS,
+    accel.y > DIRECTION_MOVING);
+
+  neg = lastn(DIRECTION_TICKS,
+    accel.y < -DIRECTION_MOVING);
+
+  automaton
+  initial state STOPPED:
+  unless if pos resume FORWARD
+  unless if neg resume BACKWARD
+  let
+    forward  = false;
+    backward = false;
+  tel
+  state FORWARD:
+  unless if zero resume STOPPED
+  let
+    forward  = true;
+    backward = false;
+  tel
+  state BACKWARD:
+  unless if zero resume STOPPED
+  let
+    forward  = false;
+    backward = true;
+  tel
+tel
+
+const LIGHTS_BRAKING: real = -1.0;
+const LIGHTS_ON:      int  = 10;
+const LIGHTS_OFF:     int  = 40;
+
+node lights(accel: v3)
+returns (light, forward, backward: bool)
+var
+  braking, trigger_on, trigger_off: bool;
+let
+
+  (forward, backward) = direction(accel);
+
+  braking     = accel.y <= LIGHTS_BRAKING and forward;
+  trigger_on  = lastn(LIGHTS_ON,      braking);
+  trigger_off = lastn(LIGHTS_OFF, not braking);
+
+  automaton
+  initial state OFF:
+    unless if trigger_on resume ON
+    let
+      light = false;
+    tel
+  state ON:
+    unless if trigger_off resume OFF
+    let
+      light = true;
+    tel
+
+  (*%PROPERTY "never on and off"
+    not (trigger_on and trigger_off); *)
+  (*%PROPERTY "not braking, no light"
+    lastn(LIGHTS_OFF, accel.y > LIGHTS_BRAKING) => not light;
+  *)
+  (* The above property wants an invariant that says something like:
+    but we can't express that in Kind2's source language without modifying the definition of lastn.
+    Kind2 finds the above invariant after around seven seconds.
+  *)
+  -- (*%PROPERTY "not braking, no light: invariant"
+  --   consecutive(accel.y > LIGHTS_BRAKING) <= consecutive(not braking); *)
+tel
+
+const BRAKES_STUCK: int = 12000;
+
+node brakes(accel: v3; clock: bool)
+returns (light, ok: bool)
+var
+  valid: bool;
+  state_ok: bool;
+  count_ok: int;
+let
+  valid = lastn(100, clock or (false -> pre clock)); -- stub
+
+  automaton
+  initial state AWAIT:
+    unless if valid restart OK
+    let
+      light     = false;
+      ok        = clock;
+      state_ok  = false;
+    tel
+  state OK:
+    unless if not valid restart AWAIT
+    var forward, backward: bool;
+    let
+      (light, forward, backward)
+                = lights(accel);
+      ok        = true;
+      state_ok  = true;
+
+      count_ok  = consecutive(accel.y > LIGHTS_BRAKING);
+    tel
+    until if lastn(BRAKES_STUCK, light) restart STUCK
+  state STUCK:
+    let
+      light     = false;
+      ok        = false;
+      state_ok  = false;
+    tel
+
+  (*%PROPERTY "not braking, no light"
+    lastn(LIGHTS_OFF, accel.y > LIGHTS_BRAKING) => not light;
+  *)
+
+  -- (*%PROPERTY "not braking, no light: invariant"
+  --   light => (count_ok  = consecutive(accel.y > LIGHTS_BRAKING));
+  -- *)
+  -- (*%PROPERTY "not braking, no light: invariant"
+  --   state_ok => (
+  --     if light
+  --     then count_ok  = consecutive(accel.y > LIGHTS_BRAKING)
+  --     else count_ok <= consecutive(accel.y > LIGHTS_BRAKING)
+  --   );
+  -- *)
+tel
+
+
+node top(accel: v3; clock: bool)
+returns (light, ok: bool)
+let
+  (light, ok) = brakes(accel, clock);
+tel
